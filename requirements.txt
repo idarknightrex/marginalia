@@ -1,0 +1,20 @@
+# Marginalia requirements
+# Install via: pip install -r requirements.txt --break-system-packages
+# Or inside .venv (recommended — bootstrap.command handles this automatically)
+
+# Web framework
+flask==3.0.3
+python-dotenv==1.0.1
+
+# AI providers — install only what you have keys for
+google-generativeai==0.8.3
+anthropic==0.34.2
+openai==1.51.0          # used for Azure OpenAI
+
+# Document processing
+bibtexparser==1.4.1     # Phase 3 — BibTeX import
+pdf2image==1.17.0       # Phase 4 — scanned PDF ingestion (requires poppler)
+Pillow==10.4.0          # Phase 4 — image processing
+
+# Utilities
+requests==2.32.3        # broadcast.json fetch fallback
