@@ -1,0 +1,20 @@
+# Marginalia — never commit these
+.env
+db/research.db
+db/research.db-shm
+db/research.db-wal
+__pycache__/
+*.pyc
+*.pyo
+uploads/
+*.pdf
+*.mp4
+*.mp3
+*.m4a
+*.wav
+*.mov
+*.zip
+*.tar.gz
+.DS_Store
+.venv/
+node_modules/

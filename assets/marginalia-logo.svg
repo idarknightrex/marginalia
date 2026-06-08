@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     viewBox="0 0 520 140" width="520" height="140">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&amp;display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@1&amp;display=swap');
+    </style>
+
+    <!-- Parchment texture gradient -->
+    <linearGradient id="parchment" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#f5eedc"/>
+      <stop offset="40%"  stop-color="#ede3c8"/>
+      <stop offset="100%" stop-color="#e0d4b0"/>
+    </linearGradient>
+
+    <!-- Subtle edge vignette -->
+    <radialGradient id="vignette" cx="50%" cy="50%" r="70%">
+      <stop offset="60%"  stop-color="#00000000"/>
+      <stop offset="100%" stop-color="#00000022"/>
+    </radialGradient>
+
+    <!-- Ink texture filter -->
+    <filter id="ink" x="-2%" y="-2%" width="104%" height="104%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="0.8" result="displaced"/>
+      <feComposite in="displaced" in2="SourceGraphic" operator="in"/>
+    </filter>
+
+    <!-- Paper texture filter -->
+    <filter id="paper">
+      <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" result="noise"/>
+      <feColorMatrix type="saturate" values="0" in="noise" result="grey"/>
+      <feBlend in="SourceGraphic" in2="grey" mode="multiply" result="blended"/>
+      <feComposite in="blended" in2="SourceGraphic" operator="in"/>
+    </filter>
+  </defs>
+
+  <!-- Parchment background -->
+  <rect width="520" height="140" rx="4" ry="4" fill="url(#parchment)" filter="url(#paper)"/>
+
+  <!-- Edge vignette -->
+  <rect width="520" height="140" rx="4" ry="4" fill="url(#vignette)"/>
+
+  <!-- Torn edge effect top -->
+  <path d="M0,8 Q20,2 40,7 Q60,12 80,5 Q100,0 120,6 Q140,11 160,4 Q180,0 200,7 Q220,13 240,5 Q260,0 280,6 Q300,11 320,4 Q340,0 360,7 Q380,13 400,5 Q420,1 440,7 Q460,12 480,5 Q500,1 520,6 L520,0 L0,0 Z"
+        fill="#d4c49a" opacity="0.5"/>
+
+  <!-- Torn edge effect bottom -->
+  <path d="M0,132 Q20,138 40,133 Q60,128 80,135 Q100,140 120,134 Q140,129 160,136 Q180,140 200,133 Q220,127 240,135 Q260,140 280,134 Q300,129 320,136 Q340,140 360,133 Q380,128 400,135 Q420,140 440,134 Q460,129 480,136 Q500,140 520,134 L520,140 L0,140 Z"
+        fill="#c8b88a" opacity="0.4"/>
+
+  <!-- Tagline: "largely local" — tucked between M and dot on i -->
+  <text x="215" y="52"
+        font-family="'IM Fell English', 'Palatino Linotype', Georgia, serif"
+        font-size="10"
+        font-style="italic"
+        fill="#5a4a2a"
+        text-anchor="middle"
+        letter-spacing="1.5"
+        opacity="0.75">largely local</text>
+
+  <!-- Main title: Marginalia in blackletter style -->
+  <text x="260" y="96"
+        font-family="'UnifrakturMaguntia', 'Old English Text MT', cursive"
+        font-size="72"
+        fill="#1a1208"
+        text-anchor="middle"
+        filter="url(#ink)"
+        letter-spacing="-1">Marginalia</text>
+
+  <!-- Tagline bottom: "slow down" — right aligned -->
+  <text x="478" y="122"
+        font-family="'IM Fell English', 'Palatino Linotype', Georgia, serif"
+        font-size="12"
+        font-style="italic"
+        fill="#7a6a4a"
+        text-anchor="end"
+        letter-spacing="3"
+        opacity="0.7">slow down</text>
+
+  <!-- Decorative rule lines -->
+  <line x1="40" y1="108" x2="480" y2="108" stroke="#8a7a5a" stroke-width="0.5" opacity="0.4"/>
+  <!-- Subtle hairline under "largely local" -->
+  <line x1="155" y1="55" x2="275" y2="55" stroke="#8a7a5a" stroke-width="0.3" opacity="0.3"/>
+</svg>

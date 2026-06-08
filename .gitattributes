@@ -1,0 +1,35 @@
+# Marginalia .gitattributes
+# Enforces consistent line endings across Mac, Linux, and Windows
+# Prevents script breakage when contributors edit files on different OS
+
+# Default: normalize all text files to LF on commit
+* text=auto eol=lf
+
+# Mac/Linux scripts — must use LF
+*.command text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+
+# Windows scripts — must use CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Data and config files — LF
+*.md text eol=lf
+*.txt text eol=lf
+*.json text eol=lf
+*.sql text eol=lf
+*.env text eol=lf
+*.gitignore text eol=lf
+
+# Binary files — no line ending conversion
+*.db binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.mp3 binary
+*.mp4 binary
+*.m4a binary
+*.wav binary
