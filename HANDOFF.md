@@ -1,5 +1,5 @@
 # Marginalia — Thread Handoff
-**Version:** v0.8.6.2
+**Version:** v0.8.7
 **Purpose:** Copy this into a new Claude thread to restore full context
 
 ---
@@ -41,7 +41,7 @@ No hidden .env file needed. Fields:
 
 ---
 
-## Model Chips (v0.8.6.2)
+## Model Chips (v0.8.7)
 | Chip | Model | Status |
 |---|---|---|
 | Gemini 2.5 Flash | gemini-2.5-flash | ✅ Working |
@@ -90,7 +90,7 @@ No hidden .env file needed. Fields:
 - **v0.8-pre** — Multi-model prompt: Gemini, Claude Haiku, Azure GPT-4o. References pipeline. Save & Break.
 - **v0.8.1** — DeepSeek R1 + Gemma 4 chips added and wired to Ollama backend
 - **v0.8.2** — Synthesis engine (DeepSeek R1 local meta-pass). 16GB mutex. Claude cost counter.
-- **v0.8.6.2** — Full reference import (CSV/BibTeX/RIS/DOI/plaintext). Azure replaced with OpenAI direct + Perplexity. setup.env replaces .env. Docs updated.
+- **v0.8.7** — Full reference import (CSV/BibTeX/RIS/DOI/plaintext). Azure replaced with OpenAI direct + Perplexity. setup.env replaces .env. Docs updated.
 
 ---
 
@@ -119,3 +119,19 @@ Target paper: Teaching and Learning Inquiry (TLI), 2027.
 
 ## The Line
 *Ideas don't have a calendar. Neither does gratitude.*
+
+---
+
+## From PhD Thread (PreWork 6) — Architectural Notes for Marginalia
+
+### The three-lens provocation sequence
+Local model matrix as pre-deployment stress-testing layer — Phase 6 or 7 function. Before bringing an argument to human gatekeepers, run it through the local model sequence. Outputs won't be right but they'll surface where the argument is soft. "The XO using the enemy's maps to find the reefs."
+
+### Bedrock bias caveat
+Known architectural limitation: if the LLM summarizing a source is trained on the same Western linear textual monoculture as the sources being summarized, annotations will be epistemologically flatter than the sources deserve. Not a blocker — a caveat to build into the UI and documentation. The global model chip row (Qwen/Asian, Mistral/European, AfriqueQwen/African) is a partial structural response to this.
+
+### Positionality sentence (methods section)
+"Scaffolding your own scaffolding." The researcher who built a research workbench to stress-test the architecture before human review is doing methodological transparency in a form most SoTL candidates don't have access to. Name it explicitly in the methods section of the dissertation.
+
+### Implication for annotation fields
+annotation and argument_connection fields in canonical references are downstream of whoever summarized them. Single-model annotations are epistemologically narrow. Multi-model annotation — running the same source through Qwen, Mistral, and DeepSeek and comparing — is a richer capture. Worth building as an option in the reference panel (Phase 6).

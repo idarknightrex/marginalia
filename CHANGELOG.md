@@ -2,6 +2,65 @@
 
 ---
 
+## v0.8.7 — 2026-06-09
+
+### New local models: Qwen 2.5 14B and Mistral Small
+- Qwen 2.5 14B (Asia / Global South perspective) — Alibaba, ~9GB, immense Asian cultural and academic training data
+- Mistral Small (Europe perspective) — Mistral AI Paris, ~14GB, European legal and pedagogical training data, Apache 2.0
+- Both start inactive by default — activate one local model at a time
+- Mistral at 14GB: close all other apps before running
+
+### Graceful local model unload (keep_alive: 0)
+- All local Ollama calls now set keep_alive=0
+- Model is evicted from memory immediately after responding
+- Enables sequential local firing without RAM pressure building up
+- Each model gets clean memory — no contention between local models
+- Noted in chip tooltips
+
+### Global perspective labels on local model badges
+- DeepSeek R1: China
+- Qwen 2.5: Asia / Global South
+- Mistral: Europe
+- Gemma 4: Western / Google
+- Llama 3.1: Global English
+- Visible in both chip tooltips and response card badges
+
+### Epistemic diversity rationale
+Multi-perspective synthesis is qualitatively different from multi-model consensus.
+Qwen's reading of a Western source on embodied learning will surface assumptions
+that DeepSeek and Gemma cannot see. Named as a methodological contribution in
+the dissertation positionality section.
+
+---
+
+## v0.8.6.4 — 2026-06-09
+
+### Generation timing per card
+- Each response card shows elapsed time at the bottom when it arrives: ⏱ 4.2s
+- Timing shown on error/timeout cards too
+- Baseline data for future predictive/reading assistant work
+
+### Synthesis pulse animation
+- Synthesis panel border pulses amber while DeepSeek is running the meta-pass
+- Loading text breathes (opacity pulse) during synthesis
+- Snaps solid when text arrives
+- Loading messages rotate randomly including "Conbobulating obfusticators…"
+
+### Fixed: route decorator on wrong function
+- @app.route("/api/prompt") was on call_model instead of handle_prompt
+- Caused TypeError on every prompt submission
+- Fixed permanently in build
+
+### Fixed: Gemini request timeout
+- Added request_options timeout=30 to Gemini API call
+- Prevents silent hangs on slow network responses
+
+### UI
+- Prompt footer margin-bottom: 24px — more breathing room above response cards
+- Response cards confirmed below prompt input
+
+---
+
 ## v0.8.6.2 — 2026-06-09
 
 ### Fixed: response cards now correctly below the prompt input

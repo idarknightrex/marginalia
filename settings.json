@@ -12,7 +12,9 @@
     "local": {
       "reasoning": "deepseek-r1:8b",
       "multimodal": "gemma4:latest",
-      "general": "llama3.1:8b"
+      "general": "llama3.1:8b",
+      "asia": "qwen2.5:14b",
+      "europe": "mistral-small:latest"
     },
     "cloud": {
       "gemini": "gemini-2.5-flash",

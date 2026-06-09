@@ -152,9 +152,19 @@ def read_all_references() -> list:
     return refs
 
 
-def call_ollama(model_str: str, prompt: str) -> str:
+def call_ollama(model_str: str, prompt: str, unload_after: bool = True) -> str:
+    """
+    Call a local Ollama model.
+    unload_after=True sets keep_alive=0 — model is evicted from memory immediately
+    after responding. This allows sequential local model firing without memory pressure.
+    """
     import urllib.request as _ur
-    payload = json.dumps({"model": model_str, "prompt": prompt, "stream": False}).encode()
+    payload = json.dumps({
+        "model":      model_str,
+        "prompt":     prompt,
+        "stream":     False,
+        "keep_alive": 0 if unload_after else "5m"
+    }).encode()
     req = _ur.Request(f"{OLLAMA_BASE}/api/generate", data=payload, headers={"Content-Type": "application/json"})
     with _ur.urlopen(req, timeout=300) as r:
         return json.loads(r.read()).get("response", "")
@@ -449,6 +459,8 @@ def key_status():
         "deepseek":  True,  # local — always available if Ollama is running
         "gemma":     True,  # local — always available if Ollama is running
         "llama":     True,  # local — always available if Ollama is running
+        "qwen":      True,  # local — always available if Ollama is running
+        "mistral":   True,  # local — always available if Ollama is running
     })
 
 def call_model(model, prompt):
@@ -475,11 +487,15 @@ def call_model(model, prompt):
                                                messages=[{"role": "user", "content": prompt}])
             return (model, r.choices[0].message.content, None, 0, 0)
         elif model == "deepseek":
-            return (model, call_ollama(local_cfg.get("reasoning",  "deepseek-r1:8b"), prompt), None, 0, 0)
+            return (model, call_ollama(local_cfg.get("reasoning",  "deepseek-r1:8b"),    prompt), None, 0, 0)
         elif model == "gemma":
-            return (model, call_ollama(local_cfg.get("multimodal", "gemma4:latest"),  prompt), None, 0, 0)
+            return (model, call_ollama(local_cfg.get("multimodal", "gemma4:latest"),     prompt), None, 0, 0)
         elif model == "llama":
-            return (model, call_ollama(local_cfg.get("general",    "llama3.1:8b"),    prompt), None, 0, 0)
+            return (model, call_ollama(local_cfg.get("general",    "llama3.1:8b"),       prompt), None, 0, 0)
+        elif model == "qwen":
+            return (model, call_ollama(local_cfg.get("asia",       "qwen2.5:14b"),       prompt), None, 0, 0)
+        elif model == "mistral":
+            return (model, call_ollama(local_cfg.get("europe",     "mistral-small:latest"), prompt), None, 0, 0)
         else:
             return (model, None, "No key configured", 0, 0)
     except Exception as e:
@@ -487,9 +503,9 @@ def call_model(model, prompt):
 
 
 # Firing order — cloud parallel first, local sequential after
-MODEL_ORDER   = ["gemini", "anthropic", "openai", "deepseek", "gemma", "llama"]
+MODEL_ORDER   = ["gemini", "anthropic", "openai", "deepseek", "qwen", "mistral", "gemma", "llama"]
 CLOUD_MODELS  = {"gemini", "anthropic", "openai"}
-LOCAL_MODELS  = {"deepseek", "gemma", "llama"}
+LOCAL_MODELS  = {"deepseek", "gemma", "llama", "qwen", "mistral"}
 
 
 @app.route("/api/prompt", methods=["POST"])
