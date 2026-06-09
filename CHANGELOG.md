@@ -4,6 +4,13 @@
 
 ## v0.8.6.1 — 2026-06-09
 
+### UI fixes
+- Response cards moved above the prompt input — you see responses without scrolling down
+- Cards now stack single-column (was 2-col grid that caused overlap with 5+ cards)
+- Response text capped at 300px with scroll for long responses
+- Model label row bolder — easier to scan which model said what
+- Cloud model timeout bumped from 30s to 60s — Gemini 2.5 Flash can be slow under load
+
 ### First-run setup warning
 - On load, Marginalia checks /api/setup-status — if no cloud keys are configured, a full-screen setup guide appears
 - Dark overlay explains exactly what to do: open setup.env, paste keys, restart

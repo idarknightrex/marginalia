@@ -240,10 +240,10 @@
     #prompt-input { width: 100%; min-height: 90px; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: Georgia, serif; font-size: 14px; resize: vertical; outline: none; line-height: 1.6; }
     .prompt-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
     .token-estimate { font-family: monospace; font-size: 11px; color: var(--muted); }
-    .response-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+    .response-grid { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
     .response-card { padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; border-left-width: 3px; }
-    .response-card .model-label { font-size: 10px; font-family: monospace; margin-bottom: 6px; }
-    .response-card .response-text { font-size: 12px; color: var(--muted); line-height: 1.6; white-space: pre-wrap; }
+    .response-card .model-label { font-size: 11px; font-family: monospace; margin-bottom: 8px; font-weight: bold; }
+    .response-card .response-text { font-size: 12px; color: var(--muted); line-height: 1.6; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
     .response-card.loading .response-text::after { content: "Thinking..."; font-style: italic; }
     .synthesis-panel { margin-top: 12px; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-top: 2px solid var(--accent); border-radius: 4px; }
     .synthesis-label { font-size: 10px; font-family: monospace; color: var(--accent); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 8px; }
@@ -443,13 +443,6 @@
       &#9888; 16GB system — one local model at a time recommended.
     </div>
 
-    <textarea id="prompt-input" placeholder="Enter your research question or prompt..."></textarea>
-    <div class="prompt-footer">
-      <span class="token-estimate" id="token-estimate">~0 tokens</span>
-      <button class="cancel-btn" id="cancel-btn" onclick="cancelPrompt()">&#9632; Cancel</button>
-      <button class="btn-primary" id="send-btn" onclick="sendPrompt()">Send to Active Models &#8594;</button>
-    </div>
-
     <div class="response-grid" id="response-grid"></div>
 
     <div class="synthesis-panel" id="synthesis-panel" style="display:none">
@@ -461,6 +454,13 @@
       </div>
     </div>
   </div>
+
+    <textarea id="prompt-input" placeholder="Enter your research question or prompt..."></textarea>
+    <div class="prompt-footer">
+      <span class="token-estimate" id="token-estimate">~0 tokens</span>
+      <button class="cancel-btn" id="cancel-btn" onclick="cancelPrompt()">&#9632; Cancel</button>
+      <button class="btn-primary" id="send-btn" onclick="sendPrompt()">Send to Active Models &#8594;</button>
+    </div>
 
   <!-- ── References view ── -->
   <div id="view-references" class="view">
@@ -648,7 +648,7 @@ document.getElementById('prompt-input').addEventListener('input', function() {
 });
 
 // Timeout durations per model type (ms) — used for progress bar animation
-const MODEL_TIMEOUT = { gemini: 30000, anthropic: 30000, openai: 30000, deepseek: 300000, gemma: 300000, llama: 300000 };
+const MODEL_TIMEOUT = { gemini: 60000, anthropic: 60000, openai: 60000, deepseek: 300000, gemma: 300000, llama: 300000 };
 let activeReader = null;
 
 function makeCard(model) {
