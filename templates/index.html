@@ -41,6 +41,124 @@
     .no-key-badge { font-size: 9px; font-family: monospace; color: var(--muted); margin-left: 2px; }
 
 
+
+    /* ── First-run setup warning ── */
+    #setup-warning {
+      display: none;
+      background: #1a1410;
+      color: #f5f0e8;
+      padding: 0;
+      position: fixed;
+      top: 52px; left: 0; right: 0; bottom: 0;
+      z-index: 500;
+      overflow-y: auto;
+    }
+    .setup-inner {
+      max-width: 560px;
+      margin: 60px auto;
+      padding: 0 20px;
+    }
+    .setup-logo {
+      font-family: Georgia, serif;
+      font-size: 28px;
+      font-style: italic;
+      font-weight: bold;
+      color: #f5f0e8;
+      margin-bottom: 4px;
+    }
+    .setup-tagline {
+      font-family: monospace;
+      font-size: 10px;
+      color: #7a6a4a;
+      letter-spacing: 3px;
+      margin-bottom: 32px;
+    }
+    .setup-heading {
+      font-family: monospace;
+      font-size: 13px;
+      color: #c9a832;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+    }
+    .setup-body {
+      font-family: Georgia, serif;
+      font-size: 14px;
+      color: #d4c5b0;
+      line-height: 1.7;
+      margin-bottom: 24px;
+    }
+    .setup-step {
+      background: #2a2018;
+      border: 1px solid #3a3020;
+      border-left: 3px solid #c9a832;
+      border-radius: 4px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+    .setup-step-num {
+      font-family: monospace;
+      font-size: 10px;
+      color: #c9a832;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      margin-bottom: 6px;
+    }
+    .setup-step-title {
+      font-family: monospace;
+      font-size: 12px;
+      color: #f5f0e8;
+      margin-bottom: 4px;
+    }
+    .setup-step-body {
+      font-family: monospace;
+      font-size: 11px;
+      color: #8a7a6a;
+      line-height: 1.6;
+    }
+    .setup-step-body code {
+      background: #3a3020;
+      padding: 1px 5px;
+      border-radius: 2px;
+      color: #c9a832;
+    }
+    .setup-key-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-top: 4px;
+    }
+    .setup-key-name {
+      font-family: monospace;
+      font-size: 11px;
+      color: #c9a832;
+      min-width: 160px;
+    }
+    .setup-key-where {
+      font-family: monospace;
+      font-size: 10px;
+      color: #5a4a2a;
+    }
+    .setup-dismiss {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 8px 20px;
+      background: #8b4513;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .setup-dismiss:hover { background: #a05515; }
+    .setup-partial {
+      background: #1a2818;
+      border-color: #2a4028;
+      border-left-color: #3d8b37;
+    }
+    .setup-partial .setup-step-num { color: #3d8b37; }
+
     /* ── Timeout countdown ── */
     .timeout-countdown {
       font-family: monospace; font-size: 9px; color: var(--muted);
@@ -207,6 +325,75 @@
     <button class="btn-secondary" id="save-break-btn" onclick="saveAndBreak()">&#8593; Save &amp; Take a Break</button>
   </div>
 </nav>
+
+
+<!-- First-run setup warning -->
+<div id="setup-warning">
+  <div class="setup-inner">
+    <div class="setup-logo">Marginalia</div>
+    <div class="setup-tagline">slow down</div>
+
+    <div class="setup-heading">&#9888; Setup Required</div>
+    <div class="setup-body">
+      Marginalia needs at least one API key to run cloud models.
+      Local models (DeepSeek, Gemma, Llama) work without keys — but
+      you need Ollama running and models downloaded first.
+    </div>
+
+    <div class="setup-step">
+      <div class="setup-step-num">Step 1</div>
+      <div class="setup-step-title">Open setup.env in your marginalia folder</div>
+      <div class="setup-step-body">
+        In Terminal:<br>
+        <code>open -e ~/Developer/marginalia/setup.env</code>
+      </div>
+    </div>
+
+    <div class="setup-step">
+      <div class="setup-step-num">Step 2</div>
+      <div class="setup-step-title">Paste your API keys — get them free at:</div>
+      <div class="setup-step-body">
+        <div class="setup-key-row">
+          <span class="setup-key-name">GOOGLE_API_KEY</span>
+          <span class="setup-key-where">aistudio.google.com &#8594; Get API Key (free)</span>
+        </div>
+        <div class="setup-key-row">
+          <span class="setup-key-name">ANTHROPIC_API_KEY</span>
+          <span class="setup-key-where">console.anthropic.com &#8594; API Keys (pay-as-you-go)</span>
+        </div>
+        <div class="setup-key-row">
+          <span class="setup-key-name">OPENAI_API_KEY</span>
+          <span class="setup-key-where">platform.openai.com/api-keys (pay-as-you-go)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="setup-step">
+      <div class="setup-step-num">Step 3</div>
+      <div class="setup-step-title">Save setup.env and restart Marginalia</div>
+      <div class="setup-step-body">
+        <code>Ctrl+C</code> in the terminal, then double-click <code>bootstrap.command</code> again.
+      </div>
+    </div>
+
+    <div class="setup-step">
+      <div class="setup-step-num">Optional — Local models</div>
+      <div class="setup-step-title">For DeepSeek R1, Gemma 4, and Llama 3.1</div>
+      <div class="setup-step-body">
+        Requires Ollama installed and models pulled:<br>
+        <code>ollama pull deepseek-r1:8b</code><br>
+        <code>ollama pull gemma4</code><br>
+        <code>ollama pull llama3.1:8b</code><br><br>
+        If models are on an external drive, set <code>OLLAMA_MODELS_PATH</code> in setup.env.
+      </div>
+    </div>
+
+    <div style="margin-top:24px;font-family:monospace;font-size:10px;color:#5a4a2a">
+      Already set your keys? Restart Marginalia — this screen won't appear again.
+    </div>
+    <button class="setup-dismiss" onclick="dismissSetup()">I'll set this up later &#8594; continue anyway</button>
+  </div>
+</div>
 
 <div id="broadcast-banner" class="banner banner-green" style="display:none">
   <span id="broadcast-text"></span>
@@ -398,7 +585,7 @@
   <span class="status-online">&#9679; Marginalia running</span>
   <span id="session-time">Session: 0m</span>
   <span class="status-cost" id="cost-display">Claude: $0.0000</span>
-  <span class="status-project">v0.8.6 &middot; LLM</span>
+  <span class="status-project">v0.8.6.1 &middot; LLM</span>
 </div>
 
 <script>
@@ -812,6 +999,22 @@ async function saveAndBreak() {
 
 
 
+
+// ── First-run setup check ─────────────────────────────────────────────────
+async function checkSetupStatus() {
+  try {
+    const res  = await fetch('/api/setup-status');
+    const data = await res.json();
+    if (!data.configured) {
+      document.getElementById('setup-warning').style.display = 'block';
+    }
+  } catch(e) { /* silent */ }
+}
+
+function dismissSetup() {
+  document.getElementById('setup-warning').style.display = 'none';
+}
+
 // ── Hide inactive toggle ──────────────────────────────────────────────────
 function toggleHideInactive(btn) {
   const chips = document.getElementById('model-chips');
@@ -867,6 +1070,7 @@ setInterval(() => {
 checkBroadcast();
 updateLocalWarning();
 checkKeyStatus();
+checkSetupStatus();
 </script>
 </body>
 </html>

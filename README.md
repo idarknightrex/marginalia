@@ -38,7 +38,7 @@ verification judgments belong to you.
 
 ---
 
-## Current Version: 0.8.6
+## Current Version: 0.8.6.1
 
 ### Models
 Six model chips in the UI — mix and match per session:

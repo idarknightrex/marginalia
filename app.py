@@ -413,6 +413,32 @@ def doi_lookup():
 
 
 
+
+@app.route("/api/setup-status", methods=["GET"])
+def setup_status():
+    """
+    Check whether setup.env has been configured.
+    Returns a warning if all keys are blank (fresh install).
+    """
+    has_any_cloud_key = any([
+        bool(KEYS.get("gemini")),
+        bool(KEYS.get("anthropic")),
+        bool(KEYS.get("openai")),
+    ])
+    ollama_models_path = os.getenv("OLLAMA_MODELS_PATH", "")
+    setup_file = "setup.env" if (APP_ROOT / "setup.env").exists() else ".env"
+
+    return jsonify({
+        "configured":        has_any_cloud_key,
+        "has_gemini":        bool(KEYS.get("gemini")),
+        "has_anthropic":     bool(KEYS.get("anthropic")),
+        "has_openai":        bool(KEYS.get("openai")),
+        "has_ollama_path":   bool(ollama_models_path),
+        "ollama_models_path": ollama_models_path,
+        "setup_file":        setup_file,
+        "setup_file_path":   str(APP_ROOT / setup_file),
+    })
+
 @app.route("/api/key-status", methods=["GET"])
 def key_status():
     """Tell the frontend which API keys are configured — no values, just booleans."""

@@ -2,6 +2,19 @@
 
 ---
 
+## v0.8.6.1 — 2026-06-09
+
+### First-run setup warning
+- On load, Marginalia checks /api/setup-status — if no cloud keys are configured, a full-screen setup guide appears
+- Dark overlay explains exactly what to do: open setup.env, paste keys, restart
+- Lists all three key sources with URLs
+- Includes local model setup instructions (Ollama pull commands, OLLAMA_MODELS_PATH)
+- "I'll set this up later" button dismisses and continues to the app
+- Warning does not appear once any cloud key is configured
+- Protects new users from landing on a broken-looking UI with no explanation
+
+---
+
 ## v0.8.6 — 2026-06-09
 
 ### Timeout countdown (replaces progress bar)
