@@ -4,6 +4,32 @@
 
 ## v0.8.6 — 2026-06-09
 
+### Timeout countdown (replaces progress bar)
+- Each loading card shows a live countdown timer: "Waiting… ▓▓▓▓░░░ 28s"
+- Bar depletes in real time with second-by-second updates
+- Colour shifts: blue/green → amber at 40% remaining → red at 15%
+- Timer stops and hides cleanly when response arrives
+- Cloud models: 30s · Local models: 300s
+
+### Cancel button
+- Appears next to Send while a prompt is running
+- Cancels stream immediately — pending cards marked Cancelled
+- Send re-enables straight away — no restart needed
+
+### Fixed: chip tooltips
+- Tooltips now correctly attached to each chip
+- Hover any chip to see model type, web awareness, knowledge cutoff, notes
+
+### Fixed: local models not responding
+- OLLAMA_MODELS_PATH added to setup.env
+- app.py injects it as OLLAMA_MODELS env var on startup
+- Ollama can now find models on external Vault SSD without manual export
+- Set to /Volumes/Vault/Marginalia/ollama/models — change if your path differs
+
+---
+
+## v0.8.6 — 2026-06-09
+
 ### Timeout progress bar
 - Each response card shows a thin bar that depletes over the model's timeout window
 - Cloud models: 30 second bar (blue)

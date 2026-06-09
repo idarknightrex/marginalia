@@ -39,6 +39,12 @@ KEYS = {
 
 OLLAMA_BASE = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 
+# If OLLAMA_MODELS_PATH is set in setup.env, inject it into the environment
+# so Ollama finds models on external drives (e.g. Vault SSD on Mac Mini)
+_ollama_models_path = os.getenv("OLLAMA_MODELS_PATH", "")
+if _ollama_models_path:
+    os.environ["OLLAMA_MODELS"] = _ollama_models_path
+
 for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, APP_ROOT / "db"]:
     d.mkdir(parents=True, exist_ok=True)
 

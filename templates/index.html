@@ -41,20 +41,24 @@
     .no-key-badge { font-size: 9px; font-family: monospace; color: var(--muted); margin-left: 2px; }
 
 
-    /* ── Timeout progress bar ── */
-    .response-card .timeout-bar-wrap {
-      height: 2px; background: var(--border); border-radius: 1px;
-      margin-bottom: 6px; overflow: hidden; display: none;
+    /* ── Timeout countdown ── */
+    .timeout-countdown {
+      font-family: monospace; font-size: 9px; color: var(--muted);
+      margin-bottom: 4px; display: none; letter-spacing: .02em;
     }
-    .response-card.loading .timeout-bar-wrap { display: block; }
-    .timeout-bar {
-      height: 100%; border-radius: 1px;
-      transition: width linear;
+    .response-card.loading .timeout-countdown { display: block; }
+    .timeout-countdown .countdown-bar {
+      display: inline-block; width: 80px; height: 3px;
+      background: var(--border); border-radius: 2px;
+      vertical-align: middle; margin-left: 5px; overflow: hidden;
     }
-    .timeout-bar.cloud { background: #4285f4; }
-    .timeout-bar.local { background: #52c41a; }
-    .response-card.timed-out .timeout-bar-wrap { display: block; }
-    .response-card.timed-out .timeout-bar { width: 0% !important; background: #c94242; transition: none; }
+    .timeout-countdown .countdown-fill {
+      height: 100%; border-radius: 2px; background: #4285f4;
+      transition: width 1s linear;
+    }
+    .timeout-countdown.local .countdown-fill { background: #52c41a; }
+    .timeout-countdown.warning .countdown-fill { background: #c9a832; }
+    .timeout-countdown.critical .countdown-fill { background: #c94242; }
 
     /* ── Cancel button ── */
     .cancel-btn {
@@ -474,31 +478,49 @@ function makeCard(model) {
   const cutoff = meta.type === 'local'
     ? '<span style="font-size:9px;font-family:monospace;color:var(--muted);margin-left:4px">~1yr cutoff</span>'
     : '';
-  const barClass = meta.type === 'local' ? 'local' : 'cloud';
+  const cdClass = meta.type === 'local' ? 'local' : '';
   card.innerHTML =
-    '<div class="timeout-bar-wrap"><div class="timeout-bar ' + barClass + '" id="bar-' + model + '" style="width:100%"></div></div>' +
+    '<div class="timeout-countdown ' + cdClass + '" id="cd-' + model + '">Waiting… <span class="countdown-bar"><span class="countdown-fill" id="cdfill-' + model + '" style="width:100%"></span></span> <span id="cdsec-' + model + '"></span></div>' +
     '<div class="model-label" style="color:' + MODEL_COLORS[model] + ';display:flex;align-items:center">' + model + badge + cutoff + '</div>' +
     '<div class="response-text"></div>';
   return card;
 }
 
+const countdownTimers = {};
+
 function startTimeoutBar(model) {
-  const bar = document.getElementById('bar-' + model);
-  if (!bar) return;
-  const duration = MODEL_TIMEOUT[model] || 30000;
-  // Force reflow then animate
-  bar.style.transition = 'none';
-  bar.style.width = '100%';
-  bar.getBoundingClientRect();
-  bar.style.transition = 'width ' + (duration / 1000) + 's linear';
-  bar.style.width = '0%';
+  const total   = (MODEL_TIMEOUT[model] || 30000) / 1000;
+  const cdEl    = document.getElementById('cd-' + model);
+  const fillEl  = document.getElementById('cdfill-' + model);
+  const secEl   = document.getElementById('cdsec-' + model);
+  if (!cdEl) return;
+  let remaining = total;
+
+  function tick() {
+    if (!document.getElementById('cd-' + model)) return;
+    remaining = Math.max(0, remaining - 1);
+    const pct  = (remaining / total) * 100;
+    if (fillEl) fillEl.style.width = pct + '%';
+    if (secEl)  secEl.textContent  = remaining + 's';
+    // Colour shift as time runs down
+    const pctLeft = pct;
+    if (cdEl) {
+      cdEl.classList.toggle('warning',  pctLeft < 40 && pctLeft >= 15);
+      cdEl.classList.toggle('critical', pctLeft < 15);
+    }
+    if (remaining > 0) {
+      countdownTimers[model] = setTimeout(tick, 1000);
+    }
+  }
+  if (secEl) secEl.textContent = total + 's';
+  countdownTimers[model] = setTimeout(tick, 1000);
 }
 
 function stopTimeoutBar(model) {
-  const bar = document.getElementById('bar-' + model);
-  if (!bar) return;
-  bar.style.transition = 'none';
-  bar.style.width = '100%';
+  clearTimeout(countdownTimers[model]);
+  delete countdownTimers[model];
+  const cdEl = document.getElementById('cd-' + model);
+  if (cdEl) cdEl.style.display = 'none';
 }
 
 function cancelPrompt() {
@@ -513,9 +535,8 @@ function cancelPrompt() {
     rt.textContent = 'Cancelled';
     rt.style.color = 'var(--muted)';
     rt.style.fontStyle = 'italic';
-    // Stop bar
-    const bar = card.querySelector('.timeout-bar');
-    if (bar) { bar.style.transition = 'none'; bar.style.width = '0%'; bar.style.background = '#c9a832'; }
+    const model = card.id.replace('card-', '');
+    stopTimeoutBar(model);
   });
   document.getElementById('cancel-btn').classList.remove('visible');
   document.getElementById('send-btn').disabled = false;
@@ -583,8 +604,7 @@ async function sendPrompt() {
           const card = document.getElementById('card-' + evt.model);
           if (card) {
             card.classList.remove('loading');
-            const bar = document.getElementById('bar-' + evt.model);
-            if (bar) { bar.style.transition = 'none'; bar.style.width = '0%'; bar.style.background = '#c94242'; }
+            stopTimeoutBar(evt.model);
             const rt = card.querySelector('.response-text');
             const isTimeout = evt.error && evt.error.toLowerCase().includes('timed out');
             rt.textContent = isTimeout ? '\u23f1 Timed out — model took too long' : '\u26a0 ' + evt.error;
