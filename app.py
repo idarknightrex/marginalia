@@ -426,70 +426,111 @@ def key_status():
     })
 
 @app.route("/api/prompt", methods=["POST"])
-def handle_prompt():
-    global anthropic_tokens
-    data    = request.json
-    prompt  = data.get("prompt", "")
-    models  = data.get("models", [])
-    results, errors = {}, {}
-
-    if "gemini" in models and KEYS["gemini"]:
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=KEYS["gemini"])
-            response = genai.GenerativeModel("gemini-2.5-flash").generate_content(prompt)
-            results["gemini"] = response.text
-        except Exception as e:
-            errors["gemini"] = str(e)
-
-    if "anthropic" in models and KEYS["anthropic"]:
-        try:
-            import anthropic
-            client  = anthropic.Anthropic(api_key=KEYS["anthropic"])
-            message = client.messages.create(model="claude-haiku-4-5", max_tokens=1024, messages=[{"role": "user", "content": prompt}])
-            results["anthropic"] = message.content[0].text
-            anthropic_tokens["input"]  += message.usage.input_tokens
-            anthropic_tokens["output"] += message.usage.output_tokens
-        except Exception as e:
-            errors["anthropic"] = str(e)
-
-    if "openai" in models and KEYS["openai"]:
-        try:
-            from openai import OpenAI
-            client   = OpenAI(api_key=KEYS["openai"])
-            response = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": prompt}])
-            results["openai"] = response.choices[0].message.content
-        except Exception as e:
-            errors["openai"] = str(e)
-
-    if "llama" in models:
-        try:
-            results["llama"] = call_ollama(local_cfg.get("general", "llama3.1:8b"), prompt)
-        except Exception as e:
-            errors["llama"] = str(e)
-
+def call_model(model, prompt):
+    """Call one model. Returns (model, result, error, input_tokens, output_tokens)."""
     settings  = load_settings()
     local_cfg = settings.get("models", {}).get("local", {})
+    try:
+        if model == "gemini" and KEYS.get("gemini"):
+            import google.generativeai as genai
+            genai.configure(api_key=KEYS["gemini"])
+            r = genai.GenerativeModel("gemini-2.5-flash").generate_content(prompt)
+            return (model, r.text, None, 0, 0)
+        elif model == "anthropic" and KEYS.get("anthropic"):
+            import anthropic as _anth
+            client = _anth.Anthropic(api_key=KEYS["anthropic"])
+            msg = client.messages.create(model="claude-haiku-4-5", max_tokens=1024,
+                                         messages=[{"role": "user", "content": prompt}])
+            return (model, msg.content[0].text, None,
+                    msg.usage.input_tokens, msg.usage.output_tokens)
+        elif model == "openai" and KEYS.get("openai"):
+            from openai import OpenAI
+            client = OpenAI(api_key=KEYS["openai"])
+            r = client.chat.completions.create(model="gpt-4o",
+                                               messages=[{"role": "user", "content": prompt}])
+            return (model, r.choices[0].message.content, None, 0, 0)
+        elif model == "deepseek":
+            return (model, call_ollama(local_cfg.get("reasoning",  "deepseek-r1:8b"), prompt), None, 0, 0)
+        elif model == "gemma":
+            return (model, call_ollama(local_cfg.get("multimodal", "gemma4:latest"),  prompt), None, 0, 0)
+        elif model == "llama":
+            return (model, call_ollama(local_cfg.get("general",    "llama3.1:8b"),    prompt), None, 0, 0)
+        else:
+            return (model, None, "No key configured", 0, 0)
+    except Exception as e:
+        return (model, None, str(e), 0, 0)
 
-    if "deepseek" in models:
-        try: results["deepseek"] = call_ollama(local_cfg.get("reasoning", "deepseek-r1:8b"), prompt)
-        except Exception as e: errors["deepseek"] = str(e)
 
-    if "gemma" in models:
-        try: results["gemma"] = call_ollama(local_cfg.get("multimodal", "gemma4:latest"), prompt)
-        except Exception as e: errors["gemma"] = str(e)
+# Firing order — cloud parallel first, local sequential after
+MODEL_ORDER   = ["gemini", "anthropic", "openai", "deepseek", "gemma", "llama"]
+CLOUD_MODELS  = {"gemini", "anthropic", "openai"}
+LOCAL_MODELS  = {"deepseek", "gemma", "llama"}
 
-    synthesis = run_synthesis(prompt, results) if len(results) > 1 else ""
-    if results:
-        write_canonical_session(prompt, results, synthesis)
 
-    cost = estimate_anthropic_cost(anthropic_tokens["input"], anthropic_tokens["output"])
-    return jsonify({
-        "results": results, "errors": errors, "synthesis": synthesis,
-        "session_saved": bool(results),
-        "anthropic_cost_usd": round(cost, 4),
-        "anthropic_tokens": dict(anthropic_tokens)
-    })
+def handle_prompt():
+    global anthropic_tokens
+    data   = request.json
+    prompt = data.get("prompt", "")
+    models = data.get("models", [])
+
+    cloud_ordered = [m for m in MODEL_ORDER if m in models and m in CLOUD_MODELS]
+    local_ordered = [m for m in MODEL_ORDER if m in models and m in LOCAL_MODELS]
+
+    def generate():
+        import concurrent.futures
+        results, errors = {}, {}
+
+        # Phase 1 — cloud models in parallel
+        if cloud_ordered:
+            for m in cloud_ordered:
+                yield json.dumps({"event": "start", "model": m}) + "\n"
+            with concurrent.futures.ThreadPoolExecutor() as ex:
+                futures = {ex.submit(call_model, m, prompt): m for m in cloud_ordered}
+                for future in concurrent.futures.as_completed(futures):
+                    model, result, error, in_tok, out_tok = future.result()
+                    if in_tok:
+                        anthropic_tokens["input"]  += in_tok
+                        anthropic_tokens["output"] += out_tok
+                    if result:
+                        results[model] = result
+                        yield json.dumps({"event": "result", "model": model, "text": result}) + "\n"
+                    else:
+                        errors[model] = error or "No response"
+                        yield json.dumps({"event": "error", "model": model, "error": errors[model]}) + "\n"
+
+        # Phase 2 — local models one at a time
+        for model in local_ordered:
+            yield json.dumps({"event": "start", "model": model}) + "\n"
+            _, result, error, _, _ = call_model(model, prompt)
+            if result:
+                results[model] = result
+                yield json.dumps({"event": "result", "model": model, "text": result}) + "\n"
+            else:
+                errors[model] = error or "No response"
+                yield json.dumps({"event": "error", "model": model, "error": errors[model]}) + "\n"
+
+        # Phase 3 — synthesis
+        synthesis = ""
+        if len(results) > 1:
+            yield json.dumps({"event": "synthesis_start"}) + "\n"
+            synthesis = run_synthesis(prompt, results)
+            yield json.dumps({"event": "synthesis", "text": synthesis}) + "\n"
+
+        if results:
+            write_canonical_session(prompt, results, synthesis)
+
+        cost = estimate_anthropic_cost(anthropic_tokens["input"], anthropic_tokens["output"])
+        yield json.dumps({
+            "event":              "done",
+            "session_saved":      bool(results),
+            "anthropic_cost_usd": round(cost, 4),
+        }) + "\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"}
+    )
 
 
 @app.route("/api/broadcast", methods=["GET"])
