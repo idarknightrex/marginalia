@@ -192,32 +192,21 @@
     .chip-wrapper { position: relative; display: inline-flex; }
     .chip-tooltip {
       display: none;
-      position: absolute;
-      bottom: calc(100% + 6px);
-      left: 50%;
-      transform: translateX(-50%);
+      position: fixed;
       background: #1a1410;
       color: #f5f0e8;
       font-family: monospace;
       font-size: 10px;
-      line-height: 1.5;
-      padding: 6px 10px;
+      line-height: 1.6;
+      padding: 8px 12px;
       border-radius: 4px;
       white-space: nowrap;
-      z-index: 200;
+      z-index: 9999;
       pointer-events: none;
-      box-shadow: 0 2px 8px rgba(0,0,0,.3);
+      box-shadow: 0 4px 16px rgba(0,0,0,.4);
+      border: 1px solid #3a3020;
     }
-    .chip-tooltip::after {
-      content: '';
-      position: absolute;
-      top: 100%;
-      left: 50%;
-      transform: translateX(-50%);
-      border: 4px solid transparent;
-      border-top-color: #1a1410;
-    }
-    .chip-wrapper:hover .chip-tooltip { display: block; }
+    /* tooltip shown via JS mouseover for fixed positioning */
 
     /* ── Hide inactive toggle ── */
     .chips-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
@@ -591,7 +580,7 @@
   <span class="status-online">&#9679; Marginalia running</span>
   <span id="session-time">Session: 0m</span>
   <span class="status-cost" id="cost-display">Claude: $0.0000</span>
-  <span class="status-project">v0.8.6.1 &middot; LLM</span>
+  <span class="status-project">v0.8.6.3 &middot; LLM</span>
 </div>
 
 <script>
@@ -700,14 +689,24 @@ function startTimeoutBar(model) {
     const pct  = (remaining / total) * 100;
     if (fillEl) fillEl.style.width = pct + '%';
     if (secEl)  secEl.textContent  = remaining + 's';
-    // Colour shift as time runs down
-    const pctLeft = pct;
     if (cdEl) {
-      cdEl.classList.toggle('warning',  pctLeft < 40 && pctLeft >= 15);
-      cdEl.classList.toggle('critical', pctLeft < 15);
+      cdEl.classList.toggle('warning',  pct < 40 && pct >= 15);
+      cdEl.classList.toggle('critical', pct < 15);
     }
     if (remaining > 0) {
       countdownTimers[model] = setTimeout(tick, 1000);
+    } else {
+      // Time's up — mark card as timed out
+      const card = document.getElementById('card-' + model);
+      if (card && card.classList.contains('loading')) {
+        card.classList.remove('loading');
+        const rt = card.querySelector('.response-text');
+        if (rt) {
+          rt.textContent = '\u23f1 Timed out — model took too long. Try again with a shorter prompt, or check Ollama is running for local models.';
+          rt.style.color = '#c94242';
+        }
+        if (cdEl) cdEl.style.display = 'none';
+      }
     }
   }
   if (secEl) secEl.textContent = total + 's';
@@ -819,7 +818,17 @@ async function sendPrompt() {
           panel.style.display = 'block';
           text.style.color = 'var(--muted)';
           text.style.fontStyle = 'italic';
-          text.textContent = 'Synthesising with DeepSeek R1\u2026';
+          // Sim City tribute
+    const splineMessages = [
+      'Reticulating splines\u2026',
+      'Triangulating research vectors\u2026',
+      'Mapping consensus nodes\u2026',
+      'Calibrating divergence fields\u2026',
+      'Weaving argument threads\u2026',
+      'Identifying epistemic gaps\u2026',
+      'Conbobulating obfusticators\u2026',
+    ];
+    text.textContent = splineMessages[Math.floor(Math.random() * splineMessages.length)];
         }
 
         else if (evt.event === 'synthesis') {
@@ -1028,6 +1037,29 @@ async function checkSetupStatus() {
 function dismissSetup() {
   document.getElementById('setup-warning').style.display = 'none';
 }
+
+// ── Chip tooltip positioning ─────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.chip-wrapper').forEach(wrapper => {
+    const tooltip = wrapper.querySelector('.chip-tooltip');
+    if (!tooltip) return;
+    wrapper.addEventListener('mouseenter', (e) => {
+      const rect = wrapper.getBoundingClientRect();
+      tooltip.style.display = 'block';
+      // Position above the chip, centred
+      tooltip.style.left = (rect.left + rect.width / 2 - tooltip.offsetWidth / 2) + 'px';
+      tooltip.style.top  = (rect.top - tooltip.offsetHeight - 8) + 'px';
+      // Keep on screen
+      const tRect = tooltip.getBoundingClientRect();
+      if (tRect.left < 8) tooltip.style.left = '8px';
+      if (tRect.right > window.innerWidth - 8)
+        tooltip.style.left = (window.innerWidth - tRect.width - 8) + 'px';
+    });
+    wrapper.addEventListener('mouseleave', () => {
+      tooltip.style.display = 'none';
+    });
+  });
+});
 
 // ── Hide inactive toggle ──────────────────────────────────────────────────
 function toggleHideInactive(btn) {

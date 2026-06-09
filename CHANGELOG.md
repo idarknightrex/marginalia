@@ -2,6 +2,23 @@
 
 ---
 
+## v0.8.6.2 — 2026-06-09
+
+### Fixed: response cards now correctly below the prompt input
+- Reverted accidental reorder from v0.8.6.1 — cards appear below textarea as intended
+
+### Fixed: timeout at zero now marks the card
+- When countdown hits 0, card shows "⏱ Timed out" message in red
+- Countdown hides cleanly
+- Card no longer sits frozen — you can send a new prompt immediately
+
+### Fixed: chip tooltips
+- Switched from CSS hover to JS mouseenter with fixed positioning
+- Tooltips now appear correctly above each chip with accurate placement
+- No longer clipped by parent overflow or misaligned to wrong chip
+
+---
+
 ## v0.8.6.1 — 2026-06-09
 
 ### UI fixes
