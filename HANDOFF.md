@@ -1,5 +1,5 @@
 # Marginalia — Thread Handoff
-**Version:** v0.8.7
+**Version:** v0.8.7.1
 **Purpose:** Copy this into a new Claude thread to restore full context
 
 ---
@@ -41,7 +41,7 @@ No hidden .env file needed. Fields:
 
 ---
 
-## Model Chips (v0.8.7)
+## Model Chips (v0.8.7.1)
 | Chip | Model | Status |
 |---|---|---|
 | Gemini 2.5 Flash | gemini-2.5-flash | ✅ Working |
@@ -88,9 +88,9 @@ No hidden .env file needed. Fields:
 
 ## Build History
 - **v0.8-pre** — Multi-model prompt: Gemini, Claude Haiku, Azure GPT-4o. References pipeline. Save & Break.
-- **v0.8.1** — DeepSeek R1 + Gemma 4 chips added and wired to Ollama backend
-- **v0.8.2** — Synthesis engine (DeepSeek R1 local meta-pass). 16GB mutex. Claude cost counter.
-- **v0.8.7** — Full reference import (CSV/BibTeX/RIS/DOI/plaintext). Azure replaced with OpenAI direct + Perplexity. setup.env replaces .env. Docs updated.
+- **v0.8.7.1** — DeepSeek R1 + Gemma 4 chips added and wired to Ollama backend
+- **v0.8.7.1** — Synthesis engine (DeepSeek R1 local meta-pass). 16GB mutex. Claude cost counter.
+- **v0.8.7.1** — Full reference import (CSV/BibTeX/RIS/DOI/plaintext). Azure replaced with OpenAI direct + Perplexity. setup.env replaces .env. Docs updated.
 
 ---
 

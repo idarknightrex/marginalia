@@ -2,6 +2,36 @@
 
 ---
 
+## v0.8.7.1 — 2026-06-09
+
+### Fixed: Qwen and Mistral now fire correctly
+- Added qwen and mistral to frontend MODEL_ORDER
+- Added qwen and mistral to MODEL_META with correct perspective labels
+- Added qwen and mistral to MODEL_TIMEOUT (300s each)
+- Added qwen and mistral to MODEL_COLORS
+
+### Fixed: Local model badges show correct type
+- Qwen: local · Asia/Global South · ~1yr cutoff
+- Mistral: local · Europe · ~1yr cutoff
+- DeepSeek: local · China · ~1yr cutoff
+- Gemma: local · Western · ~1yr cutoff
+- Llama: local · Global · ~1yr cutoff
+
+### Fixed: Countdown timer starts when model actually fires
+- Timer now starts on backend 'start' event, not card creation
+- Sequential local models show accurate individual elapsed times
+- Cards created immediately but show no timer until backend signals
+
+### Fixed: Local chip mutex removed
+- Multiple local models can be selected and activated
+- Fire sequentially with keep_alive:0 — each unloads before next loads
+- Warning updated: Mistral (14GB) note, others sequential
+
+### Fixed: cardStartTimes single declaration
+- Removed duplicate declaration that caused reference errors
+
+---
+
 ## v0.8.7 — 2026-06-09
 
 ### New local models: Qwen 2.5 14B and Mistral Small
