@@ -786,7 +786,7 @@ async function sendPrompt() {
   document.getElementById('synthesis-panel').style.display = 'none';
 
   // MODEL_ORDER defines firing sequence — cloud first, local after
-  const MODEL_ORDER = ['gemini', 'anthropic', 'openai', 'deepseek', 'gemma', 'llama'];
+  const MODEL_ORDER = ['gemini', 'anthropic', 'openai', 'deepseek', 'qwen', 'mistral', 'gemma', 'llama'];
   const models = MODEL_ORDER.filter(m => activeModels.has(m));
 
   // Pre-create all cards in order so layout is stable
