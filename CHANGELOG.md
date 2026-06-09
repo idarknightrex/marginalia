@@ -2,6 +2,45 @@
 
 ---
 
+## v0.8.6 — 2026-06-09
+
+### Timeout progress bar
+- Each response card shows a thin bar that depletes over the model's timeout window
+- Cloud models: 30 second bar (blue)
+- Local models: 300 second bar (green)
+- Bar turns red and card shows "Timed out" if model doesn't respond in time
+- Bar fills instantly to full on completion — clear visual confirmation
+
+### Cancel button
+- Cancel button appears next to Send while a prompt is running
+- Cancels the stream immediately — all pending cards marked Cancelled
+- Send button re-enables — you can send a new prompt straight away
+- No need to restart Marginalia to recover from a stalled session
+
+---
+
+## v0.8.5 — 2026-06-09
+
+### Parallel cloud / sequential local model firing
+- Cloud models (Gemini, Claude, GPT-4o) now fire in parallel — all start simultaneously
+- Local models (DeepSeek, Gemma, Llama) still fire sequentially after cloud completes
+- Net result: cloud responses arrive together in seconds; you read them while local models think
+- Fixes Gemma appearing to "fire first" when cloud keys were missing (they errored instantly)
+
+### Chip tooltips
+- Hover over any model chip to see: model name, type, web awareness, knowledge cutoff, notes
+- Gemini: web-aware, current knowledge
+- Cloud models: no web search, ~early 2025 cutoff
+- Local models: private, on-machine, ~1yr knowledge cutoff, memory notes
+- DeepSeek tooltip notes it doubles as the synthesis engine
+
+### Hide inactive chips toggle
+- "Hide inactive" button above chip row — collapses greyed chips out of view
+- Toggles to "Show all" — restores full chip row
+- Useful when running with only 2-3 models active
+
+---
+
 ## v0.8.4 — 2026-06-09
 
 ### Sequential streaming responses

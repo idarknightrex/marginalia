@@ -39,6 +39,78 @@
     .model-chip.no-key { opacity: .3; cursor: not-allowed; }
     .model-chip.no-key .chip-dot { filter: grayscale(1); }
     .no-key-badge { font-size: 9px; font-family: monospace; color: var(--muted); margin-left: 2px; }
+
+
+    /* ── Timeout progress bar ── */
+    .response-card .timeout-bar-wrap {
+      height: 2px; background: var(--border); border-radius: 1px;
+      margin-bottom: 6px; overflow: hidden; display: none;
+    }
+    .response-card.loading .timeout-bar-wrap { display: block; }
+    .timeout-bar {
+      height: 100%; border-radius: 1px;
+      transition: width linear;
+    }
+    .timeout-bar.cloud { background: #4285f4; }
+    .timeout-bar.local { background: #52c41a; }
+    .response-card.timed-out .timeout-bar-wrap { display: block; }
+    .response-card.timed-out .timeout-bar { width: 0% !important; background: #c94242; transition: none; }
+
+    /* ── Cancel button ── */
+    .cancel-btn {
+      padding: 6px 14px; background: transparent;
+      color: #c94242; border: 1px solid #c9424244;
+      border-radius: 4px; cursor: pointer;
+      font-family: monospace; font-size: 11px;
+      display: none;
+    }
+    .cancel-btn.visible { display: inline-block; }
+
+    /* ── Chip tooltips ── */
+    .chip-wrapper { position: relative; display: inline-flex; }
+    .chip-tooltip {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1a1410;
+      color: #f5f0e8;
+      font-family: monospace;
+      font-size: 10px;
+      line-height: 1.5;
+      padding: 6px 10px;
+      border-radius: 4px;
+      white-space: nowrap;
+      z-index: 200;
+      pointer-events: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    }
+    .chip-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 4px solid transparent;
+      border-top-color: #1a1410;
+    }
+    .chip-wrapper:hover .chip-tooltip { display: block; }
+
+    /* ── Hide inactive toggle ── */
+    .chips-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .hide-inactive-btn {
+      font-family: monospace; font-size: 10px;
+      background: transparent; border: 1px solid var(--border);
+      color: var(--muted); border-radius: 3px;
+      padding: 2px 8px; cursor: pointer;
+    }
+    .hide-inactive-btn.active {
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+      color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    }
+    .model-chips.hide-inactive .model-chip.inactive { display: none; }
+
     .chip-local-warning { display: none; font-family: monospace; font-size: 10px; color: #c9a832; margin-bottom: 10px; padding: 4px 8px; background: #c9a83212; border: 1px solid #c9a83244; border-radius: 3px; }
     .chip-local-warning.visible { display: block; }
 
@@ -144,25 +216,37 @@
     <div class="page-header"><h1>Prompt</h1><small>Multi-model synthesis</small></div>
 
     <div class="model-chips">
-      <div class="model-chip active" data-model="gemini" data-local="false" style="background:rgba(66,133,244,.1);border-color:rgba(66,133,244,.3)" onclick="toggleModel(this)">
+      <div class="chip-wrapper"><div class="model-chip active" data-model="gemini" data-local="false" style="background:rgba(66,133,244,.1);border-color:rgba(66,133,244,.3)" onclick="toggleModel(this)">
         <div class="chip-dot" style="background:#4285f4"></div><span style="color:#4285f4">Gemini 2.5 Flash</span>
       </div>
-      <div class="model-chip active" data-model="anthropic" data-local="false" style="background:rgba(201,100,66,.1);border-color:rgba(201,100,66,.3)" onclick="toggleModel(this)">
+      <div class="chip-wrapper"><div class="model-chip active" data-model="anthropic" data-local="false" style="background:rgba(201,100,66,.1);border-color:rgba(201,100,66,.3)" onclick="toggleModel(this)">
         <div class="chip-dot" style="background:#c96442"></div><span style="color:#c96442">Claude Haiku</span>
       </div>
-      <div class="model-chip active" data-model="openai" data-local="false" style="background:rgba(16,163,127,.1);border-color:rgba(16,163,127,.3)" onclick="toggleModel(this)">
+      <div class="chip-wrapper"><div class="model-chip active" data-model="openai" data-local="false" style="background:rgba(16,163,127,.1);border-color:rgba(16,163,127,.3)" onclick="toggleModel(this)">
         <div class="chip-dot" style="background:#10a37f"></div><span style="color:#10a37f">GPT-4o</span>
       </div>
-      <div class="model-chip active" data-model="llama" data-local="true" style="background:rgba(156,106,222,.1);border-color:rgba(156,106,222,.3)" onclick="toggleModel(this)">
+      <div class="chip-wrapper"><div class="model-chip active" data-model="llama" data-local="true" style="background:rgba(156,106,222,.1);border-color:rgba(156,106,222,.3)" onclick="toggleModel(this)">
         <div class="chip-dot" style="background:#9c6ade"></div><span style="color:#9c6ade">Llama 3.1</span>
       </div>
-      <div class="model-chip active" data-model="deepseek" data-local="true" style="background:rgba(82,196,26,.1);border-color:rgba(82,196,26,.3)" onclick="toggleModel(this)">
+      <div class="chip-wrapper"><div class="model-chip active" data-model="deepseek" data-local="true" style="background:rgba(82,196,26,.1);border-color:rgba(82,196,26,.3)" onclick="toggleModel(this)">
         <div class="chip-dot" style="background:#52c41a"></div><span style="color:#52c41a">DeepSeek R1</span>
       </div>
-      <div class="model-chip inactive" data-model="gemma" data-local="true" style="background:rgba(255,171,0,.1);border-color:rgba(255,171,0,.3)" onclick="toggleModel(this)">
+      <div class="chip-wrapper"><div class="model-chip inactive" data-model="gemma" data-local="true" style="background:rgba(255,171,0,.1);border-color:rgba(255,171,0,.3)" onclick="toggleModel(this)">
         <div class="chip-dot" style="background:#ffab00"></div><span style="color:#ffab00">Gemma 4</span>
       </div>
     </div>
+      <span class="chip-tooltip">🔒 Local · Llama 3.1 8B (Meta)\nRuns on your machine · No internet · Private\nGeneral purpose · Knowledge: ~1yr behind\nPull first: ollama pull llama3.1:8b</span>
+      </div>
+      <span class="chip-tooltip">🔒 Local · Gemma 4 (Google)\nRuns on your machine · No internet · Private\nMultimodal capable · Knowledge: ~1yr behind\n9.6GB — start inactive on 16GB systems</span>
+      </div>
+      <span class="chip-tooltip">🔒 Local · DeepSeek R1 8B\nRuns on your machine · No internet · Private\nReasoning model · Knowledge: ~1yr behind\nAlso used for synthesis pass</span>
+      </div>
+      <span class="chip-tooltip">☁️ Cloud · OpenAI GPT-4o\nBroad capability · Pay-as-you-go\nNo web search · Knowledge: ~early 2025</span>
+      </div>
+      <span class="chip-tooltip">☁️ Cloud · Anthropic Claude Haiku 4.5\nStrong reasoning · Pay-as-you-go\nNo web search · Knowledge: ~early 2025</span>
+      </div>
+      <span class="chip-tooltip">🌐 Web-aware · Google Gemini 2.5 Flash\nLive internet access · Free tier available\nCloud · Knowledge: current</span>
+      </div>
 
     <div class="chip-local-warning" id="local-warning">
       &#9888; 16GB system — one local model at a time recommended.
@@ -171,7 +255,8 @@
     <textarea id="prompt-input" placeholder="Enter your research question or prompt..."></textarea>
     <div class="prompt-footer">
       <span class="token-estimate" id="token-estimate">~0 tokens</span>
-      <button class="btn-primary" onclick="sendPrompt()">Send to Active Models &#8594;</button>
+      <button class="cancel-btn" id="cancel-btn" onclick="cancelPrompt()">&#9632; Cancel</button>
+      <button class="btn-primary" id="send-btn" onclick="sendPrompt()">Send to Active Models &#8594;</button>
     </div>
 
     <div class="response-grid" id="response-grid"></div>
@@ -309,7 +394,7 @@
   <span class="status-online">&#9679; Marginalia running</span>
   <span id="session-time">Session: 0m</span>
   <span class="status-cost" id="cost-display">Claude: $0.0000</span>
-  <span class="status-project">v0.8.4 &middot; LLM</span>
+  <span class="status-project">v0.8.6 &middot; LLM</span>
 </div>
 
 <script>
@@ -371,6 +456,10 @@ document.getElementById('prompt-input').addEventListener('input', function() {
   document.getElementById('token-estimate').textContent = '~' + Math.round(this.value.trim().split(/\s+/).length * 1.3) + ' tokens';
 });
 
+// Timeout durations per model type (ms) — used for progress bar animation
+const MODEL_TIMEOUT = { gemini: 30000, anthropic: 30000, openai: 30000, deepseek: 300000, gemma: 300000, llama: 300000 };
+let activeReader = null;
+
 function makeCard(model) {
   const card = document.createElement('div');
   card.className = 'response-card loading';
@@ -385,8 +474,51 @@ function makeCard(model) {
   const cutoff = meta.type === 'local'
     ? '<span style="font-size:9px;font-family:monospace;color:var(--muted);margin-left:4px">~1yr cutoff</span>'
     : '';
-  card.innerHTML = '<div class="model-label" style="color:' + MODEL_COLORS[model] + ';display:flex;align-items:center">' + model + badge + cutoff + '</div><div class="response-text"></div>';
+  const barClass = meta.type === 'local' ? 'local' : 'cloud';
+  card.innerHTML =
+    '<div class="timeout-bar-wrap"><div class="timeout-bar ' + barClass + '" id="bar-' + model + '" style="width:100%"></div></div>' +
+    '<div class="model-label" style="color:' + MODEL_COLORS[model] + ';display:flex;align-items:center">' + model + badge + cutoff + '</div>' +
+    '<div class="response-text"></div>';
   return card;
+}
+
+function startTimeoutBar(model) {
+  const bar = document.getElementById('bar-' + model);
+  if (!bar) return;
+  const duration = MODEL_TIMEOUT[model] || 30000;
+  // Force reflow then animate
+  bar.style.transition = 'none';
+  bar.style.width = '100%';
+  bar.getBoundingClientRect();
+  bar.style.transition = 'width ' + (duration / 1000) + 's linear';
+  bar.style.width = '0%';
+}
+
+function stopTimeoutBar(model) {
+  const bar = document.getElementById('bar-' + model);
+  if (!bar) return;
+  bar.style.transition = 'none';
+  bar.style.width = '100%';
+}
+
+function cancelPrompt() {
+  if (activeReader) {
+    activeReader.cancel();
+    activeReader = null;
+  }
+  // Mark all still-loading cards as cancelled
+  document.querySelectorAll('.response-card.loading').forEach(card => {
+    card.classList.remove('loading');
+    const rt = card.querySelector('.response-text');
+    rt.textContent = 'Cancelled';
+    rt.style.color = 'var(--muted)';
+    rt.style.fontStyle = 'italic';
+    // Stop bar
+    const bar = card.querySelector('.timeout-bar');
+    if (bar) { bar.style.transition = 'none'; bar.style.width = '0%'; bar.style.background = '#c9a832'; }
+  });
+  document.getElementById('cancel-btn').classList.remove('visible');
+  document.getElementById('send-btn').disabled = false;
 }
 
 async function sendPrompt() {
@@ -404,6 +536,10 @@ async function sendPrompt() {
   // Pre-create all cards in order so layout is stable
   models.forEach(model => grid.appendChild(makeCard(model)));
 
+  // Show cancel, disable send
+  document.getElementById('cancel-btn').classList.add('visible');
+  document.getElementById('send-btn').disabled = true;
+
   try {
     const res = await fetch('/api/prompt', {
       method: 'POST',
@@ -412,6 +548,7 @@ async function sendPrompt() {
     });
 
     const reader  = res.body.getReader();
+    activeReader  = reader;
     const decoder = new TextDecoder();
     let   buffer  = '';
 
@@ -428,15 +565,16 @@ async function sendPrompt() {
         try { evt = JSON.parse(line); } catch(e) { continue; }
 
         if (evt.event === 'start') {
-          // Model is now thinking — card already exists, just ensure loading state
           const card = document.getElementById('card-' + evt.model);
           if (card) card.classList.add('loading');
+          startTimeoutBar(evt.model);
         }
 
         else if (evt.event === 'result') {
           const card = document.getElementById('card-' + evt.model);
           if (card) {
             card.classList.remove('loading');
+            stopTimeoutBar(evt.model);
             card.querySelector('.response-text').textContent = evt.text;
           }
         }
@@ -445,8 +583,11 @@ async function sendPrompt() {
           const card = document.getElementById('card-' + evt.model);
           if (card) {
             card.classList.remove('loading');
+            const bar = document.getElementById('bar-' + evt.model);
+            if (bar) { bar.style.transition = 'none'; bar.style.width = '0%'; bar.style.background = '#c94242'; }
             const rt = card.querySelector('.response-text');
-            rt.textContent = '\u26a0 ' + evt.error;
+            const isTimeout = evt.error && evt.error.toLowerCase().includes('timed out');
+            rt.textContent = isTimeout ? '\u23f1 Timed out — model took too long' : '\u26a0 ' + evt.error;
             rt.style.color = '#c94242';
           }
         }
@@ -468,6 +609,9 @@ async function sendPrompt() {
         }
 
         else if (evt.event === 'done') {
+          document.getElementById('cancel-btn').classList.remove('visible');
+          document.getElementById('send-btn').disabled = false;
+          activeReader = null;
           if (evt.anthropic_cost_usd !== undefined) {
             const el = document.getElementById('cost-display');
             el.textContent = 'Claude: $' + evt.anthropic_cost_usd.toFixed(4);
@@ -485,7 +629,12 @@ async function sendPrompt() {
       }
     }
   } catch(e) {
-    grid.innerHTML = '<div style="color:#c94242;font-family:monospace;font-size:12px">Error: ' + e.message + '</div>';
+    if (e.name !== 'AbortError') {
+      grid.innerHTML = '<div style="color:#c94242;font-family:monospace;font-size:12px">Error: ' + e.message + '</div>';
+    }
+    document.getElementById('cancel-btn').classList.remove('visible');
+    document.getElementById('send-btn').disabled = false;
+    activeReader = null;
   }
 }
 
@@ -641,6 +790,15 @@ async function saveAndBreak() {
   setTimeout(() => { btn.textContent = '\u2191 Save & Take a Break'; }, 3000);
 }
 
+
+
+// ── Hide inactive toggle ──────────────────────────────────────────────────
+function toggleHideInactive(btn) {
+  const chips = document.getElementById('model-chips');
+  const active = btn.classList.toggle('active');
+  chips.classList.toggle('hide-inactive', active);
+  btn.textContent = active ? 'Show all' : 'Hide inactive';
+}
 
 // ── Key status ────────────────────────────────────────────────────────────
 async function checkKeyStatus() {
