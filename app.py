@@ -451,7 +451,6 @@ def key_status():
         "llama":     True,  # local — always available if Ollama is running
     })
 
-@app.route("/api/prompt", methods=["POST"])
 def call_model(model, prompt):
     """Call one model. Returns (model, result, error, input_tokens, output_tokens)."""
     settings  = load_settings()
@@ -493,6 +492,7 @@ CLOUD_MODELS  = {"gemini", "anthropic", "openai"}
 LOCAL_MODELS  = {"deepseek", "gemma", "llama"}
 
 
+@app.route("/api/prompt", methods=["POST"])
 def handle_prompt():
     global anthropic_tokens
     data   = request.json

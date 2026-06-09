@@ -449,6 +449,13 @@
       &#9888; 16GB system — one local model at a time recommended.
     </div>
 
+    <textarea id="prompt-input" placeholder="Enter your research question or prompt..."></textarea>
+    <div class="prompt-footer">
+      <span class="token-estimate" id="token-estimate">~0 tokens</span>
+      <button class="cancel-btn" id="cancel-btn" onclick="cancelPrompt()">&#9632; Cancel</button>
+      <button class="btn-primary" id="send-btn" onclick="sendPrompt()">Send to Active Models &#8594;</button>
+    </div>
+
     <div class="response-grid" id="response-grid"></div>
 
     <div class="synthesis-panel" id="synthesis-panel" style="display:none">
@@ -460,13 +467,6 @@
       </div>
     </div>
   </div>
-
-    <textarea id="prompt-input" placeholder="Enter your research question or prompt..."></textarea>
-    <div class="prompt-footer">
-      <span class="token-estimate" id="token-estimate">~0 tokens</span>
-      <button class="cancel-btn" id="cancel-btn" onclick="cancelPrompt()">&#9632; Cancel</button>
-      <button class="btn-primary" id="send-btn" onclick="sendPrompt()">Send to Active Models &#8594;</button>
-    </div>
 
   <!-- ── References view ── -->
   <div id="view-references" class="view">
