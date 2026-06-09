@@ -6,326 +6,211 @@
   <title>Marginalia</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg:       #f5f0e8;
-      --surface:  #fff;
-      --text:     #1a1410;
-      --accent:   #8b4513;
-      --border:   #d4c5b0;
-      --muted:    #8a7a6a;
-      --verified: #3d8b37;
-      --located:  #c9a832;
-      --surfaced: #6e56cf;
-    }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Georgia', serif;
-      min-height: 100vh;
-      padding-bottom: 36px;
-    }
-
-    /* ── Nav ── */
-    nav {
-      display: flex;
-      align-items: center;
-      height: 52px;
-      padding: 0 16px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      gap: 4px;
-      position: sticky;
-      top: 0;
-      z-index: 50;
-    }
-
-    .logo {
-      margin-right: 12px;
-      background: linear-gradient(135deg, #f5eedc, #e0d4b0);
-      border: 1px solid #c8b88a;
-      border-radius: 4px;
-      padding: 2px 10px 3px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      line-height: 1;
-      flex-shrink: 0;
-    }
+    :root { --bg: #f5f0e8; --surface: #fff; --text: #1a1410; --accent: #8b4513; --border: #d4c5b0; --muted: #8a7a6a; --verified: #3d8b37; --located: #c9a832; --surfaced: #6e56cf; }
+    body { background: var(--bg); color: var(--text); font-family: 'Georgia', serif; min-height: 100vh; padding-bottom: 36px; }
+    nav { display: flex; align-items: center; height: 52px; padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--border); gap: 4px; position: sticky; top: 0; z-index: 50; }
+    .logo { margin-right: 12px; background: linear-gradient(135deg, #f5eedc, #e0d4b0); border: 1px solid #c8b88a; border-radius: 4px; padding: 2px 10px 3px; display: flex; flex-direction: column; align-items: center; line-height: 1; flex-shrink: 0; }
     .logo-top    { font-family: 'Palatino Linotype', Georgia, serif; font-size: 8px; font-style: italic; color: #5a4a2a; letter-spacing: 2px; opacity: .85; }
     .logo-main   { font-family: Georgia, 'Times New Roman', serif; font-size: 18px; font-weight: bold; font-style: italic; color: #1a1208; letter-spacing: -.5px; }
     .logo-bottom { font-family: Georgia, serif; font-size: 7px; font-style: italic; color: #7a6a4a; letter-spacing: 3px; opacity: .7; align-self: flex-end; }
-
-    .nav-btn {
-      padding: 6px 12px;
-      background: transparent;
-      color: var(--muted);
-      border: 1px solid transparent;
-      border-radius: 4px;
-      cursor: pointer;
-      font-family: monospace;
-      font-size: 11px;
-      transition: all .15s;
-    }
-    .nav-btn.active, .nav-btn:hover {
-      background: color-mix(in srgb, var(--accent) 15%, transparent);
-      color: var(--accent);
-      border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-    }
-
+    .nav-btn { padding: 6px 12px; background: transparent; color: var(--muted); border: 1px solid transparent; border-radius: 4px; cursor: pointer; font-family: monospace; font-size: 11px; transition: all .15s; }
+    .nav-btn.active, .nav-btn:hover { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
     .nav-right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
-
-    .btn-primary {
-      padding: 6px 14px;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-family: monospace;
-      font-size: 11px;
-    }
-    .btn-secondary {
-      padding: 5px 10px;
-      background: transparent;
-      color: var(--muted);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      cursor: pointer;
-      font-family: monospace;
-      font-size: 11px;
-    }
-
-    /* ── Banners ── */
-    .banner {
-      padding: 6px 20px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-family: monospace;
-      font-size: 11px;
-    }
+    .btn-primary { padding: 6px 14px; background: var(--accent); color: #fff; border: none; border-radius: 4px; cursor: pointer; font-family: monospace; font-size: 11px; }
+    .btn-secondary { padding: 5px 10px; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-family: monospace; font-size: 11px; }
+    .banner { padding: 6px 20px; display: flex; align-items: center; gap: 10px; font-family: monospace; font-size: 11px; }
     .banner-amber { background: #c9a83218; border-bottom: 1px solid #c9a83244; color: #c9a832; }
     .banner-green { background: #3d8b3718; border-bottom: 1px solid #3d8b3744; color: #3d8b37; }
     .banner-close { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 16px; margin-left: auto; }
-
-    /* ── Main content ── */
     main { max-width: 900px; margin: 0 auto; padding: 20px; }
-
     .page-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 16px; }
     .page-header h1 { font-size: 18px; font-weight: normal; }
     .page-header small { font-family: monospace; font-size: 11px; color: var(--muted); }
-
-    /* ── Views ── */
     .view { display: none; }
     .view.active { display: block; }
 
-    /* ── Prompt view ── */
-    .model-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-    .model-chip {
-      display: flex; align-items: center; gap: 6px;
-      padding: 4px 10px; border-radius: 4px;
-      border: 1px solid var(--border);
-      cursor: pointer; font-family: monospace; font-size: 11px;
-      transition: all .15s;
-    }
+    /* ── Model chips ── */
+    .model-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .model-chip { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; font-family: monospace; font-size: 11px; transition: all .15s; }
     .model-chip.active { opacity: 1; }
     .model-chip.inactive { opacity: .5; }
     .chip-dot { width: 8px; height: 8px; border-radius: 50%; }
 
-    #prompt-input {
-      width: 100%; min-height: 90px; padding: 12px;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 6px; color: var(--text);
-      font-family: Georgia, serif; font-size: 14px;
-      resize: vertical; outline: none; line-height: 1.6;
-    }
+    .model-chip.no-key { opacity: .3; cursor: not-allowed; }
+    .model-chip.no-key .chip-dot { filter: grayscale(1); }
+    .no-key-badge { font-size: 9px; font-family: monospace; color: var(--muted); margin-left: 2px; }
+    .chip-local-warning { display: none; font-family: monospace; font-size: 10px; color: #c9a832; margin-bottom: 10px; padding: 4px 8px; background: #c9a83212; border: 1px solid #c9a83244; border-radius: 3px; }
+    .chip-local-warning.visible { display: block; }
 
+    /* ── Prompt ── */
+    #prompt-input { width: 100%; min-height: 90px; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: Georgia, serif; font-size: 14px; resize: vertical; outline: none; line-height: 1.6; }
     .prompt-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
     .token-estimate { font-family: monospace; font-size: 11px; color: var(--muted); }
-
     .response-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
-    .response-card {
-      padding: 10px; background: var(--surface);
-      border: 1px solid var(--border); border-radius: 4px;
-      border-left-width: 3px;
-    }
+    .response-card { padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; border-left-width: 3px; }
     .response-card .model-label { font-size: 10px; font-family: monospace; margin-bottom: 6px; }
     .response-card .response-text { font-size: 12px; color: var(--muted); line-height: 1.6; white-space: pre-wrap; }
     .response-card.loading .response-text::after { content: "Thinking..."; font-style: italic; }
+    .synthesis-panel { margin-top: 12px; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-top: 2px solid var(--accent); border-radius: 4px; }
+    .synthesis-label { font-size: 10px; font-family: monospace; color: var(--accent); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 8px; }
+    #synthesis-text { font-size: 12px; color: var(--text); line-height: 1.7; white-space: pre-wrap; }
 
-    .synthesis-panel {
-      margin-top: 12px; padding: 12px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-top: 2px solid var(--accent);
-      border-radius: 4px;
-    }
-    .synthesis-label { font-size: 10px; font-family: monospace; color: var(--accent); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 6px; }
-
-    /* ── References view ── */
+    /* ── References ── */
     .search-row { display: flex; gap: 8px; margin-bottom: 10px; }
-    .search-input {
-      flex: 1; padding: 8px 12px;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 6px; color: var(--text);
-      font-family: Georgia, serif; font-size: 13px; outline: none;
-    }
+    .search-input { flex: 1; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: Georgia, serif; font-size: 13px; outline: none; }
     .filter-row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
-    .filter-btn {
-      padding: 4px 10px; font-family: monospace; font-size: 10px;
-      background: transparent; color: var(--muted);
-      border: 1px solid var(--border); border-radius: 3px; cursor: pointer;
-    }
+    .filter-btn { padding: 4px 10px; font-family: monospace; font-size: 10px; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 3px; cursor: pointer; }
     .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-
-    .ref-card {
-      padding: 12px; background: var(--surface);
-      border: 1px solid var(--border); border-radius: 4px;
-      border-left: 3px solid var(--border);
-      margin-bottom: 8px; cursor: pointer;
-    }
+    .ref-card { padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; border-left: 3px solid var(--border); margin-bottom: 8px; }
     .ref-card .ref-author { font-size: 13px; font-family: Georgia, serif; }
     .ref-card .ref-title  { font-size: 12px; color: var(--muted); font-style: italic; }
     .ref-card .ref-tags   { margin-top: 6px; }
-    .tag {
-      display: inline-block; padding: 2px 8px; border-radius: 3px;
-      font-size: 10px; font-family: monospace;
-      margin-right: 4px; margin-bottom: 4px;
-    }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 10px; font-family: monospace; margin-right: 4px; margin-bottom: 4px; }
     .ref-card .ref-actions { margin-top: 8px; display: flex; gap: 6px; }
-    .ref-action {
-      padding: 3px 8px; font-size: 10px; font-family: monospace;
-      background: transparent; border: 1px solid var(--border);
-      color: var(--muted); border-radius: 3px; cursor: pointer;
-    }
+    .ref-action { padding: 3px 8px; font-size: 10px; font-family: monospace; background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 3px; cursor: pointer; }
+
+    /* ── Import panel ── */
+    .import-bar { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+    .import-bar .btn-secondary { font-size: 10px; padding: 4px 10px; }
+    .import-section { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-bottom: 16px; }
+    .import-section-title { font-family: monospace; font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+    .import-drop-zone { border: 2px dashed var(--border); border-radius: 6px; padding: 32px; text-align: center; cursor: pointer; transition: all .15s; }
+    .import-drop-zone:hover, .import-drop-zone.drag-over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, transparent); }
+    .import-drop-zone input[type=file] { display: none; }
+    .import-drop-icon { font-size: 32px; opacity: .3; margin-bottom: 8px; }
+    .import-drop-label { font-family: monospace; font-size: 11px; color: var(--muted); }
+    .import-drop-types { font-family: monospace; font-size: 10px; color: var(--muted); opacity: .7; margin-top: 4px; }
+    .import-text-area { width: 100%; min-height: 80px; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; font-family: monospace; font-size: 11px; color: var(--text); outline: none; resize: vertical; line-height: 1.5; }
+    .import-format-row { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+    .format-btn { padding: 3px 10px; font-family: monospace; font-size: 10px; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 3px; cursor: pointer; }
+    .format-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .import-result { font-family: monospace; font-size: 11px; padding: 8px 12px; border-radius: 4px; margin-top: 10px; display: none; }
+    .import-result.success { background: #3d8b3718; border: 1px solid #3d8b3744; color: #3d8b37; }
+    .import-result.error   { background: #c9424218; border: 1px solid #c9424244; color: #c94242; }
+
+    /* ── DOI quick lookup ── */
+    .doi-row { display: flex; gap: 8px; margin-bottom: 16px; }
+    .doi-input { flex: 1; padding: 7px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; font-family: monospace; font-size: 11px; color: var(--text); outline: none; }
+    .doi-preview { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 4px; padding: 12px; margin-bottom: 12px; font-size: 12px; display: none; }
+    .doi-preview .doi-title { font-family: Georgia, serif; font-size: 14px; margin-bottom: 4px; }
+    .doi-preview .doi-meta  { font-family: monospace; font-size: 10px; color: var(--muted); }
 
     /* ── Status bar ── */
-    #status-bar {
-      position: fixed; bottom: 0; left: 0; right: 0;
-      height: 28px; background: var(--surface);
-      border-top: 1px solid var(--border);
-      display: flex; align-items: center;
-      padding: 0 20px; gap: 16px;
-      font-family: monospace; font-size: 10px; color: var(--muted);
-    }
-    .status-online  { color: var(--verified); }
+    #status-bar { position: fixed; bottom: 0; left: 0; right: 0; height: 28px; background: var(--surface); border-top: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 16px; font-family: monospace; font-size: 10px; color: var(--muted); }
+    .status-online { color: var(--verified); }
     .status-project { margin-left: auto; }
+    .status-cost { color: var(--muted); }
+    .status-cost.nonzero { color: #c9a832; }
 
-    /* ── Add Reference panel ── */
-    .panel {
-      position: fixed; right: 0; top: 0; bottom: 0; width: 380px;
-      background: var(--surface); border-left: 1px solid var(--border);
-      z-index: 100; display: flex; flex-direction: column;
-      box-shadow: -4px 0 20px rgba(0,0,0,.15);
-      transform: translateX(100%); transition: transform .2s ease;
-    }
+    /* ── Panels ── */
+    .panel { position: fixed; right: 0; top: 0; bottom: 0; width: 380px; background: var(--surface); border-left: 1px solid var(--border); z-index: 100; display: flex; flex-direction: column; box-shadow: -4px 0 20px rgba(0,0,0,.15); transform: translateX(100%); transition: transform .2s ease; }
     .panel.open { transform: translateX(0); }
-    .panel-header {
-      padding: 14px 16px; border-bottom: 1px solid var(--border);
-      display: flex; justify-content: space-between; align-items: center;
-    }
+    .panel-header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
     .panel-title { font-family: monospace; font-size: 13px; }
     .panel-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; }
     .panel-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
     .panel-footer { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
-
     .field-label { font-size: 10px; font-family: monospace; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }
-    .field-input {
-      width: 100%; padding: 7px 10px;
-      background: var(--bg); border: 1px solid var(--border);
-      border-radius: 4px; color: var(--text);
-      font-family: monospace; font-size: 11px; outline: none;
-    }
-    .field-textarea {
-      width: 100%; padding: 7px 10px; min-height: 70px;
-      background: var(--bg); border: 1px solid var(--border);
-      border-radius: 4px; color: var(--text);
-      font-family: Georgia, serif; font-size: 12px;
-      outline: none; resize: vertical; line-height: 1.5;
-    }
+    .field-input { width: 100%; padding: 7px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-family: monospace; font-size: 11px; outline: none; }
+    .field-textarea { width: 100%; padding: 7px 10px; min-height: 70px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-family: Georgia, serif; font-size: 12px; outline: none; resize: vertical; line-height: 1.5; }
     .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   </style>
 </head>
 <body>
 
-<!-- Nav -->
 <nav>
   <div class="logo">
     <span class="logo-top">largely local</span>
     <span class="logo-main">Marginalia</span>
     <span class="logo-bottom">slow down</span>
   </div>
-
-  <button class="nav-btn active" onclick="showView('prompt', this)">◈ Prompt</button>
-  <button class="nav-btn" onclick="showView('references', this)">◎ References</button>
-  <button class="nav-btn" onclick="showView('ingest', this)">⊕ Ingest</button>
-
+  <button class="nav-btn active" onclick="showView('prompt', this)">&#9672; Prompt</button>
+  <button class="nav-btn" onclick="showView('references', this)">&#9678; References</button>
+  <button class="nav-btn" onclick="showView('ingest', this)">&#8853; Ingest</button>
   <div class="nav-right">
-    <button class="btn-secondary" id="save-break-btn" onclick="saveAndBreak()">↑ Save &amp; Take a Break</button>
+    <button class="btn-secondary" id="save-break-btn" onclick="saveAndBreak()">&#8593; Save &amp; Take a Break</button>
   </div>
 </nav>
 
-<!-- Banners -->
 <div id="broadcast-banner" class="banner banner-green" style="display:none">
   <span id="broadcast-text"></span>
-  <button class="banner-close" onclick="this.parentElement.style.display='none'">×</button>
+  <button class="banner-close" onclick="this.parentElement.style.display='none'">&#215;</button>
 </div>
 
-<!-- Main -->
 <main>
 
   <!-- ── Prompt view ── -->
   <div id="view-prompt" class="view active">
-    <div class="page-header">
-      <h1>Prompt</h1>
-      <small>Multi-model synthesis</small>
+    <div class="page-header"><h1>Prompt</h1><small>Multi-model synthesis</small></div>
+
+    <div class="model-chips">
+      <div class="model-chip active" data-model="gemini" data-local="false" style="background:rgba(66,133,244,.1);border-color:rgba(66,133,244,.3)" onclick="toggleModel(this)">
+        <div class="chip-dot" style="background:#4285f4"></div><span style="color:#4285f4">Gemini 2.5 Flash</span>
+      </div>
+      <div class="model-chip active" data-model="anthropic" data-local="false" style="background:rgba(201,100,66,.1);border-color:rgba(201,100,66,.3)" onclick="toggleModel(this)">
+        <div class="chip-dot" style="background:#c96442"></div><span style="color:#c96442">Claude Haiku</span>
+      </div>
+      <div class="model-chip active" data-model="openai" data-local="false" style="background:rgba(16,163,127,.1);border-color:rgba(16,163,127,.3)" onclick="toggleModel(this)">
+        <div class="chip-dot" style="background:#10a37f"></div><span style="color:#10a37f">GPT-4o</span>
+      </div>
+      <div class="model-chip active" data-model="llama" data-local="true" style="background:rgba(156,106,222,.1);border-color:rgba(156,106,222,.3)" onclick="toggleModel(this)">
+        <div class="chip-dot" style="background:#9c6ade"></div><span style="color:#9c6ade">Llama 3.1</span>
+      </div>
+      <div class="model-chip active" data-model="deepseek" data-local="true" style="background:rgba(82,196,26,.1);border-color:rgba(82,196,26,.3)" onclick="toggleModel(this)">
+        <div class="chip-dot" style="background:#52c41a"></div><span style="color:#52c41a">DeepSeek R1</span>
+      </div>
+      <div class="model-chip inactive" data-model="gemma" data-local="true" style="background:rgba(255,171,0,.1);border-color:rgba(255,171,0,.3)" onclick="toggleModel(this)">
+        <div class="chip-dot" style="background:#ffab00"></div><span style="color:#ffab00">Gemma 4</span>
+      </div>
     </div>
 
-    <div class="model-chips" id="model-chips">
-      <div class="model-chip active" data-model="gemini" style="background:rgba(66,133,244,.1);border-color:rgba(66,133,244,.3)" onclick="toggleModel(this)">
-        <div class="chip-dot" style="background:#4285f4"></div>
-        <span style="color:#4285f4">Gemini 2.5 Flash</span>
-      </div>
-      <div class="model-chip active" data-model="anthropic" style="background:rgba(201,100,66,.1);border-color:rgba(201,100,66,.3)" onclick="toggleModel(this)">
-        <div class="chip-dot" style="background:#c96442"></div>
-        <span style="color:#c96442">Claude Haiku</span>
-      </div>
-      <div class="model-chip active" data-model="azure" style="background:rgba(0,164,239,.1);border-color:rgba(0,164,239,.3)" onclick="toggleModel(this)">
-        <div class="chip-dot" style="background:#00a4ef"></div>
-        <span style="color:#00a4ef">GPT-4o</span>
-      </div>
+    <div class="chip-local-warning" id="local-warning">
+      &#9888; 16GB system — one local model at a time recommended.
     </div>
 
     <textarea id="prompt-input" placeholder="Enter your research question or prompt..."></textarea>
     <div class="prompt-footer">
       <span class="token-estimate" id="token-estimate">~0 tokens</span>
-      <button class="btn-primary" onclick="sendPrompt()">Send to Active Models →</button>
+      <button class="btn-primary" onclick="sendPrompt()">Send to Active Models &#8594;</button>
     </div>
 
     <div class="response-grid" id="response-grid"></div>
 
     <div class="synthesis-panel" id="synthesis-panel" style="display:none">
-      <div class="synthesis-label">Synthesis — Consensus · Divergence · Gaps</div>
-      <div id="synthesis-text" style="font-size:12px;color:var(--muted);line-height:1.6"></div>
-      <div style="margin-top:8px;display:flex;gap:6px">
-        <button class="ref-action" onclick="flagReference()">Flag Reference</button>
-        <button class="ref-action" onclick="saveSession()">Session Saved ✓</button>
+      <div class="synthesis-label">Synthesis &#8212; Consensus &middot; Divergence &middot; Unique Contributions &middot; Gaps</div>
+      <div id="synthesis-text"></div>
+      <div style="margin-top:10px;display:flex;gap:6px">
+        <button class="ref-action">Flag Reference</button>
+        <button class="ref-action">Session Saved &#10003;</button>
       </div>
     </div>
   </div>
 
   <!-- ── References view ── -->
   <div id="view-references" class="view">
-    <div class="page-header">
-      <h1>References</h1>
-      <small id="ref-count">Loading...</small>
+    <div class="page-header"><h1>References</h1><small id="ref-count">Loading...</small></div>
+
+    <!-- DOI quick lookup -->
+    <div style="margin-bottom:16px">
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Quick DOI Import</div>
+      <div class="doi-row">
+        <input class="doi-input" id="doi-input" placeholder="10.xxxx/... or paste full DOI URL" onkeydown="if(event.key==='Enter') lookupDOI()">
+        <button class="btn-secondary" onclick="lookupDOI()">Look up</button>
+      </div>
+      <div class="doi-preview" id="doi-preview">
+        <div class="doi-title" id="doi-preview-title"></div>
+        <div class="doi-meta" id="doi-preview-meta"></div>
+        <div style="margin-top:8px;display:flex;gap:6px">
+          <button class="btn-primary" style="font-size:10px;padding:4px 10px" onclick="importDOIPreview()">Add to References</button>
+          <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="closeDOIPreview()">Cancel</button>
+        </div>
+      </div>
     </div>
 
     <div class="search-row">
       <input class="search-input" id="ref-search" placeholder="Search author, title, or theme..." oninput="filterRefs()">
-      <button class="btn-primary" onclick="openAddPanel()">+ Add Reference</button>
+      <button class="btn-secondary" onclick="showView('ingest', document.querySelectorAll('.nav-btn')[2])">&#8853; Import</button>
+      <button class="btn-primary" onclick="openAddPanel()">+ Add</button>
     </div>
 
     <div class="filter-row">
@@ -334,20 +219,46 @@
       <button class="filter-btn" data-filter="located" onclick="setFilter(this)">located</button>
       <button class="filter-btn" data-filter="surfaced" onclick="setFilter(this)">surfaced</button>
     </div>
-
     <div id="ref-list"></div>
   </div>
 
   <!-- ── Ingest view ── -->
   <div id="view-ingest" class="view">
-    <div class="page-header">
-      <h1>Ingest</h1>
-      <small>Capture your reflection</small>
+    <div class="page-header"><h1>Ingest</h1><small>Import references &amp; capture your reflection</small></div>
+
+    <!-- File drop import -->
+    <div class="import-section">
+      <div class="import-section-title">&#8595; Drop a File</div>
+      <div class="import-drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+        <input type="file" id="file-input" accept=".csv,.bib,.ris" onchange="handleFileSelect(event)">
+        <div class="import-drop-icon">&#8853;</div>
+        <div class="import-drop-label">Click to choose a file or drag and drop</div>
+        <div class="import-drop-types">.csv &nbsp;&#183;&nbsp; .bib (BibTeX) &nbsp;&#183;&nbsp; .ris</div>
+      </div>
+      <div class="import-result" id="file-import-result"></div>
     </div>
-    <div style="padding:60px;text-align:center;color:var(--muted);background:var(--surface);border:2px dashed var(--border);border-radius:6px">
-      <div style="font-size:48px;margin-bottom:12px;opacity:.3">⊕</div>
-      <div style="font-family:monospace;font-size:12px">Photo / PDF / Audio / Typed Notes</div>
-      <div style="font-family:monospace;font-size:10px;margin-top:6px;opacity:.7">Phase 4 — coming soon</div>
+
+    <!-- Paste import -->
+    <div class="import-section">
+      <div class="import-section-title">&#8618; Paste Text</div>
+      <div class="import-format-row">
+        <button class="format-btn active" data-fmt="bibtex" onclick="selectFormat(this)">BibTeX</button>
+        <button class="format-btn" data-fmt="ris" onclick="selectFormat(this)">RIS</button>
+        <button class="format-btn" data-fmt="csv" onclick="selectFormat(this)">CSV</button>
+        <button class="format-btn" data-fmt="doi" onclick="selectFormat(this)">DOI list</button>
+        <button class="format-btn" data-fmt="plaintext" onclick="selectFormat(this)">Plain text &#9670; local AI</button>
+      </div>
+      <textarea class="import-text-area" id="paste-input" placeholder="Paste BibTeX, RIS, CSV, a list of DOIs, or a messy reference list..."></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px">
+        <button class="btn-primary" onclick="runPasteImport()">Import &#8594;</button>
+      </div>
+      <div class="import-result" id="paste-import-result"></div>
+    </div>
+
+    <!-- Phase 4 placeholder -->
+    <div class="import-section" style="opacity:.5">
+      <div class="import-section-title">&#9685; Capture (Phase 4)</div>
+      <div style="font-family:monospace;font-size:11px;color:var(--muted)">Photo / PDF / Audio — coming soon. Gemma 4 as primary OCR engine.</div>
     </div>
   </div>
 
@@ -360,7 +271,7 @@
       <div class="panel-title">Add Reference</div>
       <div style="font-family:monospace;font-size:9px;color:var(--muted);margin-top:2px">Creates canonical file immediately</div>
     </div>
-    <button class="panel-close" onclick="closeAddPanel()">×</button>
+    <button class="panel-close" onclick="closeAddPanel()">&#215;</button>
   </div>
   <div class="panel-body">
     <div><div class="field-label">Title *</div><input class="field-input" id="ref-title" placeholder="Full title"></div>
@@ -384,7 +295,7 @@
       </div>
       <div><div class="field-label">Status</div><input class="field-input" id="ref-status" value="surfaced" readonly style="opacity:.7"></div>
     </div>
-    <div><div class="field-label">Themes — comma separated</div><input class="field-input" id="ref-themes" placeholder="indigenous-pedagogy, decolonial"></div>
+    <div><div class="field-label">Themes — comma separated</div><input class="field-input" id="ref-themes" placeholder="embodied-learning, anxiety"></div>
     <div><div class="field-label">Annotation</div><textarea class="field-textarea" id="ref-annotation" placeholder="What does this source argue?"></textarea></div>
     <div><div class="field-label">Argument Connection</div><textarea class="field-textarea" id="ref-argument" placeholder="How does this connect to your research?"></textarea></div>
   </div>
@@ -394,62 +305,89 @@
   </div>
 </div>
 
-<!-- Status bar -->
 <div id="status-bar">
-  <span class="status-online">● Marginalia running</span>
+  <span class="status-online">&#9679; Marginalia running</span>
   <span id="session-time">Session: 0m</span>
-  <span class="status-project">v0.8-pre · LLM</span>
+  <span class="status-cost" id="cost-display">Claude: $0.0000</span>
+  <span class="status-project">v0.8.4 &middot; LLM</span>
 </div>
 
 <script>
-// ── State ──────────────────────────────────────────────────────────────────
-let allRefs = [];
-let activeFilter = 'all';
-let sessionMinutes = 0;
-let activeModels = new Set(['gemini', 'anthropic', 'azure']);
+let allRefs = [], activeFilter = 'all', sessionMinutes = 0;
+let activeModels = new Set(['gemini', 'anthropic', 'openai', 'deepseek']);
+let doiPreviewData = null;
+let pasteFormat = 'bibtex';
 
-const STATUS_COLORS = {
-  verified: '#3d8b37', located: '#c9a832',
-  surfaced: '#6e56cf', rejected: '#c94242'
-};
-const MODEL_COLORS = {
-  gemini: '#4285f4', anthropic: '#c96442', azure: '#00a4ef'
+const STATUS_COLORS = { verified: '#3d8b37', located: '#c9a832', surfaced: '#6e56cf', rejected: '#c94242' };
+const MODEL_COLORS  = { gemini: '#4285f4', anthropic: '#c96442', openai: '#10a37f', llama: '#9c6ade', deepseek: '#52c41a', gemma: '#ffab00' };
+const MODEL_META = {
+  gemini:    { type: 'cloud',  web: true,  label: 'web' },
+  anthropic: { type: 'cloud',  web: false, label: 'cloud' },
+  openai:    { type: 'cloud',  web: false, label: 'cloud' },
+  llama:     { type: 'local',  web: false, label: 'local · ~1yr cutoff' },
+  deepseek:  { type: 'local',  web: false, label: 'local · ~1yr cutoff' },
+  gemma:     { type: 'local',  web: false, label: 'local · ~1yr cutoff' },
 };
 
-// ── Navigation ─────────────────────────────────────────────────────────────
+// ── Navigation ────────────────────────────────────────────────────────────
 function showView(name, btn) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
   if (btn) btn.classList.add('active');
   if (name === 'references') loadReferences();
-  updatePageHeader(name);
+  const titles = { prompt: 'Prompt', references: 'References', ingest: 'Ingest' };
+  document.querySelector('#view-' + name + ' h1').textContent = titles[name] || name;
 }
 
-function updatePageHeader(name) {
-  const titles = { prompt: ['Prompt','Multi-model synthesis'], references: ['References',''], ingest: ['Ingest','Capture your reflection'] };
-  const [h, s] = titles[name] || [name, ''];
-  document.querySelector('#view-' + name + ' h1').textContent = h;
+// ── Model chips ───────────────────────────────────────────────────────────
+function countActiveLocals() {
+  let n = 0;
+  document.querySelectorAll('.model-chip[data-local="true"]').forEach(c => { if (activeModels.has(c.dataset.model)) n++; });
+  return n;
 }
-
-// ── Models ─────────────────────────────────────────────────────────────────
+function updateLocalWarning() {
+  document.getElementById('local-warning').classList.toggle('visible', countActiveLocals() > 1);
+}
 function toggleModel(chip) {
-  const model = chip.dataset.model;
+  const model = chip.dataset.model, isLocal = chip.dataset.local === 'true';
   if (activeModels.has(model)) {
-    activeModels.delete(model);
-    chip.classList.remove('active'); chip.classList.add('inactive');
+    activeModels.delete(model); chip.classList.remove('active'); chip.classList.add('inactive');
   } else {
-    activeModels.add(model);
-    chip.classList.add('active'); chip.classList.remove('inactive');
+    if (isLocal) {
+      document.querySelectorAll('.model-chip[data-local="true"]').forEach(c => {
+        if (c !== chip && activeModels.has(c.dataset.model)) {
+          activeModels.delete(c.dataset.model); c.classList.remove('active'); c.classList.add('inactive');
+        }
+      });
+    }
+    activeModels.add(model); chip.classList.add('active'); chip.classList.remove('inactive');
   }
+  updateLocalWarning();
 }
 
-// ── Prompt ─────────────────────────────────────────────────────────────────
+// ── Prompt ────────────────────────────────────────────────────────────────
 document.getElementById('prompt-input').addEventListener('input', function() {
-  const words = this.value.trim().split(/\s+/).length;
-  const est = Math.round(words * 1.3);
-  document.getElementById('token-estimate').textContent = `~${est} tokens`;
+  document.getElementById('token-estimate').textContent = '~' + Math.round(this.value.trim().split(/\s+/).length * 1.3) + ' tokens';
 });
+
+function makeCard(model) {
+  const card = document.createElement('div');
+  card.className = 'response-card loading';
+  card.id = 'card-' + model;
+  card.style.borderLeftColor = MODEL_COLORS[model] || '#888';
+  const meta = MODEL_META[model] || {};
+  const badge = meta.web
+    ? '<span style="font-size:9px;font-family:monospace;background:#4285f422;color:#4285f4;border:1px solid #4285f444;border-radius:3px;padding:1px 5px;margin-left:5px">&#127760; web</span>'
+    : meta.type === 'local'
+      ? '<span style="font-size:9px;font-family:monospace;background:#52c41a22;color:#52c41a;border:1px solid #52c41a44;border-radius:3px;padding:1px 5px;margin-left:5px">&#128274; local</span>'
+      : '<span style="font-size:9px;font-family:monospace;background:#8a7a6a22;color:#c9a832;border:1px solid #c9a83244;border-radius:3px;padding:1px 5px;margin-left:5px">&#9729; cloud</span>';
+  const cutoff = meta.type === 'local'
+    ? '<span style="font-size:9px;font-family:monospace;color:var(--muted);margin-left:4px">~1yr cutoff</span>'
+    : '';
+  card.innerHTML = '<div class="model-label" style="color:' + MODEL_COLORS[model] + ';display:flex;align-items:center">' + model + badge + cutoff + '</div><div class="response-text"></div>';
+  return card;
+}
 
 async function sendPrompt() {
   const prompt = document.getElementById('prompt-input').value.trim();
@@ -457,16 +395,14 @@ async function sendPrompt() {
 
   const grid = document.getElementById('response-grid');
   grid.innerHTML = '';
+  document.getElementById('synthesis-panel').style.display = 'none';
 
-  const models = [...activeModels];
-  models.forEach(model => {
-    const card = document.createElement('div');
-    card.className = 'response-card loading';
-    card.id = 'card-' + model;
-    card.style.borderLeftColor = MODEL_COLORS[model] || '#888';
-    card.innerHTML = `<div class="model-label" style="color:${MODEL_COLORS[model]}">${model}</div><div class="response-text"></div>`;
-    grid.appendChild(card);
-  });
+  // MODEL_ORDER defines firing sequence — cloud first, local after
+  const MODEL_ORDER = ['gemini', 'anthropic', 'openai', 'deepseek', 'gemma', 'llama'];
+  const models = MODEL_ORDER.filter(m => activeModels.has(m));
+
+  // Pre-create all cards in order so layout is stable
+  models.forEach(model => grid.appendChild(makeCard(model)));
 
   try {
     const res = await fetch('/api/prompt', {
@@ -474,174 +410,285 @@ async function sendPrompt() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ prompt, models })
     });
-    const data = await res.json();
 
-    models.forEach(model => {
-      const card = document.getElementById('card-' + model);
-      card.classList.remove('loading');
-      if (data.results[model]) {
-        card.querySelector('.response-text').textContent = data.results[model];
-      } else if (data.errors[model]) {
-        card.querySelector('.response-text').textContent = '⚠ ' + data.errors[model];
-        card.querySelector('.response-text').style.color = '#c94242';
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let   buffer  = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep incomplete line
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let evt;
+        try { evt = JSON.parse(line); } catch(e) { continue; }
+
+        if (evt.event === 'start') {
+          // Model is now thinking — card already exists, just ensure loading state
+          const card = document.getElementById('card-' + evt.model);
+          if (card) card.classList.add('loading');
+        }
+
+        else if (evt.event === 'result') {
+          const card = document.getElementById('card-' + evt.model);
+          if (card) {
+            card.classList.remove('loading');
+            card.querySelector('.response-text').textContent = evt.text;
+          }
+        }
+
+        else if (evt.event === 'error') {
+          const card = document.getElementById('card-' + evt.model);
+          if (card) {
+            card.classList.remove('loading');
+            const rt = card.querySelector('.response-text');
+            rt.textContent = '\u26a0 ' + evt.error;
+            rt.style.color = '#c94242';
+          }
+        }
+
+        else if (evt.event === 'synthesis_start') {
+          const panel = document.getElementById('synthesis-panel');
+          const text  = document.getElementById('synthesis-text');
+          panel.style.display = 'block';
+          text.style.color = 'var(--muted)';
+          text.style.fontStyle = 'italic';
+          text.textContent = 'Synthesising with DeepSeek R1\u2026';
+        }
+
+        else if (evt.event === 'synthesis') {
+          const text = document.getElementById('synthesis-text');
+          text.style.color = 'var(--text)';
+          text.style.fontStyle = 'normal';
+          text.textContent = evt.text;
+        }
+
+        else if (evt.event === 'done') {
+          if (evt.anthropic_cost_usd !== undefined) {
+            const el = document.getElementById('cost-display');
+            el.textContent = 'Claude: $' + evt.anthropic_cost_usd.toFixed(4);
+            el.classList.toggle('nonzero', evt.anthropic_cost_usd > 0);
+          }
+          if (evt.session_saved && models.length === 1) {
+            const panel = document.getElementById('synthesis-panel');
+            const text  = document.getElementById('synthesis-text');
+            panel.style.display = 'block';
+            text.style.color = 'var(--muted)';
+            text.style.fontStyle = 'italic';
+            text.textContent = 'Single model \u2014 no synthesis. Session saved.';
+          }
+        }
       }
-    });
-
-    if (data.session_saved) {
-      document.getElementById('synthesis-panel').style.display = 'block';
-      document.getElementById('synthesis-text').textContent = 'Session saved to canonical/sessions/ — add synthesis notes in the file directly.';
     }
   } catch(e) {
-    grid.innerHTML = `<div style="color:#c94242;font-family:monospace;font-size:12px">Error: ${e.message}</div>`;
+    grid.innerHTML = '<div style="color:#c94242;font-family:monospace;font-size:12px">Error: ' + e.message + '</div>';
   }
 }
 
-// ── References ─────────────────────────────────────────────────────────────
+// ── References ────────────────────────────────────────────────────────────
 async function loadReferences() {
   const res = await fetch('/api/references');
   allRefs = await res.json();
-  document.getElementById('ref-count').textContent = `${allRefs.length} sources`;
+  document.getElementById('ref-count').textContent = allRefs.length + ' sources';
   renderRefs();
 }
-
 function renderRefs() {
   const q = document.getElementById('ref-search').value.toLowerCase();
   const list = document.getElementById('ref-list');
   list.innerHTML = '';
-
   const filtered = allRefs.filter(r => {
     const matchFilter = activeFilter === 'all' || r.verification_status === activeFilter;
-    const matchSearch = !q || [r.title, r.authors, r.themes].some(f => f?.toLowerCase().includes(q));
+    const matchSearch = !q || [r.title, r.authors, r.themes].some(f => f && f.toLowerCase().includes(q));
     return matchFilter && matchSearch;
   });
-
-  document.getElementById('ref-count').textContent = `${filtered.length} of ${allRefs.length} sources`;
-
-  if (!filtered.length) {
-    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-family:monospace;font-size:12px">No references match</div>';
-    return;
-  }
-
+  document.getElementById('ref-count').textContent = filtered.length + ' of ' + allRefs.length + ' sources';
+  if (!filtered.length) { list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-family:monospace;font-size:12px">No references match</div>'; return; }
   filtered.forEach(ref => {
-    const status = ref.verification_status || 'surfaced';
-    const color  = STATUS_COLORS[status] || '#888';
+    const status = ref.verification_status || 'surfaced', color = STATUS_COLORS[status] || '#888';
     const themes = (ref.themes || '').split(/[,;]/).map(t => t.trim()).filter(Boolean);
-
     const card = document.createElement('div');
-    card.className = 'ref-card';
-    card.style.borderLeftColor = color;
-    card.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div>
-          <div class="ref-author">${ref.authors || ''} (${ref.year || ''})</div>
-          <div class="ref-title">${ref.title || ''}</div>
-        </div>
-        <span class="tag" style="background:${color}22;color:${color};border:1px solid ${color}44;flex-shrink:0;margin-left:10px">${status}</span>
-      </div>
-      <div class="ref-tags">${themes.map(t => `<span class="tag" style="background:var(--accent)22;color:var(--accent);border:1px solid var(--accent)44">${t}</span>`).join('')}</div>
-      <div class="ref-actions">
-        <button class="ref-action">Launch Prompt →</button>
-        <button class="ref-action">Edit</button>
-      </div>`;
+    card.className = 'ref-card'; card.style.borderLeftColor = color;
+    card.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div class="ref-author">' + (ref.authors||'') + ' (' + (ref.year||'') + ')</div><div class="ref-title">' + (ref.title||'') + '</div></div><span class="tag" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;flex-shrink:0;margin-left:10px">' + status + '</span></div><div class="ref-tags">' + themes.map(t => '<span class="tag" style="background:var(--accent)22;color:var(--accent);border:1px solid var(--accent)44">' + t + '</span>').join('') + '</div><div class="ref-actions"><button class="ref-action">Launch Prompt &#8594;</button><button class="ref-action">Edit</button></div>';
     list.appendChild(card);
   });
 }
-
 function filterRefs() { renderRefs(); }
+function setFilter(btn) { document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); activeFilter = btn.dataset.filter; renderRefs(); }
 
-function setFilter(btn) {
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  activeFilter = btn.dataset.filter;
-  renderRefs();
+// ── DOI lookup ────────────────────────────────────────────────────────────
+async function lookupDOI() {
+  const doi = document.getElementById('doi-input').value.trim();
+  if (!doi) return;
+  const btn = document.querySelector('.doi-row .btn-secondary');
+  btn.textContent = 'Looking up...'; btn.disabled = true;
+  try {
+    const res  = await fetch('/api/doi-lookup', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ doi }) });
+    const data = await res.json();
+    if (data._error) { alert('DOI not found: ' + data._error); }
+    else {
+      doiPreviewData = data;
+      document.getElementById('doi-preview-title').textContent = data.title || '(no title)';
+      document.getElementById('doi-preview-meta').textContent = (data.authors || '') + (data.year ? ' · ' + data.year : '') + (data.source_type ? ' · ' + data.source_type : '');
+      document.getElementById('doi-preview').style.display = 'block';
+    }
+  } catch(e) { alert('Lookup failed: ' + e.message); }
+  btn.textContent = 'Look up'; btn.disabled = false;
 }
-
-// ── Add Reference Panel ────────────────────────────────────────────────────
-function openAddPanel()  { document.getElementById('add-ref-panel').classList.add('open'); }
-function closeAddPanel() { document.getElementById('add-ref-panel').classList.remove('open'); }
-
-function updateStatus() {
-  const holding = document.getElementById('ref-holding').value;
-  const auto = ['physical','pdf','ebook','library-access'].includes(holding) ? 'located' : 'surfaced';
-  document.getElementById('ref-status').value = auto;
-}
-
-async function saveReference() {
-  const data = {
-    title:               document.getElementById('ref-title').value,
-    authors:             document.getElementById('ref-authors').value,
-    year:                document.getElementById('ref-year').value,
-    source_type:         document.getElementById('ref-type').value,
-    url_doi:             document.getElementById('ref-doi').value,
-    physical_holding:    document.getElementById('ref-holding').value,
-    verification_status: document.getElementById('ref-status').value,
-    themes:              document.getElementById('ref-themes').value,
-    annotation:          document.getElementById('ref-annotation').value,
-    argument_connection: document.getElementById('ref-argument').value,
-  };
-
-  if (!data.title || !data.authors || !data.year) {
-    alert('Title, Authors, and Year are required.');
-    return;
-  }
-
-  await fetch('/api/references', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(data)
-  });
-
-  closeAddPanel();
+async function importDOIPreview() {
+  if (!doiPreviewData) return;
+  await fetch('/api/references', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(doiPreviewData) });
+  closeDOIPreview();
   loadReferences();
 }
+function closeDOIPreview() { document.getElementById('doi-preview').style.display = 'none'; doiPreviewData = null; document.getElementById('doi-input').value = ''; }
 
-// ── Save & Break ────────────────────────────────────────────────────────────
+// ── File import ───────────────────────────────────────────────────────────
+function handleDragOver(e) { e.preventDefault(); document.getElementById('drop-zone').classList.add('drag-over'); }
+function handleDragLeave(e) { document.getElementById('drop-zone').classList.remove('drag-over'); }
+function handleDrop(e) { e.preventDefault(); document.getElementById('drop-zone').classList.remove('drag-over'); const file = e.dataTransfer.files[0]; if (file) uploadFile(file); }
+function handleFileSelect(e) { const file = e.target.files[0]; if (file) uploadFile(file); }
+
+async function uploadFile(file) {
+  const resultEl = document.getElementById('file-import-result');
+  resultEl.style.display = 'none';
+  const dropZone = document.getElementById('drop-zone');
+  dropZone.querySelector('.import-drop-label').textContent = 'Importing ' + file.name + '...';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res  = await fetch('/api/import', { method: 'POST', body: formData });
+    const data = await res.json();
+    showImportResult(resultEl, data);
+    dropZone.querySelector('.import-drop-label').textContent = 'Click to choose a file or drag and drop';
+    loadReferences();
+  } catch(e) {
+    resultEl.className = 'import-result error'; resultEl.style.display = 'block';
+    resultEl.textContent = 'Upload failed: ' + e.message;
+    dropZone.querySelector('.import-drop-label').textContent = 'Click to choose a file or drag and drop';
+  }
+}
+
+// ── Paste import ──────────────────────────────────────────────────────────
+function selectFormat(btn) {
+  document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  pasteFormat = btn.dataset.fmt;
+  const placeholders = {
+    bibtex: '@article{key,\n  title={...},\n  author={...},\n  year={2024}\n}',
+    ris: 'TY  - JOUR\nTI  - Title\nAU  - Author, Name\nPY  - 2024\nER  -',
+    csv: 'title,authors,year,source_type\nMy Paper,Smith J,2024,journal',
+    doi: '10.1234/example\n10.5678/another\nhttps://doi.org/10.9999/third',
+    plaintext: 'Smith, J. (2024). The title of the paper. Journal Name, 12(3), 45-67.\nJones, A. & Brown, B. (2023). Another paper. Book Publisher.'
+  };
+  document.getElementById('paste-input').placeholder = placeholders[pasteFormat] || '';
+}
+
+async function runPasteImport() {
+  const text = document.getElementById('paste-input').value.trim();
+  if (!text) return;
+  const resultEl = document.getElementById('paste-import-result');
+  resultEl.style.display = 'none';
+  const btn = document.querySelector('#view-ingest .import-section:nth-child(2) .btn-primary');
+  btn.textContent = 'Importing...'; btn.disabled = true;
+  try {
+    const res  = await fetch('/api/import', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ format: pasteFormat, text }) });
+    const data = await res.json();
+    showImportResult(resultEl, data);
+    if (data.imported > 0) { document.getElementById('paste-input').value = ''; loadReferences(); }
+  } catch(e) {
+    resultEl.className = 'import-result error'; resultEl.style.display = 'block';
+    resultEl.textContent = 'Import failed: ' + e.message;
+  }
+  btn.textContent = 'Import \u2192'; btn.disabled = false;
+}
+
+function showImportResult(el, data) {
+  if (data.error) {
+    el.className = 'import-result error'; el.style.display = 'block';
+    el.textContent = 'Error: ' + data.error; return;
+  }
+  el.className = 'import-result success'; el.style.display = 'block';
+  let msg = data.imported + ' reference' + (data.imported !== 1 ? 's' : '') + ' imported';
+  if (data.skipped > 0) msg += ', ' + data.skipped + ' skipped (no title)';
+  if (data.errors && data.errors.length) msg += ', ' + data.errors.length + ' error(s)';
+  el.textContent = msg;
+}
+
+// ── Add Reference Panel ───────────────────────────────────────────────────
+function openAddPanel()  { document.getElementById('add-ref-panel').classList.add('open'); }
+function closeAddPanel() { document.getElementById('add-ref-panel').classList.remove('open'); }
+function updateStatus() { document.getElementById('ref-status').value = ['physical','pdf','ebook','library-access'].includes(document.getElementById('ref-holding').value) ? 'located' : 'surfaced'; }
+async function saveReference() {
+  const data = { title: document.getElementById('ref-title').value, authors: document.getElementById('ref-authors').value, year: document.getElementById('ref-year').value, source_type: document.getElementById('ref-type').value, url_doi: document.getElementById('ref-doi').value, physical_holding: document.getElementById('ref-holding').value, verification_status: document.getElementById('ref-status').value, themes: document.getElementById('ref-themes').value, annotation: document.getElementById('ref-annotation').value, argument_connection: document.getElementById('ref-argument').value };
+  if (!data.title || !data.authors || !data.year) { alert('Title, Authors, and Year are required.'); return; }
+  await fetch('/api/references', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+  closeAddPanel(); loadReferences();
+}
+
+// ── Save & Break ──────────────────────────────────────────────────────────
 async function saveAndBreak() {
   const btn = document.getElementById('save-break-btn');
-  btn.textContent = 'Saving...';
-  btn.disabled = true;
-
-  const res  = await fetch('/api/save-break', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ message: `Session — ${new Date().toISOString().slice(0,16)}` })
-  });
+  btn.textContent = 'Saving...'; btn.disabled = true;
+  const res = await fetch('/api/save-break', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ message: 'Session \u2014 ' + new Date().toISOString().slice(0,16) }) });
   const data = await res.json();
-
-  btn.textContent = data.status === 'committed' ? '✓ Saved' : '⚠ Check terminal';
+  btn.textContent = data.status === 'committed' ? 'Saved \u2713' : '\u26A0 Check terminal';
   btn.disabled = false;
-
-  if (data.warnings?.length) {
-    alert('Saved with warnings:\n\n' + data.warnings.join('\n'));
-  }
-
-  setTimeout(() => { btn.textContent = '↑ Save & Take a Break'; }, 3000);
+  if (data.warnings && data.warnings.length) alert('Saved with warnings:\n\n' + data.warnings.join('\n'));
+  setTimeout(() => { btn.textContent = '\u2191 Save & Take a Break'; }, 3000);
 }
 
-// ── Broadcast ───────────────────────────────────────────────────────────────
+
+// ── Key status ────────────────────────────────────────────────────────────
+async function checkKeyStatus() {
+  try {
+    const res  = await fetch('/api/key-status');
+    const keys = await res.json();
+    document.querySelectorAll('.model-chip').forEach(chip => {
+      const model = chip.dataset.model;
+      if (keys[model] === false) {
+        // Cloud key missing — grey out and remove from activeModels
+        chip.classList.add('no-key');
+        chip.classList.remove('active');
+        chip.classList.add('inactive');
+        activeModels.delete(model);
+        // Add badge if not already there
+        if (!chip.querySelector('.no-key-badge')) {
+          const badge = document.createElement('span');
+          badge.className = 'no-key-badge';
+          badge.textContent = 'no key';
+          chip.appendChild(badge);
+        }
+        // Prevent toggling until key is added
+        chip.onclick = () => {
+          alert(model + ' requires an API key. Add it to setup.env and restart Marginalia.');
+        };
+      }
+    });
+  } catch(e) { /* silent — don't break UI if endpoint unreachable */ }
+}
+
+// ── Broadcast ─────────────────────────────────────────────────────────────
 async function checkBroadcast() {
   try {
-    const res  = await fetch('/api/broadcast');
-    const data = await res.json();
-    if (data.title) {
-      const banner = document.getElementById('broadcast-banner');
-      document.getElementById('broadcast-text').textContent = `${data.title} — ${data.body}`;
-      banner.style.display = 'flex';
-    }
-  } catch(e) { /* offline — silent */ }
+    const res = await fetch('/api/broadcast'), data = await res.json();
+    if (data.title) { document.getElementById('broadcast-text').textContent = data.title + ' \u2014 ' + data.body; document.getElementById('broadcast-banner').style.display = 'flex'; }
+  } catch(e) {}
 }
 
-// ── Session timer ───────────────────────────────────────────────────────────
+// ── Session timer ─────────────────────────────────────────────────────────
 setInterval(() => {
   sessionMinutes++;
-  const h = Math.floor(sessionMinutes / 60);
-  const m = sessionMinutes % 60;
-  document.getElementById('session-time').textContent =
-    h > 0 ? `Session: ${h}h${m > 0 ? ` ${m}m` : ''}` : `Session: ${m}m`;
+  const h = Math.floor(sessionMinutes/60), m = sessionMinutes%60;
+  document.getElementById('session-time').textContent = h > 0 ? 'Session: ' + h + 'h' + (m > 0 ? ' ' + m + 'm' : '') : 'Session: ' + m + 'm';
 }, 60000);
 
-// ── Init ───────────────────────────────────────────────────────────────────
 checkBroadcast();
+updateLocalWarning();
+checkKeyStatus();
 </script>
 </body>
 </html>

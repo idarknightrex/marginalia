@@ -1,4 +1,3 @@
-# Marginalia — never commit these
 .env
 db/research.db
 db/research.db-shm
@@ -7,6 +6,15 @@ __pycache__/
 *.pyc
 *.pyo
 uploads/
+
+# ── Your research data — never goes to the public repo ──────────────────────
+# These belong in YOUR private backup repo (git remote: backup)
+# not in the public Marginalia codebase
+canonical/
+logs/
+exports/
+
+# ── Large files ──────────────────────────────────────────────────────────────
 *.pdf
 *.mp4
 *.mp3
@@ -18,3 +26,7 @@ uploads/
 .DS_Store
 .venv/
 node_modules/
+
+# ── API keys — visible config file, never push ───────────────────────────────
+setup.env
+.env

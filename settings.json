@@ -1,7 +1,6 @@
 {
-  "_comment": "Marginalia settings — human readable, travels with your repo, committed to git",
+  "_comment": "Marginalia settings \u2014 human readable, travels with your repo, committed to git",
   "_docs": "All values editable here or via Settings panel in the UI",
-
   "workflow": {
     "break_reminder_minutes": 120,
     "dwell_threshold_seconds": 30,
@@ -9,31 +8,34 @@
     "upgrade_check_days": 30,
     "auto_save_canonical": true
   },
-
   "models": {
     "local": {
       "reasoning": "deepseek-r1:8b",
-      "multimodal": "gemma2:9b",
+      "multimodal": "gemma4:latest",
       "general": "llama3.1:8b"
     },
     "cloud": {
       "gemini": "gemini-2.5-flash",
-      "azure_deployment": "gpt-4o",
-      "anthropic": "claude-haiku-4-5"
+      "anthropic": "claude-haiku-4-5",
+      "openai": "gpt-4o"
     }
   },
-
   "storage": {
     "pdf_folder": "~/Documents/Research/PDFs",
     "canonical_folder": "canonical",
     "exports_folder": "exports",
     "captures_folder": "canonical/captures"
   },
-
   "projects": {
-    "types": ["PhD", "Masters", "Paper", "Conference", "Course", "Other"]
+    "types": [
+      "PhD",
+      "Masters",
+      "Paper",
+      "Conference",
+      "Course",
+      "Other"
+    ]
   },
-
   "ui": {
     "theme": "default",
     "reading_assistant_enabled": false,

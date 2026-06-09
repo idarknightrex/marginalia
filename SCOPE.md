@@ -152,7 +152,7 @@ Features:
 | created_at | timestamp | |
 | updated_at | timestamp | |
 
-**Schema normalisation — themes join table (Gap 3 fix, v0.5):**
+**Schema normalisation — themes join table (Gap 3 fix, v0.8-pre):**
 
 Comma-separated tags in a text column fail gracefully at 50 references but become
 slow painful LIKE queries at 500+, especially under Phase 7 idea map graph rendering.
@@ -714,7 +714,7 @@ Store API keys in a password manager (Bitwarden is free and open-source). Never 
 - This means references exist as plain JSON even if the database somehow corrupts
 - Human-readable flat files survive anything
 
-### SQLite Git Sync — Critical Fix (v0.5)
+### SQLite Git Sync — Critical Fix (v0.8-pre)
 
 **The problem with tracking the binary `.db` file directly:**
 Git cannot merge binary SQLite files. The moment the Air and Mini diverge by even one
@@ -2427,7 +2427,7 @@ https://raw.githubusercontent.com/idarknightrex/marginalia/main/broadcast.json
 
 ```json
 {
-  "version": "0.5.0",
+  "version": "0.8-pre",
   "broadcast": {
     "active": false,
     "type": "info",
