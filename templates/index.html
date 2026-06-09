@@ -665,13 +665,7 @@ function toggleModel(chip) {
   if (activeModels.has(model)) {
     activeModels.delete(model); chip.classList.remove('active'); chip.classList.add('inactive');
   } else {
-    if (isLocal) {
-      document.querySelectorAll('.model-chip[data-local="true"]').forEach(c => {
-        if (c !== chip && activeModels.has(c.dataset.model)) {
-          activeModels.delete(c.dataset.model); c.classList.remove('active'); c.classList.add('inactive');
-        }
-      });
-    }
+    // No mutex — models unload after each response (keep_alive:0), sequential firing
     activeModels.add(model); chip.classList.add('active'); chip.classList.remove('inactive');
   }
   updateLocalWarning();
@@ -709,13 +703,15 @@ function makeCard(model) {
   return card;
 }
 
+const cardStartTimes = {};
+
 function startCardCountdown(model) {
   // Called after card is in DOM — safe to query elements
   startTimeoutBar(model);
 }
 
 const countdownTimers = {};
-const cardStartTimes = {};
+
 
 function startTimeoutBar(model) {
   const total   = (MODEL_TIMEOUT[model] || 30000) / 1000;
