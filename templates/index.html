@@ -682,7 +682,8 @@ function makeCard(model) {
   card.innerHTML =
     '<div class="timeout-countdown ' + cdClass + '" id="cd-' + model + '">Waiting… <span class="countdown-bar"><span class="countdown-fill" id="cdfill-' + model + '" style="width:100%"></span></span> <span id="cdsec-' + model + '"></span></div>' +
     '<div class="model-label" style="color:' + MODEL_COLORS[model] + ';display:flex;align-items:center">' + model + badge + cutoff + '</div>' +
-    '<div class="response-text"></div>';
+    '<div class="response-text"></div>' +
+    '<div class="response-timing" id="timing-' + model + '" style="display:none"></div>';
   return card;
 }
 
@@ -692,6 +693,7 @@ function startCardCountdown(model) {
 }
 
 const countdownTimers = {};
+const cardStartTimes = {};
 
 function startTimeoutBar(model) {
   const total   = (MODEL_TIMEOUT[model] || 30000) / 1000;
@@ -772,6 +774,7 @@ async function sendPrompt() {
   // Pre-create all cards in order so layout is stable
   models.forEach(model => {
     grid.appendChild(makeCard(model));
+    cardStartTimes[model] = Date.now();
     startCardCountdown(model);
   });
 
@@ -815,6 +818,9 @@ async function sendPrompt() {
             card.classList.remove('loading');
             stopTimeoutBar(evt.model);
             card.querySelector('.response-text').textContent = evt.text;
+            const elapsed = cardStartTimes[evt.model] ? ((Date.now() - cardStartTimes[evt.model]) / 1000).toFixed(1) : null;
+            const timingEl = document.getElementById('timing-' + evt.model);
+            if (timingEl && elapsed) { timingEl.style.display = 'block'; timingEl.textContent = '\u23f1 ' + elapsed + 's'; }
           }
         }
 
