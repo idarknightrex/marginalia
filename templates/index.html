@@ -159,6 +159,24 @@
     }
     .setup-partial .setup-step-num { color: #3d8b37; }
 
+
+    @keyframes synthPulse {
+      0%   { opacity: 1; }
+      50%  { opacity: 0.4; }
+      100% { opacity: 1; }
+    }
+    @keyframes synthBorderPulse {
+      0%   { border-top-color: var(--accent); }
+      50%  { border-top-color: #c9a832; }
+      100% { border-top-color: var(--accent); }
+    }
+    .synthesis-panel.pulsing {
+      animation: synthBorderPulse 2s ease-in-out infinite;
+    }
+    .synthesis-panel.pulsing #synthesis-text {
+      animation: synthPulse 2s ease-in-out infinite;
+    }
+
     /* ── Timeout countdown ── */
     .timeout-countdown {
       font-family: monospace; font-size: 9px; color: var(--muted);
@@ -816,6 +834,7 @@ async function sendPrompt() {
           const panel = document.getElementById('synthesis-panel');
           const text  = document.getElementById('synthesis-text');
           panel.style.display = 'block';
+          panel.classList.add('pulsing');
           text.style.color = 'var(--muted)';
           text.style.fontStyle = 'italic';
           // Sim City tribute
@@ -832,7 +851,9 @@ async function sendPrompt() {
         }
 
         else if (evt.event === 'synthesis') {
-          const text = document.getElementById('synthesis-text');
+          const panel = document.getElementById('synthesis-panel');
+          const text  = document.getElementById('synthesis-text');
+          panel.classList.remove('pulsing');
           text.style.color = 'var(--text)';
           text.style.fontStyle = 'normal';
           text.textContent = evt.text;
