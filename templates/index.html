@@ -278,7 +278,7 @@
 
     /* ── Hide inactive toggle ── */
     .ref-annotation-preview { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 8px 0 4px; font-style: italic; border-left: 2px solid var(--border); padding-left: 10px; }
-    .ref-argument-preview { font-size: 11px; color: var(--accent); line-height: 1.5; margin: 4px 0; font-family: monospace; }
+    .ref-argument-preview { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 0 0 4px; font-style: italic; border-left: 2px solid var(--border); padding-left: 10px; }
     .ref-status-badge { font-family: monospace; font-size: 10px; padding: 2px 7px; border-radius: 3px; cursor: pointer; user-select: none; margin-left: 8px; }
     .status-surfaced  { background: #c9a83222; color: #c9a832; border: 1px solid #c9a83244; }
     .status-located   { background: #4285f422; color: #4285f4; border: 1px solid #4285f444; }
@@ -598,10 +598,10 @@
     </div>
 
     <div class="filter-row">
-      <button class="filter-btn active" data-filter="all" onclick="setFilter(this)">all</button>
-      <button class="filter-btn" data-filter="verified" onclick="setFilter(this)">verified</button>
-      <button class="filter-btn" data-filter="located" onclick="setFilter(this)">located</button>
-      <button class="filter-btn" data-filter="surfaced" onclick="setFilter(this)">surfaced</button>
+      <button class="filter-btn active" data-filter="all" id="filter-all" onclick="setFilter(this)">all</button>
+      <button class="filter-btn" data-filter="verified" id="filter-verified" onclick="setFilter(this)">verified</button>
+      <button class="filter-btn" data-filter="located" id="filter-located" onclick="setFilter(this)">located</button>
+      <button class="filter-btn" data-filter="surfaced" id="filter-surfaced" onclick="setFilter(this)">surfaced</button>
     </div>
     <div id="ref-list"></div>
   </div>
@@ -1129,9 +1129,33 @@ function renderRefs() {
     card.appendChild(topRow); card.appendChild(actions);
     list.appendChild(card);
   });
+  updateFilterLabels();
 }
 function filterRefs() { renderRefs(); }
+function _postRender() { updateFilterLabels(); }
 function setFilter(btn) { document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); activeFilter = btn.dataset.filter; renderRefs(); }
+
+function updateFilterLabels() {
+  const counts = { all: allRefs.length, verified: 0, located: 0, surfaced: 0 };
+  const lastChanged = { verified: null, located: null, surfaced: null };
+  allRefs.forEach(r => {
+    const s = r.verification_status || 'surfaced';
+    if (counts[s] !== undefined) counts[s]++;
+    // Use updated_at as proxy for last status change
+    if (r.updated_at) {
+      const ts = r.updated_at.slice(0, 16).replace('T', ' ');
+      if (!lastChanged[s] || ts > lastChanged[s]) lastChanged[s] = ts;
+    }
+  });
+  const btn_all = document.getElementById('filter-all');
+  if (btn_all) btn_all.textContent = 'all (' + counts.all + ')';
+  ['verified','located','surfaced'].forEach(s => {
+    const btn = document.getElementById('filter-' + s);
+    if (!btn) return;
+    const ts = lastChanged[s] ? ' · ' + lastChanged[s] : '';
+    btn.textContent = s + (counts[s] ? ' (' + counts[s] + ')' : '') + ts;
+  });
+}
 
 // ── DOI lookup ────────────────────────────────────────────────────────────
 async function lookupDOI() {
@@ -1397,9 +1421,16 @@ async function cycleRefStatus(filename, badge) {
     });
     const data = await res.json();
     if (data.verification_status) {
-      badge.textContent = data.verification_status;
-      badge.className = 'ref-status-badge status-' + data.verification_status;
-      await loadRefs();
+      const newStatus = data.verification_status;
+      badge.textContent = newStatus;
+      badge.className = 'ref-status-badge status-' + newStatus;
+      // Update card border colour in place — no full reload needed
+      const card = badge.closest('.ref-card');
+      if (card) card.style.borderLeftColor = STATUS_COLORS[newStatus] || '#888';
+      // Update allRefs in memory so filter labels stay accurate
+      const ref = allRefs.find(r => r._filename === filename);
+      if (ref) { ref.verification_status = newStatus; ref.updated_at = new Date().toISOString(); }
+      updateFilterLabels();
     }
   } catch(e) { console.error('Status update failed:', e); }
 }
