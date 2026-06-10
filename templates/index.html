@@ -1060,21 +1060,28 @@ function renderRefs() {
     titleEl.textContent = ref.title || '';
     left.appendChild(authorEl); left.appendChild(titleEl);
 
-    const statusTag = document.createElement('span');
-    statusTag.className = 'tag';
-    statusTag.style.cssText = 'background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;flex-shrink:0;margin-left:10px';
-    statusTag.textContent = status;
-
-    topRow.appendChild(left); topRow.appendChild(statusTag);
+    topRow.appendChild(left);
 
     const tagRow = document.createElement('div');
     tagRow.className = 'ref-tags';
-    themes.forEach(t => {
+    // Short tags from frontmatter
+    const tagsList = (ref.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+    tagsList.forEach(t => {
       const tag = document.createElement('span');
       tag.className = 'tag';
       tag.style.cssText = 'background:var(--accent)22;color:var(--accent);border:1px solid var(--accent)44';
       tag.textContent = t;
       tagRow.appendChild(tag);
+    });
+    // Connections as smaller chips
+    (ref.conn_list || []).forEach(c => {
+      const name = c.split('|')[0].trim();
+      const chip = document.createElement('span');
+      chip.className = 'tag';
+      chip.title = c; // full "name | note" on hover
+      chip.style.cssText = 'background:#4285f411;color:#4285f4;border:1px solid #4285f433;font-size:10px';
+      chip.textContent = '⬡ ' + name;
+      tagRow.appendChild(chip);
     });
 
     // Annotation preview
@@ -1152,7 +1159,7 @@ function updateFilterLabels() {
   ['verified','located','surfaced'].forEach(s => {
     const btn = document.getElementById('filter-' + s);
     if (!btn) return;
-    const ts = lastChanged[s] ? ' · ' + lastChanged[s] : '';
+    const ts = lastChanged[s] ? ' · ' + lastChanged[s] + ' UTC' : '';
     btn.textContent = s + (counts[s] ? ' (' + counts[s] + ')' : '') + ts;
   });
 }
@@ -1363,7 +1370,7 @@ async function annotateInModal(filename) {
     const data = await res.json();
     if (data.status === 'annotated') {
       document.getElementById('edit-annotation').value = data.synthesis || '';
-      if (btn) { btn.textContent = '✓ Done'; setTimeout(() => { btn.textContent = '陰 Run Annotation'; btn.disabled = false; }, 2000); }
+      if (btn) { btn.textContent = '✓ Done'; setTimeout(() => { btn.textContent = '◆ Generate'; btn.disabled = false; }, 2000); }
     } else {
       if (btn) { btn.textContent = '⚠ ' + (data.error || 'Failed'); btn.disabled = false; }
     }
@@ -1457,8 +1464,11 @@ function openEditModal(ref, runAnnotate) {
   document.getElementById('edit-year').value     = ref.year || '';
   document.getElementById('edit-type').value     = ref.source_type || 'journal';
   document.getElementById('edit-doi').value      = ref.url_doi || '';
-  document.getElementById('edit-themes').value   = ref.themes || '';
+  document.getElementById('edit-tags').value        = ref.tags || '';
+  document.getElementById('edit-themes-body').value = ref.themes_body || (ref.themes ? ref.themes.split(',').map(t => '- ' + t.trim()).join('\n') : '');
+  document.getElementById('edit-connections').value = ref.connections || '';
   document.getElementById('edit-annotation').value    = ref.annotation || '';
+  document.getElementById('edit-user-notes').value    = ref.user_notes || '';
   document.getElementById('edit-argument').value      = ref.argument_connection || '';
   document.getElementById('edit-modal').style.display = 'flex';
   if (runAnnotate) {
@@ -1479,8 +1489,11 @@ async function saveEdit() {
     year:     document.getElementById('edit-year').value.trim(),
     source_type: document.getElementById('edit-type').value,
     url_doi:  document.getElementById('edit-doi').value.trim(),
-    themes:   document.getElementById('edit-themes').value.trim(),
-    annotation:         document.getElementById('edit-annotation').value.trim(),
+    tags:        document.getElementById('edit-tags').value.trim(),
+    themes_body: document.getElementById('edit-themes-body').value.trim(),
+    connections: document.getElementById('edit-connections').value.trim(),
+    annotation:          document.getElementById('edit-annotation').value.trim(),
+    user_notes:          document.getElementById('edit-user-notes').value.trim(),
     argument_connection: document.getElementById('edit-argument').value.trim(),
   };
   try {
@@ -1493,6 +1506,71 @@ async function saveEdit() {
   } catch(e) { alert('Save failed: ' + e.message); }
   btn.textContent = 'Save'; btn.disabled = false;
 }
+
+
+// ── Tag and connection autocomplete ──────────────────────────────────────
+let _allTags = [], _allConns = [];
+async function loadAutocomplete() {
+  try {
+    const [tr, cr] = await Promise.all([fetch('/api/tags'), fetch('/api/connections')]);
+    _allTags  = await tr.json();
+    _allConns = await cr.json();
+  } catch(e) {}
+}
+loadAutocomplete();
+
+function tagAutocomplete(input) {
+  const parts = input.value.split(',');
+  const current = parts[parts.length - 1].trim().toLowerCase();
+  const box = document.getElementById('tag-suggestions');
+  if (!current || current.length < 1) { box.style.display = 'none'; return; }
+  const matches = _allTags.filter(t => t.startsWith(current) && !parts.slice(0,-1).map(p=>p.trim()).includes(t));
+  if (!matches.length) { box.style.display = 'none'; return; }
+  box.innerHTML = '';
+  matches.slice(0,6).forEach(m => {
+    const opt = document.createElement('div');
+    opt.style.cssText = 'padding:5px 10px;cursor:pointer;font-size:12px;font-family:monospace';
+    opt.textContent = m;
+    opt.onmousedown = (e) => {
+      e.preventDefault();
+      parts[parts.length - 1] = m;
+      input.value = parts.join(', ') + ', ';
+      box.style.display = 'none';
+    };
+    box.appendChild(opt);
+  });
+  box.style.display = 'block';
+}
+
+function connAutocomplete(textarea) {
+  const lines = textarea.value.split('\n');
+  const current = lines[lines.length - 1].split('|')[0].trim().toLowerCase();
+  const box = document.getElementById('conn-suggestions');
+  if (!current || current.length < 1) { box.style.display = 'none'; return; }
+  const matches = _allConns.filter(c => c.startsWith(current));
+  if (!matches.length) { box.style.display = 'none'; return; }
+  box.innerHTML = '';
+  matches.slice(0,5).forEach(m => {
+    const opt = document.createElement('div');
+    opt.style.cssText = 'padding:5px 10px;cursor:pointer;font-size:12px;font-family:monospace';
+    opt.textContent = m;
+    opt.onmousedown = (e) => {
+      e.preventDefault();
+      lines[lines.length - 1] = m + ' | ';
+      textarea.value = lines.join('\n');
+      box.style.display = 'none';
+    };
+    box.appendChild(opt);
+  });
+  box.style.display = 'block';
+}
+
+document.addEventListener('click', () => {
+  const tb = document.getElementById('tag-suggestions');
+  const cb = document.getElementById('conn-suggestions');
+  if (tb) tb.style.display = 'none';
+  if (cb) cb.style.display = 'none';
+});
 
 function launchPromptFromRef(filename) {
   // Find the ref and pre-populate the prompt input
@@ -1651,15 +1729,39 @@ checkLocalModels();
       </div>
     </div>
     <div class="edit-field"><label>DOI / URL</label><input id="edit-doi" type="text"></div>
-    <div class="edit-field"><label>Themes / Keywords</label><input id="edit-themes" type="text"></div>
+    <div class="edit-field">
+      <label>TAGS <span style="font-weight:normal;text-transform:none;font-size:10px;color:var(--muted)">— short, 1–3 words, comma-separated</span></label>
+      <div style="position:relative">
+        <input id="edit-tags" type="text" placeholder="embodied-learning, anxiety, SoTL" autocomplete="off" oninput="tagAutocomplete(this)">
+        <div id="tag-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:4px;z-index:100;max-height:120px;overflow-y:auto"></div>
+      </div>
+    </div>
+    <div class="edit-field">
+      <label>THEMES <span style="font-weight:normal;text-transform:none;font-size:10px;color:var(--muted)">— full phrases, one per line (prefix with -)</span></label>
+      <textarea id="edit-themes-body" placeholder="- Embodied cognition as pedagogical frame&#10;- Performance anxiety in threshold concepts&#10;- Community as epistemic structure" style="min-height:80px"></textarea>
+    </div>
+    <div class="edit-field">
+      <label>CONNECTIONS <span style="font-weight:normal;text-transform:none;font-size:10px;color:var(--muted)">— name | note, one per line</span></label>
+      <div style="position:relative">
+        <textarea id="edit-connections" placeholder="dissertation-ch2 | embodied learning as threshold crossing&#10;grime-matters | credential exposure through process" style="min-height:70px" oninput="connAutocomplete(this)"></textarea>
+        <div id="conn-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:4px;z-index:100;max-height:100px;overflow-y:auto"></div>
+      </div>
+    </div>
     <div class="edit-field">
       <label style="display:flex;justify-content:space-between;align-items:center">
-        Annotation
-        <button class="btn-secondary" id="edit-annotate-btn" style="font-size:10px;padding:2px 8px;margin:0" onclick="annotateInModal(editingFilename)">&#9670; Run Annotation</button>
+        <span>AI ANNOTATION <span style="font-weight:normal;text-transform:none;color:var(--muted);font-size:10px">— generated, review before saving</span></span>
+        <button class="btn-secondary" id="edit-annotate-btn" style="font-size:10px;padding:2px 8px;margin:0" onclick="annotateInModal(editingFilename)">&#9670; Generate</button>
       </label>
-      <textarea id="edit-annotation"></textarea>
+      <textarea id="edit-annotation" style="font-style:italic;color:var(--muted)"></textarea>
     </div>
-    <div class="edit-field"><label>Argument Connection</label><textarea id="edit-argument"></textarea></div>
+    <div class="edit-field">
+      <label>YOUR NOTES</label>
+      <textarea id="edit-user-notes" placeholder="Your own reading notes on this source..."></textarea>
+    </div>
+    <div class="edit-field">
+      <label>ARGUMENT CONNECTION</label>
+      <textarea id="edit-argument" placeholder="How does this source support, complicate, or challenge your research argument?"></textarea>
+    </div>
     <div class="edit-modal-actions">
       <button class="btn-secondary" onclick="closeEditModal()">Cancel</button>
       <button class="btn-primary" id="edit-save-btn" onclick="saveEdit()">Save</button>

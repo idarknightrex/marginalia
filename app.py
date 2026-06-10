@@ -78,8 +78,38 @@ def write_canonical_reference(data: dict) -> Path:
     title_slug = "-".join(data.get("title", "untitled").lower().split()[:3])
     title_slug = "".join(c for c in title_slug if c.isalnum() or c == "-")
     filename = f"{first_author}_{year}_{title_slug}.md"
-    annotation = data.get("annotation") or "<!-- Add your annotation here -->"
-    argument   = data.get("argument_connection") or "<!-- How does this connect to your research? -->"
+
+    annotation   = data.get("annotation") or "<!-- AI annotation — run Generate to populate -->"
+    user_notes   = data.get("user_notes") or "<!-- Your personal reading notes -->"
+    argument     = data.get("argument_connection") or "<!-- How does this source support, complicate, or challenge your research argument? -->"
+
+    # Tags: short, comma-separated, stay in frontmatter
+    tags = data.get("tags", "")
+    # If old import had themes as short keywords, treat as tags if no dedicated tags field
+    if not tags and data.get("themes", ""):
+        raw = data.get("themes", "")
+        # Heuristic: if all comma-parts are short (<= 4 words), treat as tags
+        parts = [p.strip() for p in raw.split(",") if p.strip()]
+        if all(len(p.split()) <= 4 for p in parts):
+            tags = raw
+
+    # Themes: longer phrases, bullet list in body
+    themes_raw = data.get("themes", "")
+    if themes_raw and themes_raw != tags:
+        theme_lines = "\n".join(
+            ("- " + t.strip()) if not t.strip().startswith("-") else t.strip()
+            for t in themes_raw.split(",") if t.strip()
+        )
+    else:
+        theme_lines = "<!-- Conceptual themes — full phrases, one per line as: - theme -->"
+
+    # Connections: name | note per line
+    connections_raw = data.get("connections", "")
+    if connections_raw:
+        conn_lines = connections_raw
+    else:
+        conn_lines = "<!-- Connections to writing/projects: name | note -->"
+
     canonical = f"""---
 id: {ref_id}
 title: {data.get("title", "")}
@@ -90,16 +120,25 @@ url_doi: {data.get("url_doi", "")}
 verification_status: {data.get("verification_status", "surfaced")}
 physical_holding: {data.get("physical_holding", "none")}
 holding_location: {data.get("holding_location", "")}
-themes: {data.get("themes", "")}
+tags: {tags}
 created_at: {datetime.now().isoformat()}
 updated_at: {datetime.now().isoformat()}
 ---
+
+## Themes
+{theme_lines}
+
+## Connections
+{conn_lines}
 
 ## Annotation
 {annotation}
 
 ## Argument Connection
 {argument}
+
+## Your Notes
+{user_notes}
 """
     filepath = REFERENCES_DIR / filename
     filepath.write_text(canonical, encoding="utf-8")
@@ -158,6 +197,17 @@ def read_all_references() -> list:
                         return ""
                     meta["annotation"]          = extract_section(body, "Annotation")
                     meta["argument_connection"] = extract_section(body, "Argument Connection")
+                    meta["user_notes"]           = extract_section(body, "Your Notes")
+                    meta["themes_body"]          = extract_section(body, "Themes")
+                    meta["connections"]          = extract_section(body, "Connections")
+
+                    # Migration: old files have themes in frontmatter, not body
+                    if not meta["themes_body"] and meta.get("themes"):
+                        meta["themes_body"] = meta["themes"]
+                    # Expose clean lists
+                    meta["tags_list"]  = [t.strip() for t in meta.get("tags","").split(",") if t.strip()]
+                    meta["theme_list"] = [ln.lstrip("- ").strip() for ln in (meta["themes_body"] or "").splitlines() if ln.strip() and not ln.strip().startswith("<!--")]
+                    meta["conn_list"]  = [ln.strip() for ln in (meta["connections"] or "").splitlines() if ln.strip() and not ln.strip().startswith("<!--")]
                     refs.append(meta)
         except Exception:
             pass
@@ -231,7 +281,9 @@ def parse_csv_import(text: str) -> list:
         "holding_location": ["holding_location", "location"],
         "annotation": ["annotation", "notes", "abstract"],
         "argument_connection": ["argument_connection", "argument"],
-        "themes": ["themes", "keywords", "tags"],
+        "tags": ["tags", "keywords"],
+        "themes": ["themes", "subject"],
+        "connections": ["connections", "projects"],
     }
     for row in reader:
         if not any(row.values()):
@@ -718,6 +770,17 @@ def update_reference(ref_filename):
     if "argument_connection" in data and data["argument_connection"]:
         body = replace_section(body, "Argument Connection", data["argument_connection"])
         meta.pop("argument_connection", None)
+    if "user_notes" in data and data["user_notes"]:
+        body = replace_section(body, "Your Notes", data["user_notes"])
+        meta.pop("user_notes", None)
+    if "themes_body" in data and data["themes_body"]:
+        body = replace_section(body, "Themes", data["themes_body"])
+        meta.pop("themes", None)
+    if "connections" in data:
+        body = replace_section(body, "Connections", data["connections"])
+    # tags stay in frontmatter — handled via meta dict above
+    if "tags" in data:
+        meta["tags"] = data["tags"]
 
     # Update updated_at timestamp
     meta["updated_at"] = datetime.now().isoformat()
@@ -786,6 +849,29 @@ def update_reference_status(ref_filename):
     fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v)
     filepath.write_text(f"---\n{fm_lines}\n---\n{body}", encoding="utf-8")
     return jsonify({"status": "updated", "verification_status": new_status})
+
+
+@app.route("/api/tags", methods=["GET"])
+def get_all_tags():
+    """Return all unique tags across the library for autocomplete."""
+    tags = set()
+    for ref in read_all_references():
+        for t in ref.get("tags_list", []):
+            if t:
+                tags.add(t.lower().strip())
+    return jsonify(sorted(tags))
+
+
+@app.route("/api/connections", methods=["GET"])
+def get_all_connections():
+    """Return all unique connection names across the library for autocomplete."""
+    conns = set()
+    for ref in read_all_references():
+        for line in ref.get("conn_list", []):
+            name = line.split("|")[0].strip()
+            if name:
+                conns.add(name.lower().strip())
+    return jsonify(sorted(conns))
 
 @app.route("/api/references/library-synthesis", methods=["POST"])
 def library_synthesis():
