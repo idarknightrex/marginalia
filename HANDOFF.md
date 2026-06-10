@@ -1,5 +1,5 @@
 # Marginalia — Thread Handoff
-**Version:** v0.8.7.1
+**Version:** v0.9.2
 **Purpose:** Copy this into a new Claude thread to restore full context
 
 ---
@@ -41,7 +41,7 @@ No hidden .env file needed. Fields:
 
 ---
 
-## Model Chips (v0.8.7.1)
+## Model Chips (v0.9.2)
 | Chip | Model | Status |
 |---|---|---|
 | Gemini 2.5 Flash | gemini-2.5-flash | ✅ Working |
@@ -88,9 +88,9 @@ No hidden .env file needed. Fields:
 
 ## Build History
 - **v0.8-pre** — Multi-model prompt: Gemini, Claude Haiku, Azure GPT-4o. References pipeline. Save & Break.
-- **v0.8.7.1** — DeepSeek R1 + Gemma 4 chips added and wired to Ollama backend
-- **v0.8.7.1** — Synthesis engine (DeepSeek R1 local meta-pass). 16GB mutex. Claude cost counter.
-- **v0.8.7.1** — Full reference import (CSV/BibTeX/RIS/DOI/plaintext). Azure replaced with OpenAI direct + Perplexity. setup.env replaces .env. Docs updated.
+- **v0.9.2** — DeepSeek R1 + Gemma 4 chips added and wired to Ollama backend
+- **v0.9.2** — Synthesis engine (DeepSeek R1 local meta-pass). 16GB mutex. Claude cost counter.
+- **v0.9.2** — Full reference import (CSV/BibTeX/RIS/DOI/plaintext). Azure replaced with OpenAI direct + Perplexity. setup.env replaces .env. Docs updated.
 
 ---
 
@@ -135,3 +135,208 @@ Known architectural limitation: if the LLM summarizing a source is trained on th
 
 ### Implication for annotation fields
 annotation and argument_connection fields in canonical references are downstream of whoever summarized them. Single-model annotations are epistemologically narrow. Multi-model annotation — running the same source through Qwen, Mistral, and DeepSeek and comparing — is a richer capture. Worth building as an option in the reference panel (Phase 6).
+
+---
+
+## v0.9 — Project Intelligence (scoped, ready to build)
+
+### "What am I missing?" button
+- On-demand predictive pass — DeepSeek R1 reads all session files in current project
+- Surfaces unasked questions, unexplored gaps, argument weaknesses
+- Trigger: button in UI, not automatic — respects the "slow down" ethos
+- Secondary trigger: optional time-based (every 2 hours if active)
+
+### Rolling 100-word project summary
+- Auto-updated every session completion and on every Save & Break
+- Covers sessions between two selectable dates
+- Lives at canonical/projects/[project-name]-summary.md
+- 2-hour background timer triggers silent regeneration
+- Designed to be readable as a standalone research diary entry
+
+### Crash resilience by design
+- Canonical files write atomically — crash mid-session loses only the unsaved window
+- The notepad in meat space covers that window (Ingest tab, Phase 4)
+- Incomplete sessions still contribute to rolling summary — fragments are data points
+- "Chaff as fuel" — nothing wasted, just weighted accordingly
+
+### Predictive framing
+- The pass isn't looking for what's there — it's looking for what's missing and what's weak
+- Same function as a supervisor reading a draft and asking "but what about X?"
+- Checks the instrument's own work for blight
+- Dissertation positionality note: the researcher built a tool that audits its own gaps
+
+### Implementation estimate
+- ~30-40 lines Python, one new Flask route /api/predict
+- Small UI panel, "What am I missing?" button prominent in prompt view
+- DeepSeek R1 as engine — same model doing synthesis, now doing longitudinal pattern recognition
+- Session files already exist in canonical/sessions/ — infrastructure ready
+
+---
+
+## v0.9.2 — Library Intelligence (scoped, ready to build)
+
+### Framing — critical
+- NOT an agent, NOT an assistant, NOT acting on behalf of the researcher
+- The library IS the intelligence — the tool is a lens pointed at curated material
+- Researcher remains the epistemological centre — tool surfaces, researcher decides
+- In UI: capability of the References tab, no branding, no persona, no agent language
+- Dissertation positionality: using a multi-model lens to interrogate your own material
+
+### Per-reference multi-model annotation
+- Send abstract/annotation through 2-3 models, synthesise their readings
+- Qwen reads a Western pedagogy paper differently than DeepSeek — that divergence is data
+- Writes multi-voice annotation back to canonical reference file
+- Route: /api/references/[id]/annotate
+- UI: "Annotate" button in reference card, model chip selector, result appended to file
+
+### Cross-reference thematic synthesis — "What's in my library?"
+- DeepSeek reads all annotations, surfaces: recurring themes, tensions between sources,
+  gaps in collected literature, sources that should be in conversation but aren't
+- Route: /api/references/synthesise
+- UI: button on References tab — no agent language, just "What's in my library?"
+- Output: structured synthesis panel same as prompt synthesis
+
+### Idea map (Phase 2, now has a data layer)
+- Nodes: references
+- Edges: thematic connections surfaced by cross-reference synthesis pass
+- Force-directed SVG, hover shows connection reasoning
+- The network is the visual layer on top of the cross-reference data
+
+### What this makes Marginalia
+- Not a citation manager (Zotero stores what you collected)
+- Not a chat interface
+- A research instrument that knows your collection, understands relationships between
+  sources, surfaces what's missing, and can interrogate your argument against your
+  own literature
+- "What does my library say about embodied learning in non-Western contexts?" —
+  answered from your canonical files, not from the internet or training data
+
+### Connection to v0.9 Project Intelligence
+- Session intelligence and reference intelligence feed the same synthesis engine
+- Together they answer: what have I been thinking? what have I collected?
+  what's the relationship? what's missing?
+- The dissertation methods section should note: the instrument evolved from a
+  multi-model prompt interface into a research library instrument during the
+  course of the research. That evolution is itself a methodological finding.
+
+
+---
+
+
+---
+
+## Versioning Roadmap — locked June 2026
+
+### v0.9.x — Multi-model system complete (current)
+- v0.9.2 — Library intelligence, synthesis model selector, local auto-detect ✓
+- v0.9.2 — Project intelligence / "What am I missing?" + rolling session summary
+- v0.9.3 — Crash resilience, atomic writes, chaff-as-fuel
+
+### v1.0 — Complete instrument, headless Mini
+**Target: Mini goes headless in ~2 weeks**
+- Tailscale remote access — phone/MBA as interface, Mini as engine
+- Launchd plist — Marginalia starts on boot, runs headless
+- Photo / handwritten notes → Gemma 4 OCR → models → canonical (The Napkin)
+- Voice memo → transcription → models → canonical
+- PDF annotation extraction → models → canonical
+- Three-lens provocation on ingested material
+- BibTeX export — round-trip complete (import AND export)
+
+### v1.1 — Reference Intelligence Complete
+- Zotero sync (import and export)
+- Library database search (U of S, CrossRef direct)
+- Full settings panel (synthesis model selector moves here from inline)
+- Project management UI
+
+### v1.2 — ISSOTL Ready
+**Target: October 28, 2026 — Saskatoon**
+- Polish, stability, demo mode
+- Documentation complete for public release
+- Ko-fi page updated with v1.2 release notes
+
+### v2.x — Intelligence Layer
+- Idea map (force-directed SVG)
+- Reading assistant (transparent opt-in dwell-time)
+- Writing tracker
+- Multi-project context switching
+- Three-lens provocation as standing feature
+
+---
+
+## Immediate next steps (this week)
+1. Deploy v0.9.2 on Mini
+2. Install Tailscale on Mini and MBA
+3. Set up launchd plist for auto-start on boot
+4. Test headless access from MBA and phone
+5. Build v0.9.2 Project Intelligence
+
+## Tailscale setup (quick reference)
+- Install: https://tailscale.com/download
+- Mini: `tailscale up` — note the Tailscale IP
+- MBA/phone: install Tailscale app, sign in same account
+- Access Marginalia at: `http://[mini-tailscale-ip]:5001`
+- No port forwarding, no VPN config, works anywhere
+
+## launchd plist (to build)
+- ~/Library/LaunchAgents/com.marginalia.server.plist
+- Runs bootstrap.command on login
+- Sets OLLAMA_MODELS env var persistently
+- Restarts on crash
+
+## v2.x Wishlist (superseded by roadmap above — kept for reference)
+ — Settings Panel and Beyond
+
+### v2.0 — Settings Panel
+- Full settings UI (currently Phase 2 placeholder)
+- Configurable: default synthesis model, cloud model versions, timeout values
+- Configurable: workflow preferences (break reminder, dwell threshold)
+- Configurable: local model paths, Ollama host
+- Synthesis model selector moves here from inline dropdown (v0.9.2 Option B → Option A)
+- Model perspective labels editable (user can rename/reframe)
+
+### v2.1 — Writing Tracker
+- Log writing sessions with word count, session duration, reference links
+- Connect writing sessions to research sessions
+- "What was I thinking when I wrote this?" — link canonical sessions to writing dates
+
+### v2.2 — Projects View
+- Multi-project context switching
+- Each project has own canonical/ folder, session history, reference library
+- Rolling 100-word summary per project (from v0.9 spec)
+- Project-scoped "What am I missing?" pass
+
+### v2.3 — Idea Map
+- Force-directed SVG graph — nodes are references, edges are thematic connections
+- Connections surfaced by library intelligence synthesis pass (v0.9.2)
+- Hover tooltips show connection reasoning
+- Click node to launch prompt from that reference
+- Visual layer on top of cross-reference data already being generated
+
+### v2.4 — Reading Assistant
+- Transparent opt-in dwell-time cross-reference engine
+- While reading a source, surfaces related references from your library
+- NOT covert — explicit opt-in, no hidden logic
+- Timing data from v0.8.6.4+ feeds into dwell-time detection
+
+### v2.5 — Three-Lens Provocation Sequence
+- Pre-deployment argument stress-testing (from PhD PreWork 6 thread)
+- Before bringing argument to human gatekeepers, run through local model matrix
+- Surfaces where argument is soft — "the XO using the enemy's maps to find the reefs"
+- Structured provocation prompts per lens (epistemic, methodological, contextual)
+
+### v2.6 — Ingest / OCR
+- Photo, PDF, audio, typed notes capture
+- Gemma 4 as primary OCR engine
+- PDF naming convention enforced: AuthorLastname_Year_ShortTitle.pdf
+- Voice memo transcription for field notes
+
+### v2.7 — launchd persistent env var
+- OLLAMA_MODELS set system-wide on Mini via launchctl
+- No manual export needed before ollama commands
+- Bootstrap.command works cleanly without shell session dependency
+
+### Perennial items
+- Python 3.12 upgrade on Mini (Homebrew install pending)
+- MacBook Air M5 deployment
+- Anthropic API key top-up reminder in UI when credits low
+- Mistral 14B available on stripped Mini (confirmed viable once clean)

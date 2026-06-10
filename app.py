@@ -54,6 +54,8 @@ app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
 # ─── Token tracking ───────────────────────────────────────────────────────────
 anthropic_tokens = {"input": 0, "output": 0}
+import threading as _threading
+_tokens_lock = _threading.Lock()
 
 def estimate_anthropic_cost(input_tokens: int, output_tokens: int) -> float:
     return (input_tokens / 1_000_000 * 0.80) + (output_tokens / 1_000_000 * 4.00)
@@ -170,10 +172,17 @@ def call_ollama(model_str: str, prompt: str, unload_after: bool = True) -> str:
         return json.loads(r.read()).get("response", "")
 
 
-def run_synthesis(prompt: str, responses: dict) -> str:
+def run_synthesis(prompt: str, responses: dict, synthesis_model: str = "deepseek") -> str:
     settings  = load_settings()
     local_cfg = settings.get("models", {}).get("local", {})
-    model_str = local_cfg.get("reasoning", "deepseek-r1:8b")
+    model_map = {
+        "deepseek": local_cfg.get("reasoning",  "deepseek-r1:8b"),
+        "qwen":     local_cfg.get("asia",       "qwen2.5:14b"),
+        "mistral":  local_cfg.get("europe",     "mistral:7b"),
+        "gemma":    local_cfg.get("multimodal", "gemma4:latest"),
+        "llama":    local_cfg.get("general",    "llama3.1:8b"),
+    }
+    model_str = model_map.get(synthesis_model, local_cfg.get("reasoning", "deepseek-r1:8b"))
     response_block = "\n\n".join(
         f"[{model.upper()}]\n{text}" for model, text in responses.items() if text
     )
@@ -449,6 +458,56 @@ def setup_status():
         "setup_file_path":   str(APP_ROOT / setup_file),
     })
 
+
+@app.route("/api/local-models", methods=["GET"])
+def get_local_models():
+    """
+    Query Ollama /api/tags to find which local models are actually installed.
+    Returns a dict of model_key -> { installed, model_str, size_gb }
+    """
+    import urllib.request as _ur
+
+    # Known local models: chip key -> list of possible ollama name prefixes
+    LOCAL_MODEL_MAP = {
+        "deepseek": ["deepseek-r1"],
+        "qwen":     ["qwen2.5", "qwen"],
+        "mistral":  ["mistral"],
+        "gemma":    ["gemma4", "gemma"],
+        "llama":    ["llama3.1", "llama3", "llama"],
+    }
+
+    installed = {}
+    try:
+        req = _ur.Request(
+            f"{OLLAMA_BASE}/api/tags",
+            headers={"Content-Type": "application/json"}
+        )
+        with _ur.urlopen(req, timeout=5) as r:
+            data = json.loads(r.read())
+        ollama_models = {m["name"]: m for m in data.get("models", [])}
+
+        for chip_key, prefixes in LOCAL_MODEL_MAP.items():
+            found = None
+            for name, info in ollama_models.items():
+                for prefix in prefixes:
+                    if name.startswith(prefix):
+                        found = {
+                            "installed": True,
+                            "model_str": name,
+                            "size_gb":   round(info.get("size", 0) / 1e9, 1)
+                        }
+                        break
+                if found:
+                    break
+            installed[chip_key] = found or {"installed": False, "model_str": None, "size_gb": 0}
+
+    except Exception as e:
+        # Ollama not running or unreachable — mark all as unknown
+        for chip_key in LOCAL_MODEL_MAP:
+            installed[chip_key] = {"installed": None, "model_str": None, "size_gb": 0, "error": str(e)}
+
+    return jsonify(installed)
+
 @app.route("/api/key-status", methods=["GET"])
 def key_status():
     """Tell the frontend which API keys are configured — no values, just booleans."""
@@ -511,9 +570,10 @@ LOCAL_MODELS  = {"deepseek", "gemma", "llama", "qwen", "mistral"}
 @app.route("/api/prompt", methods=["POST"])
 def handle_prompt():
     global anthropic_tokens
-    data   = request.json
-    prompt = data.get("prompt", "")
-    models = data.get("models", [])
+    data           = request.json
+    prompt         = data.get("prompt", "")
+    models         = data.get("models", [])
+    synthesis_model = data.get("synthesis_model", "deepseek")
 
     cloud_ordered = [m for m in MODEL_ORDER if m in models and m in CLOUD_MODELS]
     local_ordered = [m for m in MODEL_ORDER if m in models and m in LOCAL_MODELS]
@@ -531,8 +591,9 @@ def handle_prompt():
                 for future in concurrent.futures.as_completed(futures):
                     model, result, error, in_tok, out_tok = future.result()
                     if in_tok:
-                        anthropic_tokens["input"]  += in_tok
-                        anthropic_tokens["output"] += out_tok
+                        with _tokens_lock:
+                            anthropic_tokens["input"]  += in_tok
+                            anthropic_tokens["output"] += out_tok
                     if result:
                         results[model] = result
                         yield json.dumps({"event": "result", "model": model, "text": result}) + "\n"
@@ -555,7 +616,7 @@ def handle_prompt():
         synthesis = ""
         if len(results) > 1:
             yield json.dumps({"event": "synthesis_start"}) + "\n"
-            synthesis = run_synthesis(prompt, results)
+            synthesis = run_synthesis(prompt, results, synthesis_model=synthesis_model)
             yield json.dumps({"event": "synthesis", "text": synthesis}) + "\n"
 
         if results:
@@ -574,6 +635,160 @@ def handle_prompt():
         headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"}
     )
 
+
+
+@app.route("/api/references/library-synthesis", methods=["POST"])
+def library_synthesis():
+    """
+    Read all canonical reference annotations and run a synthesis pass.
+    Surfaces: recurring themes, tensions between sources, gaps, sources
+    that should be in conversation. All from your own curated material.
+    """
+    refs = read_all_references()
+    if not refs:
+        return jsonify({"error": "No references found in library"}), 400
+
+    # Build a condensed representation of the library
+    ref_summaries = []
+    for ref in refs:
+        if ref.get("title"):
+            entry = f"[{ref.get('authors','Unknown')} {ref.get('year','')}] {ref.get('title','')}"
+            if ref.get("themes"):
+                entry += f" — themes: {ref.get('themes')}"
+            # Read annotation from file if available
+            filepath = REFERENCES_DIR / ref.get("_filename", "")
+            if filepath.exists():
+                text = filepath.read_text(encoding="utf-8")
+                parts = text.split("---", 2)
+                if len(parts) >= 3:
+                    body = parts[2].strip()
+                    # Extract annotation section
+                    if "## Annotation" in body:
+                        ann = body.split("## Annotation")[1].split("##")[0].strip()
+                        if ann and not ann.startswith("<!--"):
+                            entry += f"\nAnnotation: {ann[:200]}"
+            ref_summaries.append(entry)
+
+    library_text = "\n\n".join(ref_summaries)
+
+    settings  = load_settings()
+    local_cfg = settings.get("models", {}).get("local", {})
+    model_str = local_cfg.get("reasoning", "deepseek-r1:8b")
+
+    lens_prompt = f"""You are a research librarian helping a PhD researcher understand their own collection.
+Read the following reference library and identify:
+
+1. RECURRING THEMES: What topics and concepts appear most frequently?
+2. TENSIONS: Which sources seem to argue against each other?
+3. GAPS: What important perspectives or topics are missing from this collection?
+4. CONVERSATIONS: Which sources should be read together and why?
+5. RESEARCH QUESTION FIT: How well does this collection support research on embodied learning, community-building, and performance anxiety in undergraduates?
+
+Be specific — cite author names and years. This is the researcher's own curated material, not general knowledge.
+
+LIBRARY:
+{library_text}"""
+
+    try:
+        synthesis = call_ollama(model_str, lens_prompt)
+        return jsonify({"synthesis": synthesis, "ref_count": len(refs)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/references/<ref_filename>/annotate", methods=["POST"])
+def annotate_reference(ref_filename):
+    """
+    Run a single reference through selected models and synthesise their readings.
+    Writes multi-voice annotation back to the canonical file.
+    """
+    data   = request.json or {}
+    models = data.get("models", ["deepseek"])
+
+    # Path traversal guard — filename must be a bare name, no separators
+    if "/" in ref_filename or "\\" in ref_filename or ".." in ref_filename:
+        return jsonify({"error": "Invalid filename"}), 400
+
+    filepath = (REFERENCES_DIR / ref_filename).resolve()
+    if REFERENCES_DIR.resolve() not in filepath.parents:
+        return jsonify({"error": "Invalid path"}), 400
+    if not filepath.exists():
+        return jsonify({"error": f"Reference file not found: {ref_filename}"}), 404
+
+    text  = filepath.read_text(encoding="utf-8")
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return jsonify({"error": "Invalid canonical file format"}), 400
+
+    # Parse frontmatter
+    meta = {}
+    for line in parts[1].strip().splitlines():
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            meta[k.strip()] = v.strip()
+
+    title   = meta.get("title", "Unknown")
+    authors = meta.get("authors", "Unknown")
+    year    = meta.get("year", "")
+    themes  = meta.get("themes", "")
+
+    existing_body = parts[2]
+    existing_annotation = ""
+    if "## Annotation" in existing_body:
+        existing_annotation = existing_body.split("## Annotation")[1].split("##")[0].strip()
+        if existing_annotation.startswith("<!--"):
+            existing_annotation = ""
+
+    annotation_prompt = f"""Read this academic reference and provide a concise critical annotation (100-150 words).
+What does this source argue? What is its methodology? What are its limitations?
+
+Title: {title}
+Authors: {authors} ({year})
+Themes: {themes}
+{"Existing annotation: " + existing_annotation if existing_annotation else ""}
+
+Provide a scholarly annotation suitable for a PhD research bibliography."""
+
+    results = {}
+    for model in models:
+        try:
+            _, result, error, _, _ = call_model(model, annotation_prompt)
+            if result:
+                results[model] = result
+        except Exception as e:
+            results[model] = f"Error: {e}"
+
+    if not results:
+        return jsonify({"error": "No models returned annotations"}), 500
+
+    # Synthesise if multiple models
+    if len(results) > 1:
+        synthesis = run_synthesis(annotation_prompt, results)
+    else:
+        synthesis = list(results.values())[0]
+
+    # Write multi-voice annotation back to canonical file
+    voices = "\n\n".join(f"**{m.upper()}:** {r}" for m, r in results.items())
+    new_annotation = f"<!-- Multi-voice annotation generated {datetime.now().strftime('%Y-%m-%d')} -->\n\n{voices}\n\n**SYNTHESIS:** {synthesis}"
+
+    # Replace annotation section in file
+    if "## Annotation" in existing_body:
+        before = existing_body.split("## Annotation")[0]
+        after_parts = existing_body.split("## Annotation")[1].split("\n## ", 1)
+        after = ("\n## " + after_parts[1]) if len(after_parts) > 1 else ""
+        new_body = before + "## Annotation\n" + new_annotation + after
+    else:
+        new_body = existing_body + "\n## Annotation\n" + new_annotation
+
+    new_file = "---" + parts[1] + "---\n" + new_body
+    filepath.write_text(new_file, encoding="utf-8")
+
+    return jsonify({
+        "status":      "annotated",
+        "filename":    ref_filename,
+        "models_used": list(results.keys()),
+        "synthesis":   synthesis
+    })
 
 @app.route("/api/broadcast", methods=["GET"])
 def get_broadcast():

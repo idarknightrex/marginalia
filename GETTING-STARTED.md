@@ -384,3 +384,78 @@ When adding a reference in Marginalia, paste the filename into the
 
 Always visible in the navigation bar. One click commits and pushes everything
 to your private backup. Use it every time you put the book down.
+
+---
+
+## Part 8 — Remote Access via Tailscale (Headless Mini)
+
+Tailscale creates a private network between your devices. Once set up, you can
+access Marginalia from your phone or laptop anywhere — no port forwarding,
+no public IP, no VPN configuration.
+
+### Step 1 — Install Tailscale on the Mini
+```bash
+# Download from https://tailscale.com/download/mac
+# Or via Homebrew once installed:
+brew install tailscale
+tailscale up
+```
+Note the Tailscale IP shown — looks like `100.x.x.x`
+
+### Step 2 — Install Tailscale on your other devices
+- **MacBook Air:** https://tailscale.com/download/mac
+- **iPhone/iPad:** App Store → Tailscale
+- Sign in with the same account on all devices
+
+### Step 3 — Access Marginalia remotely
+Open any browser on any Tailscale device:
+```
+http://[mini-tailscale-ip]:5001
+```
+
+That's it. Works from home, campus, coffee shop, conference.
+
+---
+
+## Part 9 — Auto-start on Boot (Headless Mini)
+
+Once the Mini is headless, Marginalia needs to start automatically.
+Create a launchd plist so it runs on login without a terminal:
+
+```bash
+cat > ~/Library/LaunchAgents/com.marginalia.server.plist << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.marginalia.server</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/rajboora/Developer/marginalia/bootstrap.command</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>OLLAMA_MODELS</key>
+        <string>/Volumes/Vault/Marginalia/ollama/models</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/rajboora/Developer/marginalia/logs/marginalia.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/rajboora/Developer/marginalia/logs/marginalia-error.log</string>
+</dict>
+</plist>
+PLIST
+
+# Load it
+launchctl load ~/Library/LaunchAgents/com.marginalia.server.plist
+```
+
+Marginalia will now start automatically on login and restart if it crashes.
+Logs in `~/Developer/marginalia/logs/`
+

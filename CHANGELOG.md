@@ -2,6 +2,81 @@
 
 ---
 
+## v0.9.2 — 2026-06-10 — security & wiring fixes (fresh-eyes review)
+
+### Fixed: Annotate button never shipped in v0.9.1
+- The v0.9.1 patch silently failed to match — reference cards still had the old
+  button row, annotateRef() was defined but never called
+- Reference cards fully rebuilt: Launch Prompt →, ◆ Annotate, and Edit all wired
+- Build scripts now FAIL LOUDLY when a patch target isn't found, instead of
+  printing success while changing nothing — root cause of the v0.8.6 route bug
+  and this one
+
+### Security: path traversal guard on annotate route
+- /api/references/<filename>/annotate validated: no slashes, no "..", resolved
+  path must stay inside canonical/references/
+- Matters now that the app binds 0.0.0.0 and Tailscale exposure is two weeks out
+
+### Security: XSS-safe reference cards
+- Titles, authors, and themes now rendered via textContent, never innerHTML
+- A hostile BibTeX import can no longer execute script in the browser
+
+### Fixed: thread-safe cost counter
+- Parallel cloud workers now update anthropic_tokens under a lock
+
+---
+
+## v0.9.1 — 2026-06-10
+
+### Library Intelligence — "What's in my library?"
+- Button on References tab runs DeepSeek R1 across all canonical reference annotations
+- Surfaces: recurring themes, tensions between sources, gaps in collection,
+  sources that should be in conversation, fit with dissertation research question
+- Output in a synthesis panel above the search row
+- No agent language — the library is the intelligence, not a persona
+
+### Per-reference multi-voice annotation
+- "Annotate" button on each reference card
+- Sends title/authors/themes through up to 2 active local models
+- Synthesises their readings into a multi-voice annotation
+- Writes result back to canonical markdown file
+- Uses models already selected in the chip row
+
+### Launch Prompt from reference
+- "Launch Prompt →" button now pre-populates the prompt input with the reference
+  details and a research-framed question ready to send to active models
+
+### Synthesis model selector
+- Dropdown next to synthesis label — "Synthesise with: [DeepSeek R1 ▾]"
+- Choose any installed local model for the synthesis pass
+- Selection sent with each prompt request — no restart needed
+- Full settings panel (v2.0) will be the permanent home for this
+
+### Architecture note
+- NOT an agent, NOT an assistant — a lens pointed at curated material
+- Researcher remains epistemological centre — tool surfaces, researcher decides
+- All processing from your own canonical files, not internet or training data
+
+---
+
+## v0.8.8 — 2026-06-10
+
+### Local model auto-detection
+- On load, Marginalia queries Ollama /api/tags to check which models are actually installed
+- Chips for uninstalled models go grey with "not installed" badge
+- Clicking an uninstalled chip shows the exact ollama pull command to run
+- Installed chips show actual model string and size (GB) added to tooltip
+- Ollama unreachable: chips stay available but tooltip warns "Ollama not detected"
+- No more silent failures — you know immediately what's available
+
+### Repo cleanup
+- Removed broadcast.json (handled remotely via GitHub)
+- Removed ui-spec/ folder (v0.5 wireframe artifact)
+- Removed bootstrap.bat (Windows — not a supported platform)
+- Removed THREAD-SUMMARY.md (superseded by HANDOFF.md)
+
+---
+
 ## v0.8.7.1 — 2026-06-09
 
 ### Fixed: Qwen and Mistral now fire correctly
@@ -296,3 +371,16 @@ the dissertation positionality section.
 - Broadcast banner (pulls from GitHub broadcast.json)
 - Session timer in status bar
 - Four-layer backup architecture: internal → Vault rsync → iCloud/OneDrive → GitHub
+
+---
+
+## v0.9 — Project Intelligence (scoped, not yet built)
+
+- "What am I missing?" button — DeepSeek R1 predictive pass across all project sessions
+- Rolling 100-word project summary, updated every session and on Save & Break
+- 2-hour background auto-summarise timer
+- Crash resilience: atomic writes, meat-space notepad covers the gap window
+- Chaff as fuel: incomplete sessions still feed the summary
+- /api/predict route, ~30-40 lines Python
+- Infrastructure already exists — canonical/sessions/ ready to read
+

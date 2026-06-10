@@ -187,6 +187,46 @@
       animation: synthPulse 2s ease-in-out infinite;
     }
 
+
+    /* ── Library synthesis panel ── */
+    .library-synthesis-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-top: 2px solid var(--surfaced);
+      border-radius: 4px;
+      padding: 14px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .library-synthesis-panel.visible { display: block; }
+    .library-synthesis-label {
+      font-size: 10px; font-family: monospace;
+      color: var(--surfaced); text-transform: uppercase;
+      letter-spacing: .1em; margin-bottom: 8px;
+    }
+    .library-synthesis-text {
+      font-size: 12px; color: var(--text);
+      line-height: 1.7; white-space: pre-wrap;
+    }
+    .annotate-result {
+      font-size: 11px; font-family: monospace;
+      color: var(--verified); margin-top: 6px;
+      display: none;
+    }
+
+
+    /* ── Synthesis model selector ── */
+    .synthesis-model-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .synthesis-model-select {
+      font-family: monospace; font-size: 10px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 3px; color: var(--accent);
+      padding: 2px 6px; cursor: pointer; outline: none;
+    }
+
     /* ── Timeout countdown ── */
     .timeout-countdown {
       font-family: monospace; font-size: 9px; color: var(--muted);
@@ -488,7 +528,16 @@
     <div class="response-grid" id="response-grid"></div>
 
     <div class="synthesis-panel" id="synthesis-panel" style="display:none">
-      <div class="synthesis-label">Synthesis &#8212; Consensus &middot; Divergence &middot; Unique Contributions &middot; Gaps</div>
+      <div class="synthesis-model-row">
+        <div class="synthesis-label">Synthesis &#8212; Consensus &middot; Divergence &middot; Unique Contributions &middot; Gaps</div>
+        <select class="synthesis-model-select" id="synthesis-model-select" title="Model used for synthesis pass">
+          <option value="deepseek">DeepSeek R1</option>
+          <option value="qwen">Qwen 2.5</option>
+          <option value="mistral">Mistral</option>
+          <option value="gemma">Gemma 4</option>
+          <option value="llama">Llama 3.1</option>
+        </select>
+      </div>
       <div id="synthesis-text"></div>
       <div style="margin-top:10px;display:flex;gap:6px">
         <button class="ref-action">Flag Reference</button>
@@ -518,8 +567,14 @@
       </div>
     </div>
 
+    <div class="library-synthesis-panel" id="library-synthesis-panel">
+      <div class="library-synthesis-label">&#9670; What's in my library?</div>
+      <div class="library-synthesis-text" id="library-synthesis-text"></div>
+    </div>
+
     <div class="search-row">
       <input class="search-input" id="ref-search" placeholder="Search author, title, or theme..." oninput="filterRefs()">
+      <button class="btn-secondary" onclick="runLibrarySynthesis()">&#9670; What's in my library?</button>
       <button class="btn-secondary" onclick="showView('ingest', document.querySelectorAll('.nav-btn')[2])">&#8853; Import</button>
       <button class="btn-primary" onclick="openAddPanel()">+ Add</button>
     </div>
@@ -620,7 +675,7 @@
   <span class="status-online">&#9679; Marginalia running</span>
   <span id="session-time">Session: 0m</span>
   <span class="status-cost" id="cost-display">Claude: $0.0000</span>
-  <span class="status-project">v0.8.7.1 &middot; LLM</span>
+  <span class="status-project">v0.9.2 &middot; LLM</span>
 </div>
 
 <script>
@@ -667,7 +722,13 @@ function toggleModel(chip) {
   if (activeModels.has(model)) {
     activeModels.delete(model); chip.classList.remove('active'); chip.classList.add('inactive');
   } else {
-    // No mutex — locals fire sequentially with keep_alive:0
+    if (isLocal) {
+      document.querySelectorAll('.model-chip[data-local="true"]').forEach(c => {
+        if (c !== chip && activeModels.has(c.dataset.model)) {
+          activeModels.delete(c.dataset.model); c.classList.remove('active'); c.classList.add('inactive');
+        }
+      });
+    }
     activeModels.add(model); chip.classList.add('active'); chip.classList.remove('inactive');
   }
   updateLocalWarning();
@@ -804,7 +865,7 @@ async function sendPrompt() {
     const res = await fetch('/api/prompt', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ prompt, models })
+      body: JSON.stringify({ prompt, models, synthesis_model: document.getElementById('synthesis-model-select')?.value || 'deepseek' })
     });
 
     const reader  = res.body.getReader();
@@ -940,7 +1001,56 @@ function renderRefs() {
     const themes = (ref.themes || '').split(/[,;]/).map(t => t.trim()).filter(Boolean);
     const card = document.createElement('div');
     card.className = 'ref-card'; card.style.borderLeftColor = color;
-    card.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div class="ref-author">' + (ref.authors||'') + ' (' + (ref.year||'') + ')</div><div class="ref-title">' + (ref.title||'') + '</div></div><span class="tag" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;flex-shrink:0;margin-left:10px">' + status + '</span></div><div class="ref-tags">' + themes.map(t => '<span class="tag" style="background:var(--accent)22;color:var(--accent);border:1px solid var(--accent)44">' + t + '</span>').join('') + '</div><div class="ref-actions"><button class="ref-action">Launch Prompt &#8594;</button><button class="ref-action">Edit</button></div>';
+    // XSS-safe rendering — all user data via textContent, never innerHTML
+    const topRow = document.createElement('div');
+    topRow.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start';
+
+    const left = document.createElement('div');
+    const authorEl = document.createElement('div');
+    authorEl.className = 'ref-author';
+    authorEl.textContent = (ref.authors||'') + ' (' + (ref.year||'') + ')';
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ref-title';
+    titleEl.textContent = ref.title || '';
+    left.appendChild(authorEl); left.appendChild(titleEl);
+
+    const statusTag = document.createElement('span');
+    statusTag.className = 'tag';
+    statusTag.style.cssText = 'background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;flex-shrink:0;margin-left:10px';
+    statusTag.textContent = status;
+
+    topRow.appendChild(left); topRow.appendChild(statusTag);
+
+    const tagRow = document.createElement('div');
+    tagRow.className = 'ref-tags';
+    themes.forEach(t => {
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.style.cssText = 'background:var(--accent)22;color:var(--accent);border:1px solid var(--accent)44';
+      tag.textContent = t;
+      tagRow.appendChild(tag);
+    });
+
+    const actions = document.createElement('div');
+    actions.className = 'ref-actions';
+
+    const launchBtn = document.createElement('button');
+    launchBtn.className = 'ref-action';
+    launchBtn.innerHTML = 'Launch Prompt &#8594;';
+    launchBtn.onclick = () => launchPromptFromRef(ref._filename || '');
+
+    const annotateBtn = document.createElement('button');
+    annotateBtn.className = 'ref-action';
+    annotateBtn.innerHTML = '&#9670; Annotate';
+    annotateBtn.onclick = function() { annotateRef(ref._filename || '', this); };
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'ref-action';
+    editBtn.textContent = 'Edit';
+
+    actions.appendChild(launchBtn); actions.appendChild(annotateBtn); actions.appendChild(editBtn);
+
+    card.appendChild(topRow); card.appendChild(tagRow); card.appendChild(actions);
     list.appendChild(card);
   });
 }
@@ -1110,6 +1220,132 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+
+
+// ── Library intelligence ──────────────────────────────────────────────────
+async function runLibrarySynthesis() {
+  const panel = document.getElementById('library-synthesis-panel');
+  const text  = document.getElementById('library-synthesis-text');
+  panel.classList.add('visible');
+  text.style.fontStyle = 'italic';
+  text.style.color = 'var(--muted)';
+  text.textContent = 'Reading your library\u2026 DeepSeek R1 is mapping your collection.';
+
+  try {
+    const res  = await fetch('/api/references/library-synthesis', { method: 'POST', headers: {'Content-Type':'application/json'} });
+    const data = await res.json();
+    if (data.error) {
+      text.textContent = '\u26a0 ' + data.error;
+      text.style.color = '#c94242';
+    } else {
+      text.style.fontStyle = 'normal';
+      text.style.color = 'var(--text)';
+      text.textContent = data.synthesis;
+    }
+  } catch(e) {
+    text.textContent = 'Error: ' + e.message;
+    text.style.color = '#c94242';
+  }
+}
+
+async function annotateRef(filename, btn) {
+  if (!filename) return;
+  const originalText = btn.textContent;
+  btn.textContent = 'Annotating\u2026';
+  btn.disabled = true;
+
+  // Use active local models, default to deepseek
+  const localModels = [...activeModels].filter(m => ['deepseek','qwen','mistral','gemma','llama'].includes(m));
+  const models = localModels.length > 0 ? localModels.slice(0,2) : ['deepseek'];
+
+  try {
+    const res  = await fetch('/api/references/' + encodeURIComponent(filename) + '/annotate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ models })
+    });
+    const data = await res.json();
+    if (data.status === 'annotated') {
+      btn.textContent = '\u2713 Annotated';
+      btn.style.color = 'var(--verified)';
+      setTimeout(() => { btn.textContent = originalText; btn.style.color = ''; btn.disabled = false; }, 3000);
+    } else {
+      btn.textContent = '\u26a0 Failed';
+      btn.disabled = false;
+    }
+  } catch(e) {
+    btn.textContent = '\u26a0 Error';
+    btn.disabled = false;
+  }
+}
+
+function launchPromptFromRef(filename) {
+  // Find the ref and pre-populate the prompt input
+  const ref = allRefs.find(r => r._filename === filename);
+  if (!ref) return;
+  showView('prompt', document.querySelectorAll('.nav-btn')[0]);
+  const input = document.getElementById('prompt-input');
+  input.value = 'Analyse this source in the context of embodied learning and intellectual risk-taking in undergraduates:\n\n' + ref.authors + ' (' + ref.year + '). ' + ref.title + '.\n\nThemes: ' + (ref.themes || 'not specified');
+  input.dispatchEvent(new Event('input'));
+}
+
+// ── Local model auto-detection ────────────────────────────────────────────
+async function checkLocalModels() {
+  try {
+    const res  = await fetch('/api/local-models');
+    const data = await res.json();
+
+    const pullCommands = {
+      deepseek: 'ollama pull deepseek-r1:8b',
+      qwen:     'ollama pull qwen2.5:14b',
+      mistral:  'ollama pull mistral:7b',
+      gemma:    'ollama pull gemma4',
+      llama:    'ollama pull llama3.1:8b',
+    };
+
+    Object.entries(data).forEach(([model, info]) => {
+      const chip = document.querySelector(`.model-chip[data-model="${model}"]`);
+      if (!chip) return;
+
+      if (info.installed === false) {
+        // Model not pulled — grey out with "not installed" badge
+        chip.classList.remove('active');
+        chip.classList.add('inactive', 'no-key');
+        activeModels.delete(model);
+        if (!chip.querySelector('.no-key-badge')) {
+          const badge = document.createElement('span');
+          badge.className = 'no-key-badge';
+          badge.textContent = 'not installed';
+          chip.appendChild(badge);
+        }
+        chip.onclick = () => {
+          alert(`${model} is not installed.\n\nRun this in Terminal:\n${pullCommands[model]}\n\nMake sure OLLAMA_MODELS is set to your Vault path first.`);
+        };
+      } else if (info.installed === true) {
+        // Model present — ensure chip is available, update tooltip with actual model string and size
+        chip.classList.remove('no-key');
+        const badge = chip.querySelector('.no-key-badge');
+        if (badge) badge.remove();
+        // Update size info in tooltip if present
+        const tooltip = chip.closest('.chip-wrapper')?.querySelector('.chip-tooltip');
+        if (tooltip && info.size_gb) {
+          const sizeSpan = document.createElement('br');
+          // Only add size if not already showing
+          if (!tooltip.innerHTML.includes('GB on Vault')) {
+            tooltip.innerHTML += `<br>✓ ${info.model_str} · ${info.size_gb}GB on Vault`;
+          }
+        }
+      } else if (info.installed === null) {
+        // Ollama unreachable — show warning but don't disable
+        const tooltip = chip.closest('.chip-wrapper')?.querySelector('.chip-tooltip');
+        if (tooltip && !tooltip.innerHTML.includes('Ollama')) {
+          tooltip.innerHTML += '<br>⚠ Ollama not detected — is it running?';
+        }
+      }
+    });
+  } catch(e) { /* silent — don't break UI */ }
+}
+
 // ── Hide inactive toggle ──────────────────────────────────────────────────
 function toggleHideInactive(btn) {
   const chips = document.getElementById('model-chips');
@@ -1166,6 +1402,7 @@ checkBroadcast();
 updateLocalWarning();
 checkKeyStatus();
 checkSetupStatus();
+checkLocalModels();
 </script>
 </body>
 </html>
