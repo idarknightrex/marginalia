@@ -908,6 +908,8 @@ async function sendPrompt() {
         let evt;
         try { evt = JSON.parse(line); } catch(e) { continue; }
 
+        if (evt.event === 'heartbeat') { continue; }
+
         if (evt.event === 'start') {
           const card = document.getElementById('card-' + evt.model);
           if (card) card.classList.add('loading');

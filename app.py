@@ -622,6 +622,7 @@ def handle_prompt():
         # Phase 2 — local models one at a time
         for model in local_ordered:
             yield json.dumps({"event": "start", "model": model}) + "\n"
+            yield json.dumps({"event": "heartbeat"}) + "\n"  # forces flush before blocking call
             _, result, error, _, _ = call_model(model, prompt)
             if result:
                 results[model] = result
