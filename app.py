@@ -485,6 +485,7 @@ def get_local_models():
         with _ur.urlopen(req, timeout=5) as r:
             data = json.loads(r.read())
         ollama_models = {m["name"]: m for m in data.get("models", [])}
+        claimed_ollama_names = set()
 
         for chip_key, prefixes in LOCAL_MODEL_MAP.items():
             found = None
@@ -496,10 +497,22 @@ def get_local_models():
                             "model_str": name,
                             "size_gb":   round(info.get("size", 0) / 1e9, 1)
                         }
+                        claimed_ollama_names.add(name)
                         break
                 if found:
                     break
             installed[chip_key] = found or {"installed": False, "model_str": None, "size_gb": 0}
+
+        # Surface any Ollama models not claimed by a known chip as dynamic entries
+        for name, info in ollama_models.items():
+            if name not in claimed_ollama_names:
+                chip_key = "ollama:" + name
+                installed[chip_key] = {
+                    "installed": True,
+                    "model_str": name,
+                    "size_gb":   round(info.get("size", 0) / 1e9, 1),
+                    "dynamic":   True
+                }
 
     except Exception as e:
         # Ollama not running or unreachable — mark all as unknown
@@ -554,7 +567,10 @@ def call_model(model, prompt):
         elif model == "qwen":
             return (model, call_ollama(local_cfg.get("asia",       "qwen2.5:14b"),       prompt), None, 0, 0)
         elif model == "mistral":
-            return (model, call_ollama(local_cfg.get("europe",     "mistral-small:latest"), prompt), None, 0, 0)
+            return (model, call_ollama(local_cfg.get("europe",     "mistral:7b"), prompt), None, 0, 0)
+        elif model.startswith("ollama:"):
+            # Dynamic model — call Ollama directly with the model string after "ollama:"
+            return (model, call_ollama(model[len("ollama:"):], prompt), None, 0, 0)
         else:
             return (model, None, "No key configured", 0, 0)
     except Exception as e:
@@ -575,8 +591,10 @@ def handle_prompt():
     models         = data.get("models", [])
     synthesis_model = data.get("synthesis_model", "deepseek")
 
+    # Dynamic ollama: models come in from the frontend — collect them separately
+    dynamic_local = [m for m in models if m.startswith("ollama:")]
     cloud_ordered = [m for m in MODEL_ORDER if m in models and m in CLOUD_MODELS]
-    local_ordered = [m for m in MODEL_ORDER if m in models and m in LOCAL_MODELS]
+    local_ordered = [m for m in MODEL_ORDER if m in models and m in LOCAL_MODELS] + dynamic_local
 
     def generate():
         import concurrent.futures

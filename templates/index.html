@@ -498,7 +498,7 @@
         <div class="model-chip inactive" data-model="mistral" data-local="true" style="background:rgba(255,112,0,.1);border-color:rgba(255,112,0,.3)" onclick="toggleModel(this)">
           <div class="chip-dot" style="background:#ff7000"></div><span style="color:#ff7000">Mistral</span>
         </div>
-        <span class="chip-tooltip">🔒 Local · Mistral Small · Europe<br>Mistral AI Paris · Runs on your machine · Private · No internet<br>European legal, pedagogical & societal training data<br>Apache 2.0 · Knowledge: ~1yr behind<br>~14GB — close all other apps before running</span>
+        <span class="chip-tooltip">🔒 Local · Mistral 7B · Europe<br>Mistral AI Paris · Runs on your machine · Private · No internet<br>European legal, pedagogical & societal training data<br>Apache 2.0 · Knowledge: ~1yr behind<br>~4GB</span>
       </div>
       <div class="chip-wrapper">
         <div class="model-chip inactive" data-model="gemma" data-local="true" style="background:rgba(255,171,0,.1);border-color:rgba(255,171,0,.3)" onclick="toggleModel(this)">
@@ -512,10 +512,11 @@
         </div>
         <span class="chip-tooltip">🔒 Local · Llama 3.1 8B (Meta)<br>Runs on your machine · Private · No internet<br>General purpose · Knowledge: ~1yr behind<br>Pull first: ollama pull llama3.1:8b</span>
       </div>
+      <!-- dynamic local chips injected here by checkLocalModels() -->
     </div>
 
     <div class="chip-local-warning" id="local-warning">
-      &#9888; Mistral (~14GB) needs all other apps closed. Other locals fire sequentially — select as many as you need.
+      &#9888; Local models fire sequentially — select as many as you need.
     </div>
 
     <textarea id="prompt-input" placeholder="Enter your research question or prompt..."></textarea>
@@ -675,7 +676,7 @@
   <span class="status-online">&#9679; Marginalia running</span>
   <span id="session-time">Session: 0m</span>
   <span class="status-cost" id="cost-display">Claude: $0.0000</span>
-  <span class="status-project">v0.9.2.1 &middot; LLM</span>
+  <span class="status-project">v0.9.2.2 &middot; LLM</span>
 </div>
 
 <script>
@@ -696,6 +697,11 @@ const MODEL_META = {
   gemma:     { type: 'local',  web: false, label: 'local · Western · ~1yr cutoff' },
   llama:     { type: 'local',  web: false, label: 'local · Global · ~1yr cutoff' },
 };
+function getModelMeta(model) {
+  if (MODEL_META[model]) return MODEL_META[model];
+  // Dynamic ollama: model
+  return { type: 'local', web: false, label: 'local · Ollama · ~1yr cutoff' };
+}
 
 // ── Navigation ────────────────────────────────────────────────────────────
 function showView(name, btn) {
@@ -740,8 +746,12 @@ function makeCard(model) {
   const card = document.createElement('div');
   card.className = 'response-card loading';
   card.id = 'card-' + model;
-  card.style.borderLeftColor = MODEL_COLORS[model] || '#888';
-  const meta = MODEL_META[model] || {};
+  const chipEl = document.querySelector(`.model-chip[data-model="${model}"]`);
+  const dynamicColor = chipEl ? getComputedStyle(chipEl).getPropertyValue('--chip-col') : null;
+  const dotEl = chipEl ? chipEl.querySelector('.chip-dot') : null;
+  const chipColor = dotEl ? dotEl.style.background : null;
+  card.style.borderLeftColor = MODEL_COLORS[model] || chipColor || '#888';
+  const meta = getModelMeta(model);
   const badge = meta.web
     ? '<span style="font-size:9px;font-family:monospace;background:#4285f422;color:#4285f4;border:1px solid #4285f444;border-radius:3px;padding:1px 5px;margin-left:5px">&#127760; web</span>'
     : meta.type === 'local'
@@ -753,7 +763,7 @@ function makeCard(model) {
   const cdClass = meta.type === 'local' ? 'local' : '';
   card.innerHTML =
     '<div class="timeout-countdown ' + cdClass + '" id="cd-' + model + '">Waiting… <span class="countdown-bar"><span class="countdown-fill" id="cdfill-' + model + '" style="width:100%"></span></span> <span id="cdsec-' + model + '"></span></div>' +
-    '<div class="model-label" style="color:' + MODEL_COLORS[model] + ';display:flex;align-items:center">' + model + badge + cutoff + '</div>' +
+    '<div class="model-label" style="color:' + (MODEL_COLORS[model] || chipColor || '#888') + ';display:flex;align-items:center">' + (model.startsWith('ollama:') ? model.replace(/^ollama:/, '').replace(/:latest$/, '') : model) + badge + cutoff + '</div>' +
     '<div class="response-text"></div>' +
     '<div class="response-timing" id="timing-' + model + '" style="display:none"></div>';
   return card;
@@ -1301,30 +1311,24 @@ async function checkLocalModels() {
       if (!chip) return;
 
       if (info.installed === false) {
-        // Model not pulled — grey out with "not installed" badge
-        chip.classList.remove('active');
-        chip.classList.add('inactive', 'no-key');
+        // Model not pulled — hide the chip entirely
+        const wrapper = chip.closest('.chip-wrapper');
+        if (wrapper) wrapper.style.display = 'none';
         activeModels.delete(model);
-        if (!chip.querySelector('.no-key-badge')) {
-          const badge = document.createElement('span');
-          badge.className = 'no-key-badge';
-          badge.textContent = 'not installed';
-          chip.appendChild(badge);
-        }
-        chip.onclick = () => {
-          alert(`${model} is not installed.\n\nRun this in Terminal:\n${pullCommands[model]}\n\nMake sure OLLAMA_MODELS is set to your Vault path first.`);
-        };
       } else if (info.installed === true) {
-        // Model present — ensure chip is available, update tooltip with actual model string and size
+        // Model present — ensure chip is available, replace size line in tooltip with real value
         chip.classList.remove('no-key');
         const badge = chip.querySelector('.no-key-badge');
         if (badge) badge.remove();
-        // Update size info in tooltip if present
+        const wrapper = chip.closest('.chip-wrapper');
+        if (wrapper) wrapper.style.display = '';
         const tooltip = chip.closest('.chip-wrapper')?.querySelector('.chip-tooltip');
         if (tooltip && info.size_gb) {
-          const sizeSpan = document.createElement('br');
-          // Only add size if not already showing
-          if (!tooltip.innerHTML.includes('GB on Vault')) {
+          // Replace the last line (size) with real detected value from Ollama
+          tooltip.innerHTML = tooltip.innerHTML
+            .replace(/~[\d.]+GB[^<]*/g, `${info.size_gb}GB on Vault`)
+            .replace(/✓ [^<]+<br>✓ /g, '✓ '); // avoid duplicate lines on re-run
+          if (!tooltip.innerHTML.includes('on Vault')) {
             tooltip.innerHTML += `<br>✓ ${info.model_str} · ${info.size_gb}GB on Vault`;
           }
         }
@@ -1335,6 +1339,27 @@ async function checkLocalModels() {
           tooltip.innerHTML += '<br>⚠ Ollama not detected — is it running?';
         }
       }
+    });
+    // Render dynamic chips for any unknown Ollama models
+    const chipsContainer = document.getElementById('model-chips');
+    Object.entries(data).forEach(([key, info]) => {
+      if (!info.dynamic) return;
+      if (document.querySelector(`.model-chip[data-model="${key}"]`)) return; // already rendered
+      // Pick a deterministic colour from a palette based on model name hash
+      const palette = ['#7c3aed','#0891b2','#be185d','#15803d','#b45309','#1d4ed8','#9f1239'];
+      let hash = 0; for (const c of key) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
+      const col = palette[hash % palette.length];
+      const label = info.model_str.replace(/:latest$/, '');
+      const wrapper = document.createElement('div');
+      wrapper.className = 'chip-wrapper';
+      wrapper.innerHTML = `
+        <div class="model-chip inactive" data-model="${key}" data-local="true"
+             style="background:${col}18;border-color:${col}44" onclick="toggleModel(this)">
+          <div class="chip-dot" style="background:${col}"></div>
+          <span style="color:${col}">${label}</span>
+        </div>
+        <span class="chip-tooltip">🔒 Local · ${info.model_str}<br>Runs on your machine · Private · No internet<br>Knowledge: ~1yr behind<br>${info.size_gb}GB on Vault</span>`;
+      chipsContainer.appendChild(wrapper);
     });
   } catch(e) { /* silent — don't break UI */ }
 }

@@ -2,6 +2,20 @@
 
 ---
 
+## v0.9.2.2 — 2026-06-10 — dynamic local model discovery
+
+### Feature: unknown Ollama models surface automatically as chips
+- `/api/local-models` now returns any model in `ollama list` not claimed by a
+  known chip key as a `dynamic: true` entry with key `ollama:<model_str>`
+- `checkLocalModels()` renders new chip HTML for dynamic entries on page load —
+  pull a new model, restart Marginalia, it appears without any code changes
+- `call_model()` routes `ollama:*` keys directly to Ollama with the model string
+- `handle_prompt` includes dynamic models in the local sequential firing order
+- Response cards display cleaned label (strips `ollama:` prefix and `:latest`)
+- Chip colour assigned deterministically from model name hash across a palette
+
+---
+
 ## v0.9.2.1 — 2026-06-10 — local chip multi-select restored
 
 ### Fixed: local model chips reverted to single-select
