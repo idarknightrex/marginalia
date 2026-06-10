@@ -622,7 +622,8 @@ def handle_prompt():
         # Phase 2 — local models one at a time
         for model in local_ordered:
             yield json.dumps({"event": "start", "model": model}) + "\n"
-            yield json.dumps({"event": "heartbeat"}) + "\n"  # forces flush before blocking call
+            import time; time.sleep(0.05)  # yield to event loop — forces flush before blocking Ollama call
+            yield json.dumps({"event": "heartbeat"}) + "\n"
             _, result, error, _, _ = call_model(model, prompt)
             if result:
                 results[model] = result

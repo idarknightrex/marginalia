@@ -489,7 +489,7 @@
         <span class="chip-tooltip">🔒 Local · DeepSeek R1 8B · China<br>Runs on your machine · Private · No internet<br>Reasoning model · Knowledge: ~1yr behind<br>Also runs the synthesis pass<br>Models unload after each response to free RAM</span>
       </div>
       <div class="chip-wrapper">
-        <div class="model-chip inactive" data-model="qwen" data-local="true" style="background:rgba(232,73,15,.1);border-color:rgba(232,73,15,.3)" onclick="toggleModel(this)">
+        <div class="model-chip inactive" data-model="qwen" data-local="true" style="background:rgba(8,145,178,.1);border-color:rgba(8,145,178,.3)" onclick="toggleModel(this)">
           <div class="chip-dot" style="background:#e8490f"></div><span style="color:#e8490f">Qwen 2.5</span>
         </div>
         <span class="chip-tooltip">🔒 Local · Qwen 2.5 14B · Asia / Global South<br>Alibaba · Runs on your machine · Private · No internet<br>Immense Asian cultural, historical & academic training data<br>Strong English reasoning · Knowledge: ~1yr behind<br>~9GB · Models unload after each response</span>
@@ -686,7 +686,7 @@ let doiPreviewData = null;
 let pasteFormat = 'bibtex';
 
 const STATUS_COLORS = { verified: '#3d8b37', located: '#c9a832', surfaced: '#6e56cf', rejected: '#c94242' };
-const MODEL_COLORS  = { gemini: '#4285f4', anthropic: '#c96442', openai: '#10a37f', llama: '#9c6ade', deepseek: '#52c41a', gemma: '#ffab00', qwen: '#e8490f', mistral: '#ff7000' };
+const MODEL_COLORS  = { gemini: '#4285f4', anthropic: '#c96442', openai: '#10a37f', llama: '#9c6ade', deepseek: '#52c41a', gemma: '#ffab00', qwen: '#0891b2', mistral: '#ff7000' };
 const MODEL_META = {
   gemini:    { type: 'cloud',  web: true,  label: 'web' },
   anthropic: { type: 'cloud',  web: false, label: 'cloud' },
