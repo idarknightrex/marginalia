@@ -45,7 +45,7 @@ _ollama_models_path = os.getenv("OLLAMA_MODELS_PATH", "")
 if _ollama_models_path:
     os.environ["OLLAMA_MODELS"] = _ollama_models_path
 
-for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, APP_ROOT / "db"]:
+for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR, WRITING_DIR, APP_ROOT / "db"]:
     d.mkdir(parents=True, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────────────────
@@ -121,8 +121,8 @@ verification_status: {data.get("verification_status", "surfaced")}
 physical_holding: {data.get("physical_holding", "none")}
 holding_location: {data.get("holding_location", "")}
 tags: {tags}
-created_at: {datetime.now().isoformat()}
-updated_at: {datetime.now().isoformat()}
+created_at: {datetime.utcnow().isoformat()}
+updated_at: {datetime.utcnow().isoformat()}
 ---
 
 ## Themes
@@ -147,7 +147,7 @@ updated_at: {datetime.now().isoformat()}
 
 def write_canonical_session(prompt: str, responses: dict, synthesis: str = "") -> Path:
     session_id = str(uuid.uuid4())
-    timestamp  = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    timestamp  = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
     filename   = f"session_{timestamp}.md"
     response_blocks = "\n\n".join(
         f"### {model.capitalize()}\n{text}" for model, text in responses.items() if text
@@ -155,7 +155,7 @@ def write_canonical_session(prompt: str, responses: dict, synthesis: str = "") -
     synth_block = synthesis if synthesis else "<!-- Add synthesis notes here -->"
     canonical = f"""---
 id: {session_id}
-created_at: {datetime.now().isoformat()}
+created_at: {datetime.utcnow().isoformat()}
 models: {list(responses.keys())}
 ---
 
@@ -783,7 +783,7 @@ def update_reference(ref_filename):
         meta["tags"] = data["tags"]
 
     # Update updated_at timestamp
-    meta["updated_at"] = datetime.now().isoformat()
+    meta["updated_at"] = datetime.utcnow().isoformat()
 
     # Reconstruct frontmatter — preserve all existing keys
     fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v)
@@ -837,7 +837,7 @@ def update_reference_status(ref_filename):
     meta["verification_status"] = new_status
 
     # Append status change log as readable markdown
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
     body = parts[2]
     log_marker = "## Status History"
     log_line   = f"- {old_status} → **{new_status}** [{timestamp}]"
@@ -850,6 +850,154 @@ def update_reference_status(ref_filename):
     filepath.write_text(f"---\n{fm_lines}\n---\n{body}", encoding="utf-8")
     return jsonify({"status": "updated", "verification_status": new_status})
 
+
+
+# ─── Projects ─────────────────────────────────────────────────────────────────
+
+@app.route("/api/projects", methods=["GET"])
+def get_projects():
+    projects = []
+    for filepath in sorted(PROJECTS_DIR.glob("*.md")):
+        try:
+            text = filepath.read_text(encoding="utf-8")
+            if text.startswith("---"):
+                parts = text.split("---", 2)
+                if len(parts) >= 3:
+                    meta = {}
+                    for line in parts[1].strip().splitlines():
+                        if ": " in line:
+                            k, v = line.split(": ", 1)
+                            meta[k.strip()] = v.strip()
+                    meta["_filename"] = filepath.name
+                    body = parts[2]
+                    # Extract framing
+                    if "## Framing" in body:
+                        raw = body.split("## Framing")[1].split("\n## ")[0].strip()
+                        meta["framing"] = raw if not raw.startswith("<!--") else ""
+                    projects.append(meta)
+        except Exception:
+            pass
+    return jsonify(projects)
+
+
+@app.route("/api/projects", methods=["POST"])
+def create_project():
+    data = request.json or {}
+    name = data.get("name", "").strip().lower().replace(" ", "-")
+    if not name:
+        return jsonify({"error": "Project name required"}), 400
+    filename = name + ".md"
+    filepath = PROJECTS_DIR / filename
+    framing = data.get("framing", "")
+    canonical = f"""---
+name: {name}
+status: active
+created_at: {datetime.utcnow().isoformat()}
+updated_at: {datetime.utcnow().isoformat()}
+---
+
+## Framing
+{framing or "<!-- Research question or framing for this project -->"}
+
+## Sessions
+
+## Syntheses
+
+"""
+    filepath.write_text(canonical, encoding="utf-8")
+    return jsonify({"status": "created", "filename": filename, "name": name})
+
+
+@app.route("/api/projects/<project_name>", methods=["GET"])
+def get_project(project_name):
+    filepath = PROJECTS_DIR / (project_name.replace("/","").replace("..","") + ".md")
+    if not filepath.exists():
+        return jsonify({"error": "Not found"}), 404
+    # Return refs connected to this project
+    refs = [r for r in read_all_references()
+            if any(project_name in line.split("|")[0].strip()
+                   for line in (r.get("conn_list") or []))]
+    return jsonify({"ref_count": len(refs), "refs": [r.get("title","") for r in refs]})
+
+
+# ─── Writing ──────────────────────────────────────────────────────────────────
+
+@app.route("/api/writing", methods=["GET"])
+def get_writing():
+    items = []
+    for filepath in sorted(WRITING_DIR.glob("*.md")):
+        try:
+            text = filepath.read_text(encoding="utf-8")
+            if text.startswith("---"):
+                parts = text.split("---", 2)
+                if len(parts) >= 3:
+                    meta = {}
+                    for line in parts[1].strip().splitlines():
+                        if ": " in line:
+                            k, v = line.split(": ", 1)
+                            meta[k.strip()] = v.strip()
+                    meta["_filename"] = filepath.name
+                    items.append(meta)
+        except Exception:
+            pass
+    return jsonify(items)
+
+
+@app.route("/api/writing", methods=["POST"])
+def create_writing():
+    data = request.json or {}
+    title = data.get("title", "").strip()
+    slug  = data.get("slug", "").strip().lower().replace(" ", "-") or             "-".join(title.lower().split()[:4])
+    if not title:
+        return jsonify({"error": "Title required"}), 400
+    filename = slug + ".md"
+    filepath = WRITING_DIR / filename
+    canonical = f"""---
+title: {title}
+slug: {slug}
+type: {data.get("type", "other")}
+project: {data.get("project", "")}
+status: drafting
+created_at: {datetime.utcnow().isoformat()}
+updated_at: {datetime.utcnow().isoformat()}
+---
+
+## Argument
+
+## Connected References
+
+## Notes
+
+"""
+    filepath.write_text(canonical, encoding="utf-8")
+    return jsonify({"status": "created", "filename": filename, "slug": slug})
+
+
+@app.route("/api/projects/<project_name>/synthesis", methods=["POST"])
+def save_project_synthesis(project_name):
+    safe = project_name.replace("/","").replace("..","")
+    filepath = PROJECTS_DIR / (safe + ".md")
+    if not filepath.exists():
+        return jsonify({"error": "Project not found"}), 404
+    synthesis = (request.json or {}).get("synthesis", "")
+    if not synthesis:
+        return jsonify({"error": "No synthesis provided"}), 400
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    entry = f"\n### Library synthesis — {timestamp}\n\n{synthesis}\n"
+    text  = filepath.read_text(encoding="utf-8")
+    parts = text.split("---", 2)
+    if len(parts) >= 3:
+        body = parts[2]
+        if "## Syntheses" in body:
+            body = body.replace("## Syntheses", "## Syntheses" + entry, 1)
+        else:
+            body = body.rstrip() + "\n\n## Syntheses" + entry
+        meta_block = parts[1]
+        # Update updated_at
+        import re
+        meta_block = re.sub(r'updated_at:.*', f'updated_at: {datetime.utcnow().isoformat()}', meta_block)
+        filepath.write_text(f"---{meta_block}---\n{body}", encoding="utf-8")
+    return jsonify({"status": "saved"})
 
 @app.route("/api/tags", methods=["GET"])
 def get_all_tags():
@@ -1005,7 +1153,7 @@ Provide a scholarly annotation suitable for a PhD research bibliography."""
 
     # Write multi-voice annotation back to canonical file
     voices = "\n\n".join(f"**{m.upper()}:** {r}" for m, r in results.items())
-    new_annotation = f"<!-- Multi-voice annotation generated {datetime.now().strftime('%Y-%m-%d')} -->\n\n{voices}\n\n**SYNTHESIS:** {synthesis}"
+    new_annotation = f"<!-- Multi-voice annotation generated {datetime.utcnow().strftime('%Y-%m-%d')} -->\n\n{voices}\n\n**SYNTHESIS:** {synthesis}"
 
     # Replace annotation section in file
     if "## Annotation" in existing_body:
@@ -1035,7 +1183,7 @@ def get_broadcast():
             b = data.get("broadcast", {})
             if not b.get("active"): return jsonify({})
             expires = b.get("expires")
-            if expires and datetime.fromisoformat(expires) < datetime.now(): return jsonify({})
+            if expires and datetime.fromisoformat(expires) < datetime.utcnow(): return jsonify({})
             return jsonify(b)
     except Exception:
         return jsonify({})
@@ -1044,7 +1192,7 @@ def get_broadcast():
 @app.route("/api/save-break", methods=["POST"])
 def save_and_break():
     from utils.git_preflight import safe_commit
-    message = request.json.get("message", f"Session — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    message = request.json.get("message", f"Session — {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}")
     return jsonify(safe_commit(APP_ROOT, message))
 
 

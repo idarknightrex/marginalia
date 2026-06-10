@@ -395,6 +395,9 @@
   <button class="nav-btn active" onclick="showView('prompt', this)">&#9672; Prompt</button>
   <button class="nav-btn" onclick="showView('references', this)">&#9678; References</button>
   <button class="nav-btn" onclick="showView('ingest', this)">&#8853; Ingest</button>
+  <button class="nav-btn" onclick="showView('projects', this)">&#9678; Projects</button>
+  <button class="nav-btn" onclick="showView('writing', this)">&#10000; Writing</button>
+  <button class="nav-btn" onclick="showView('intelligence', this)">&#9672; Intelligence</button>
   <div class="nav-right">
     <button class="btn-secondary" id="save-break-btn" onclick="saveAndBreak()">&#8593; Save &amp; Take a Break</button>
   </div>
@@ -593,7 +596,7 @@
     <div class="search-row">
       <input class="search-input" id="ref-search" placeholder="Search author, title, or theme..." oninput="filterRefs()">
       <button class="btn-secondary" onclick="runLibrarySynthesis()">&#9670; What's in my library?</button>
-      <button class="btn-secondary" onclick="showView('ingest', document.querySelectorAll('.nav-btn')[2])">&#8853; Import</button>
+      <button class="btn-secondary" onclick="showView('ingest', document.querySelector('[onclick*=\'ingest\']'))">&#8853; Import</button>
       <button class="btn-primary" onclick="openAddPanel()">+ Add</button>
     </div>
 
@@ -647,6 +650,84 @@
     </div>
   </div>
 
+  <!-- ── Projects view ── -->
+  <div id="view-projects" class="view">
+    <div class="page-header"><h1>Projects</h1><small>Research projects and their connected sources</small></div>
+    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface)">
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Add project</div>
+      <div style="display:flex;gap:8px">
+        <input id="new-project-name" class="search-input" placeholder="project-slug (e.g. dissertation-ch2)" style="flex:1">
+        <button class="btn-primary" onclick="createProject()">+ Create</button>
+      </div>
+      <div id="new-project-framing" style="margin-top:8px;display:none">
+        <textarea id="project-framing-input" placeholder="Research question or framing for this project..." style="width:100%;min-height:60px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:Georgia,serif;font-size:13px;box-sizing:border-box;margin-bottom:8px"></textarea>
+        <button class="btn-primary" onclick="saveNewProject()">Save project</button>
+        <button class="btn-secondary" onclick="cancelNewProject()" style="margin-left:6px">Cancel</button>
+      </div>
+    </div>
+    <div id="project-list"><div style="text-align:center;padding:40px;color:var(--muted);font-family:monospace;font-size:12px">No projects yet — create one above or add connections to references</div></div>
+  </div>
+
+  <!-- ── Writing view ── -->
+  <div id="view-writing" class="view">
+    <div class="page-header"><h1>Writing</h1><small>Independent writing elements — papers, posts, chapters, grants</small></div>
+    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface)">
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Add writing element</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input id="new-writing-title" class="search-input" placeholder="Title (e.g. The Grime Matters)" style="flex:2">
+        <select id="new-writing-type" style="padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px">
+          <option value="blog">Blog post</option>
+          <option value="conference">Conference paper</option>
+          <option value="chapter">Dissertation chapter</option>
+          <option value="grant">Grant</option>
+          <option value="journal">Journal article</option>
+          <option value="other">Other</option>
+        </select>
+        <button class="btn-primary" onclick="createWriting()">+ Add</button>
+      </div>
+      <div style="display:flex;gap:8px">
+        <input id="new-writing-slug" class="search-input" placeholder="slug for connections (e.g. grime-matters)" style="flex:1">
+        <input id="new-writing-project" class="search-input" placeholder="project connection (optional)" style="flex:1">
+      </div>
+    </div>
+    <div id="writing-list"><div style="text-align:center;padding:40px;color:var(--muted);font-family:monospace;font-size:12px">No writing elements yet</div></div>
+  </div>
+
+  <!-- ── Intelligence view ── -->
+  <div id="view-intelligence" class="view">
+    <div class="page-header"><h1>Intelligence</h1><small>What does your research know?</small></div>
+
+    <!-- Library synthesis -->
+    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface)">
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">What's in my library?</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Cross-reference synthesis — themes, tensions, gaps, conversations across your collected sources</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <select id="intelligence-project-filter" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px">
+          <option value="">All references</option>
+        </select>
+        <button class="btn-primary" onclick="runLibrarySynthesis()">&#9670; Run synthesis</button>
+        <button class="btn-secondary" id="save-synthesis-btn" style="display:none" onclick="saveSynthesis()">Save to project</button>
+      </div>
+      <div class="library-synthesis-panel" id="library-synthesis-panel">
+        <div class="library-synthesis-label">&#9670; What's in my library?</div>
+        <div class="library-synthesis-text" id="library-synthesis-text"></div>
+      </div>
+    </div>
+
+    <!-- What am I missing? — v0.9.3 -->
+    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface);opacity:.6">
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">What am I missing? <span style="color:var(--accent)">— v0.9.3</span></div>
+      <div style="font-size:12px;color:var(--muted)">Predictive gap analysis — surfaces unasked questions and argument weaknesses across your sessions</div>
+    </div>
+
+    <!-- Network map — v1.0 -->
+    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;background:var(--surface);opacity:.6">
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Network map <span style="color:var(--accent)">— v1.0</span></div>
+      <div style="font-size:12px;color:var(--muted)">Force-directed graph — references, projects, and writing elements as nodes, connections as edges</div>
+    </div>
+
+  </div>
+
 </main>
 
 <!-- Add Reference Panel -->
@@ -694,7 +775,7 @@
   <span class="status-online">&#9679; Marginalia running</span>
   <span id="session-time">Session: 0m</span>
   <span class="status-cost" id="cost-display">Claude: $0.0000</span>
-  <span class="status-project">v0.9.2.3 &middot; LLM</span>
+  <span class="status-project">v0.9.2.4 &middot; LLM</span>
 </div>
 
 <script>
@@ -723,13 +804,15 @@ function getModelMeta(model) {
 
 // ── Navigation ────────────────────────────────────────────────────────────
 function showView(name, btn) {
+  if (name === 'projects')     loadProjects();
+  if (name === 'writing')      loadWriting();
+  if (name === 'intelligence') loadIntelligenceProjects();
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
   if (btn) btn.classList.add('active');
   if (name === 'references') loadReferences();
-  const titles = { prompt: 'Prompt', references: 'References', ingest: 'Ingest' };
-  document.querySelector('#view-' + name + ' h1').textContent = titles[name] || name;
+  // h1 text is set in HTML — don't overwrite
 }
 
 // ── Model chips ───────────────────────────────────────────────────────────
@@ -1514,6 +1597,8 @@ function openEditModal(ref, runAnnotate) {
   document.getElementById('edit-type').value     = ref.source_type || 'journal';
   document.getElementById('edit-doi').value      = ref.url_doi || '';
   document.getElementById('edit-tags').value        = ref.tags || '';
+  document.getElementById('edit-holding').value          = ref.physical_holding || 'none';
+  document.getElementById('edit-holding-location').value = ref.holding_location || '';
   document.getElementById('edit-themes-body').value = ref.themes_body || (ref.themes ? ref.themes.split(',').map(t => '- ' + t.trim()).join('\n') : '');
   document.getElementById('edit-connections').value = ref.connections || '';
   document.getElementById('edit-annotation').value    = ref.annotation || '';
@@ -1538,7 +1623,9 @@ async function saveEdit() {
     year:     document.getElementById('edit-year').value.trim(),
     source_type: document.getElementById('edit-type').value,
     url_doi:  document.getElementById('edit-doi').value.trim(),
-    tags:        document.getElementById('edit-tags').value.trim(),
+    tags:             document.getElementById('edit-tags').value.trim(),
+    physical_holding: document.getElementById('edit-holding').value,
+    holding_location: document.getElementById('edit-holding-location').value.trim(),
     themes_body: document.getElementById('edit-themes-body').value.trim(),
     connections: document.getElementById('edit-connections').value.trim(),
     annotation:          document.getElementById('edit-annotation').value.trim(),
@@ -1556,6 +1643,148 @@ async function saveEdit() {
   btn.textContent = 'Save'; btn.disabled = false;
 }
 
+
+
+// ── Projects ──────────────────────────────────────────────────────────────
+async function loadProjects() {
+  const res  = await fetch('/api/projects');
+  const data = await res.json();
+  const list = document.getElementById('project-list');
+  if (!data.length) {
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-family:monospace;font-size:12px">No projects yet — create one above or add connections to references</div>';
+    return;
+  }
+  list.innerHTML = '';
+  data.forEach(p => {
+    const card = document.createElement('div');
+    card.style.cssText = 'border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:10px;background:var(--surface)';
+    const nameEl = document.createElement('div');
+    nameEl.style.cssText = 'font-family:monospace;font-size:13px;font-weight:bold;color:var(--accent);margin-bottom:4px';
+    nameEl.textContent = p.name || p._filename.replace('.md','');
+    const framingEl = document.createElement('div');
+    framingEl.style.cssText = 'font-size:12px;color:var(--muted);font-style:italic;margin-bottom:8px';
+    framingEl.textContent = p.framing || '— no framing set';
+    const metaEl = document.createElement('div');
+    metaEl.style.cssText = 'font-size:10px;font-family:monospace;color:var(--muted)';
+    metaEl.textContent = 'Created ' + (p.created_at || '').slice(0,10) + ' UTC';
+    card.appendChild(nameEl); card.appendChild(framingEl); card.appendChild(metaEl);
+    list.appendChild(card);
+  });
+  // Populate intelligence project filter
+  const sel = document.getElementById('intelligence-project-filter');
+  if (sel) {
+    sel.innerHTML = '<option value="">All references</option>';
+    data.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name || p._filename.replace('.md','');
+      opt.textContent = opt.value;
+      sel.appendChild(opt);
+    });
+  }
+}
+
+function createProject() {
+  const name = document.getElementById('new-project-name').value.trim();
+  if (!name) return;
+  document.getElementById('new-project-framing').style.display = 'block';
+}
+function cancelNewProject() {
+  document.getElementById('new-project-framing').style.display = 'none';
+  document.getElementById('new-project-name').value = '';
+}
+async function saveNewProject() {
+  const name    = document.getElementById('new-project-name').value.trim();
+  const framing = document.getElementById('project-framing-input').value.trim();
+  if (!name) return;
+  await fetch('/api/projects', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ name, framing })
+  });
+  document.getElementById('new-project-name').value = '';
+  document.getElementById('project-framing-input').value = '';
+  document.getElementById('new-project-framing').style.display = 'none';
+  loadProjects();
+  loadAutocomplete(); // refresh connection autocomplete
+}
+
+// ── Writing ───────────────────────────────────────────────────────────────
+const WRITING_TYPE_LABELS = { blog:'Blog post', conference:'Conference paper', chapter:'Dissertation chapter', grant:'Grant', journal:'Journal article', other:'Other' };
+async function loadWriting() {
+  const res  = await fetch('/api/writing');
+  const data = await res.json();
+  const list = document.getElementById('writing-list');
+  if (!data.length) {
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-family:monospace;font-size:12px">No writing elements yet</div>';
+    return;
+  }
+  list.innerHTML = '';
+  data.forEach(w => {
+    const card = document.createElement('div');
+    card.style.cssText = 'border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:10px;background:var(--surface)';
+    const top = document.createElement('div');
+    top.style.cssText = 'display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px';
+    const titleEl = document.createElement('div');
+    titleEl.style.cssText = 'font-family:Georgia,serif;font-size:14px;font-weight:bold;color:var(--text)';
+    titleEl.textContent = w.title || '';
+    const typeEl = document.createElement('span');
+    typeEl.style.cssText = 'font-family:monospace;font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--border);padding:2px 7px;border-radius:3px';
+    typeEl.textContent = WRITING_TYPE_LABELS[w.type] || w.type || 'other';
+    top.appendChild(titleEl); top.appendChild(typeEl);
+    const meta = document.createElement('div');
+    meta.style.cssText = 'font-size:11px;font-family:monospace;color:var(--muted)';
+    meta.textContent = (w.slug || '') + (w.project ? ' · ' + w.project : '') + ' · ' + (w.status || 'drafting');
+    card.appendChild(top); card.appendChild(meta);
+    list.appendChild(card);
+  });
+}
+
+async function createWriting() {
+  const title   = document.getElementById('new-writing-title').value.trim();
+  const type    = document.getElementById('new-writing-type').value;
+  const slug    = document.getElementById('new-writing-slug').value.trim();
+  const project = document.getElementById('new-writing-project').value.trim();
+  if (!title) return;
+  await fetch('/api/writing', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ title, type, slug, project })
+  });
+  document.getElementById('new-writing-title').value = '';
+  document.getElementById('new-writing-slug').value  = '';
+  document.getElementById('new-writing-project').value = '';
+  loadWriting();
+}
+
+// ── Intelligence ──────────────────────────────────────────────────────────
+async function loadIntelligenceProjects() {
+  const res  = await fetch('/api/projects');
+  const data = await res.json();
+  const sel  = document.getElementById('intelligence-project-filter');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">All references</option>';
+  data.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.name || p._filename.replace('.md','');
+    opt.textContent = opt.value;
+    sel.appendChild(opt);
+  });
+}
+
+let _lastSynthesis = '';
+async function saveSynthesis() {
+  const project = document.getElementById('intelligence-project-filter').value;
+  if (!project || !_lastSynthesis) return;
+  const btn = document.getElementById('save-synthesis-btn');
+  btn.textContent = 'Saving…'; btn.disabled = true;
+  const filename = project + '.md';
+  const filepath = filename;
+  // Append synthesis to project file via a lightweight route
+  await fetch('/api/projects/' + encodeURIComponent(project) + '/synthesis', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ synthesis: _lastSynthesis })
+  });
+  btn.textContent = 'Saved ✓';
+  setTimeout(() => { btn.textContent = 'Save to project'; btn.disabled = false; }, 2000);
+}
 
 // ── Tag and connection autocomplete ──────────────────────────────────────
 let _allTags = [], _allConns = [];
@@ -1778,6 +2007,17 @@ checkLocalModels();
       </div>
     </div>
     <div class="edit-field"><label>DOI / URL</label><input id="edit-doi" type="text"></div>
+    <div class="edit-field">
+      <label>PHYSICAL HOLDING</label>
+      <select id="edit-holding" style="width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px">
+        <option value="none">None</option>
+        <option value="physical">Physical copy</option>
+        <option value="pdf">PDF</option>
+        <option value="ebook">eBook</option>
+        <option value="library-access">Library access</option>
+      </select>
+    </div>
+    <div class="edit-field"><label>HOLDING LOCATION <span style="font-weight:normal;text-transform:none;font-size:10px;color:var(--muted)">— shelf, folder, URL</span></label><input id="edit-holding-location" type="text" placeholder="e.g. Zotero > Embodied Learning, or shelf A3"></div>
     <div class="edit-field">
       <label>TAGS <span style="font-weight:normal;text-transform:none;font-size:10px;color:var(--muted)">— short, 1–3 words, comma-separated</span></label>
       <div style="position:relative">

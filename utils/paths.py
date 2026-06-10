@@ -48,3 +48,7 @@ LOGO_PATH      = ASSETS_DIR / "marginalia-logo.svg"
 
 # ─── External ─────────────────────────────────────────────────────────────────
 BROADCAST_URL  = "https://raw.githubusercontent.com/idarknightrex/marginalia/main/broadcast.json"
+
+# ─── Projects and Writing (canonical, committed) ──────────────────────────────
+PROJECTS_DIR   = CANONICAL_DIR / "projects"
+WRITING_DIR    = CANONICAL_DIR / "writing"

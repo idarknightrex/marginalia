@@ -2,6 +2,30 @@
 
 ---
 
+## v0.9.2.4 — 2026-06-10 — six-tab navigation scaffolding
+
+### Added: Projects tab
+- Create and list projects (canonical/projects/*.md)
+- Framing question per project
+- /api/projects GET/POST, /api/projects/<name>/synthesis POST
+
+### Added: Writing tab  
+- Independent writing elements (canonical/writing/*.md)
+- Types: blog, conference, chapter, grant, journal, other
+- Slug-based connection to projects and references
+- /api/writing GET/POST
+
+### Added: Intelligence tab
+- Library synthesis moved here from References tab
+- Project filter — run synthesis scoped to a project's references
+- Save synthesis output directly to project canonical file
+- Placeholder panels for "What am I missing?" (v0.9.3) and Network map (v1.0)
+
+### Nav order
+◆ Prompt · ◉ References · ⊕ Ingest · ◎ Projects · ✎ Writing · ◈ Intelligence
+
+---
+
 ## v0.9.2.3 — 2026-06-10 — reference card complete
 
 ### Fixed: Annotate

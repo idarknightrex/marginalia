@@ -1,5 +1,5 @@
 # Marginalia — Thread Handoff
-**Version:** v0.9.2.3
+**Version:** v0.9.2.4
 **Purpose:** Copy this into a new Claude thread to restore full context
 
 ---
@@ -92,7 +92,7 @@ No hidden .env file needed. Fields:
 - **v0.9.2** — Synthesis engine (DeepSeek R1 local meta-pass). 16GB mutex. Claude cost counter.
 - **v0.9.2** — Full reference import (CSV/BibTeX/RIS/DOI/plaintext). Azure replaced with OpenAI direct + Perplexity. setup.env replaces .env. Docs updated.
 - **v0.9.2.1** — Local model chips multi-select restored. Removed erroneous radio-button exclusion logic from toggleModel().
-- **v0.9.2.3** — Dynamic local model discovery. Any model in `ollama list` auto-surfaces as a chip. No recoding needed to add new local models.
+- **v0.9.2.4** — Dynamic local model discovery. Any model in `ollama list` auto-surfaces as a chip. No recoding needed to add new local models.
 
 ---
 
@@ -232,7 +232,7 @@ annotation and argument_connection fields in canonical references are downstream
 ### v0.9.x — Multi-model system complete (current)
 - v0.9.2 — Library intelligence, synthesis model selector, local auto-detect ✓
 - v0.9.2.1 — Local chip multi-select restored ✓
-- v0.9.2.3 — Dynamic local model discovery ✓
+- v0.9.2.4 — Dynamic local model discovery ✓
 - v0.9.3 — Project intelligence / "What am I missing?" + rolling 100-word session summary, 2hr auto-update
 - v0.9.4 — Crash resilience, atomic writes, chaff-as-fuel (incomplete sessions feed summary)
 
@@ -268,7 +268,7 @@ annotation and argument_connection fields in canonical references are downstream
 ---
 
 ## Immediate next steps (this week)
-1. Deploy v0.9.2.3 on Mini
+1. Deploy v0.9.2.4 on Mini
 2. Install Tailscale on Mini and MBA
 3. Set up launchd plist for auto-start on boot
 4. Test headless access from MBA and phone
