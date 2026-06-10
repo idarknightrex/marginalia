@@ -2,6 +2,17 @@
 
 ---
 
+## v0.9.2.1 — 2026-06-10 — local chip multi-select restored
+
+### Fixed: local model chips reverted to single-select
+- v0.9.2 introduced a radio-button enforcement block in `toggleModel()` that
+  deactivated all other local chips whenever one was activated
+- Removed the `if (isLocal)` exclusion loop — local chips now behave identically
+  to cloud chips: toggle independently, any combination selectable
+- Multi-model parallel local runs (DeepSeek + Qwen + Mistral etc.) restored
+
+---
+
 ## v0.9.2 — 2026-06-10 — security & wiring fixes (fresh-eyes review)
 
 ### Fixed: Annotate button never shipped in v0.9.1

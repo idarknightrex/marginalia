@@ -675,7 +675,7 @@
   <span class="status-online">&#9679; Marginalia running</span>
   <span id="session-time">Session: 0m</span>
   <span class="status-cost" id="cost-display">Claude: $0.0000</span>
-  <span class="status-project">v0.9.2 &middot; LLM</span>
+  <span class="status-project">v0.9.2.1 &middot; LLM</span>
 </div>
 
 <script>
@@ -722,13 +722,6 @@ function toggleModel(chip) {
   if (activeModels.has(model)) {
     activeModels.delete(model); chip.classList.remove('active'); chip.classList.add('inactive');
   } else {
-    if (isLocal) {
-      document.querySelectorAll('.model-chip[data-local="true"]').forEach(c => {
-        if (c !== chip && activeModels.has(c.dataset.model)) {
-          activeModels.delete(c.dataset.model); c.classList.remove('active'); c.classList.add('inactive');
-        }
-      });
-    }
     activeModels.add(model); chip.classList.add('active'); chip.classList.remove('inactive');
   }
   updateLocalWarning();

@@ -1,5 +1,5 @@
 # Marginalia — Thread Handoff
-**Version:** v0.9.2
+**Version:** v0.9.2.1
 **Purpose:** Copy this into a new Claude thread to restore full context
 
 ---
@@ -91,6 +91,7 @@ No hidden .env file needed. Fields:
 - **v0.9.2** — DeepSeek R1 + Gemma 4 chips added and wired to Ollama backend
 - **v0.9.2** — Synthesis engine (DeepSeek R1 local meta-pass). 16GB mutex. Claude cost counter.
 - **v0.9.2** — Full reference import (CSV/BibTeX/RIS/DOI/plaintext). Azure replaced with OpenAI direct + Perplexity. setup.env replaces .env. Docs updated.
+- **v0.9.2.1** — Local model chips multi-select restored. Removed erroneous radio-button exclusion logic from toggleModel().
 
 ---
 
@@ -229,8 +230,9 @@ annotation and argument_connection fields in canonical references are downstream
 
 ### v0.9.x — Multi-model system complete (current)
 - v0.9.2 — Library intelligence, synthesis model selector, local auto-detect ✓
-- v0.9.2 — Project intelligence / "What am I missing?" + rolling session summary
-- v0.9.3 — Crash resilience, atomic writes, chaff-as-fuel
+- v0.9.2.1 — Local chip multi-select restored ✓
+- v0.9.3 — Project intelligence / "What am I missing?" + rolling 100-word session summary, 2hr auto-update
+- v0.9.4 — Crash resilience, atomic writes, chaff-as-fuel (incomplete sessions feed summary)
 
 ### v1.0 — Complete instrument, headless Mini
 **Target: Mini goes headless in ~2 weeks**
@@ -264,11 +266,11 @@ annotation and argument_connection fields in canonical references are downstream
 ---
 
 ## Immediate next steps (this week)
-1. Deploy v0.9.2 on Mini
+1. Deploy v0.9.2.1 on Mini
 2. Install Tailscale on Mini and MBA
 3. Set up launchd plist for auto-start on boot
 4. Test headless access from MBA and phone
-5. Build v0.9.2 Project Intelligence
+5. Build v0.9.3 Project Intelligence
 
 ## Tailscale setup (quick reference)
 - Install: https://tailscale.com/download
