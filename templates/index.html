@@ -297,7 +297,7 @@
     #prompt-input { width: 100%; min-height: 90px; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: Georgia, serif; font-size: 14px; resize: vertical; outline: none; line-height: 1.6; }
     .prompt-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
     .token-estimate { font-family: monospace; font-size: 11px; color: var(--muted); }
-    .response-grid { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+    .response-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 24px; margin-bottom: 16px; }
     .response-card { padding: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; border-left-width: 3px; }
     .response-card .model-label { font-size: 11px; font-family: monospace; margin-bottom: 8px; font-weight: bold; }
     .response-card .response-text { font-size: 12px; color: var(--muted); line-height: 1.6; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
@@ -770,6 +770,26 @@ function makeCard(model) {
 }
 
 const cardStartTimes = {};
+const cardTimerIntervals = {};
+
+function startLiveTimer(model) {
+  const timingEl = document.getElementById('timing-' + model);
+  if (!timingEl) return;
+  timingEl.style.display = 'block';
+  timingEl.textContent = '\u23f1 0.0s';
+  cardTimerIntervals[model] = setInterval(() => {
+    if (!cardStartTimes[model]) return;
+    const elapsed = ((Date.now() - cardStartTimes[model]) / 1000).toFixed(1);
+    timingEl.textContent = '\u23f1 ' + elapsed + 's';
+  }, 100);
+}
+
+function stopLiveTimer(model) {
+  if (cardTimerIntervals[model]) {
+    clearInterval(cardTimerIntervals[model]);
+    delete cardTimerIntervals[model];
+  }
+}
 
 function startCardCountdown(model) {
   // Called after card is in DOM — safe to query elements
@@ -893,6 +913,7 @@ async function sendPrompt() {
           if (card) card.classList.add('loading');
           cardStartTimes[evt.model] = Date.now();
           startCardCountdown(evt.model);
+          startLiveTimer(evt.model);
         }
 
         else if (evt.event === 'result') {
@@ -900,6 +921,7 @@ async function sendPrompt() {
           if (card) {
             card.classList.remove('loading');
             stopTimeoutBar(evt.model);
+            stopLiveTimer(evt.model);
             card.querySelector('.response-text').textContent = evt.text;
             const elapsed = cardStartTimes[evt.model] ? ((Date.now() - cardStartTimes[evt.model]) / 1000).toFixed(1) : null;
             const timingEl = document.getElementById('timing-' + evt.model);
@@ -912,6 +934,7 @@ async function sendPrompt() {
           if (card) {
             card.classList.remove('loading');
             stopTimeoutBar(evt.model);
+            stopLiveTimer(evt.model);
             const rt = card.querySelector('.response-text');
             const isTimeout = evt.error && evt.error.toLowerCase().includes('timed out');
             rt.textContent = isTimeout ? '\u23f1 Timed out — model took too long' : '\u26a0 ' + evt.error;

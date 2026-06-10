@@ -14,7 +14,7 @@
       "multimodal": "gemma4:latest",
       "general": "llama3.1:8b",
       "asia": "qwen2.5:14b",
-      "europe": "mistral-small:latest"
+      "europe": "mistral:7b"
     },
     "cloud": {
       "gemini": "gemini-2.5-flash",
