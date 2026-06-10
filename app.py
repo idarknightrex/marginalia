@@ -80,7 +80,7 @@ def write_canonical_reference(data: dict) -> Path:
     filename = f"{first_author}_{year}_{title_slug}.md"
 
     annotation   = data.get("annotation") or "<!-- AI annotation — run Generate to populate -->"
-    user_notes   = data.get("user_notes") or "<!-- Your personal reading notes -->"
+    user_notes   = data.get("user_notes") or "<!-- Your own critical reading of this source -->"
     argument     = data.get("argument_connection") or "<!-- How does this source support, complicate, or challenge your research argument? -->"
 
     # Tags: short, comma-separated, stay in frontmatter
@@ -197,7 +197,7 @@ def read_all_references() -> list:
                         return ""
                     meta["annotation"]          = extract_section(body, "Annotation")
                     meta["argument_connection"] = extract_section(body, "Argument Connection")
-                    meta["user_notes"]           = extract_section(body, "Your Notes")
+                    meta["user_notes"]           = extract_section(body, "Your Annotation")
                     meta["themes_body"]          = extract_section(body, "Themes")
                     meta["connections"]          = extract_section(body, "Connections")
 
@@ -771,7 +771,7 @@ def update_reference(ref_filename):
         body = replace_section(body, "Argument Connection", data["argument_connection"])
         meta.pop("argument_connection", None)
     if "user_notes" in data and data["user_notes"]:
-        body = replace_section(body, "Your Notes", data["user_notes"])
+        body = replace_section(body, "Your Annotation", data["user_notes"])
         meta.pop("user_notes", None)
     if "themes_body" in data and data["themes_body"]:
         body = replace_section(body, "Themes", data["themes_body"])

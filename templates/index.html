@@ -598,6 +598,7 @@
     </div>
 
     <div class="filter-row">
+      <div style="font-size:10px;font-family:monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:10px 0 6px">Filter by status</div>
       <button class="filter-btn active" data-filter="all" id="filter-all" onclick="setFilter(this)">all</button>
       <button class="filter-btn" data-filter="verified" id="filter-verified" onclick="setFilter(this)">verified</button>
       <button class="filter-btn" data-filter="located" id="filter-located" onclick="setFilter(this)">located</button>
@@ -1043,97 +1044,145 @@ function renderRefs() {
   document.getElementById('ref-count').textContent = filtered.length + ' of ' + allRefs.length + ' sources';
   if (!filtered.length) { list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-family:monospace;font-size:12px">No references match</div>'; return; }
   filtered.forEach(ref => {
-    const status = ref.verification_status || 'surfaced', color = STATUS_COLORS[status] || '#888';
-    const themes = (ref.themes || '').split(/[,;]/).map(t => t.trim()).filter(Boolean);
-    const card = document.createElement('div');
-    card.className = 'ref-card'; card.style.borderLeftColor = color;
-    // XSS-safe rendering — all user data via textContent, never innerHTML
+    const status = ref.verification_status || 'surfaced';
+    const color  = STATUS_COLORS[status] || '#888';
+    const card   = document.createElement('div');
+    card.className = 'ref-card';
+    card.style.borderLeftColor = color;
+
+    // ── Identity row: author/title + status badge ──────────────────────
     const topRow = document.createElement('div');
-    topRow.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start';
+    topRow.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:12px';
 
     const left = document.createElement('div');
+    left.style.cssText = 'flex:1;min-width:0';
     const authorEl = document.createElement('div');
     authorEl.className = 'ref-author';
-    authorEl.textContent = (ref.authors||'') + ' (' + (ref.year||'') + ')';
+    authorEl.textContent = (ref.authors || '') + ' (' + (ref.year || '') + ')';
     const titleEl = document.createElement('div');
     titleEl.className = 'ref-title';
-    titleEl.textContent = ref.title || '';
-    left.appendChild(authorEl); left.appendChild(titleEl);
+    // Strip any HTML tags from title (import artefact)
+    titleEl.textContent = (ref.title || '').replace(/<[^>]+>/g, '');
+    left.appendChild(authorEl);
+    left.appendChild(titleEl);
+
+    const statusBadge = document.createElement('span');
+    statusBadge.className = 'ref-status-badge status-' + status;
+    statusBadge.textContent = status;
+    statusBadge.title = 'Click to change status';
+    statusBadge.style.cssText = 'flex-shrink:0;cursor:pointer';
+    statusBadge.onclick = () => cycleRefStatus(ref._filename || '', statusBadge);
 
     topRow.appendChild(left);
+    topRow.appendChild(statusBadge);
+    card.appendChild(topRow);
 
-    const tagRow = document.createElement('div');
-    tagRow.className = 'ref-tags';
-    // Short tags from frontmatter
+    // ── Tags + connection chips ────────────────────────────────────────
     const tagsList = (ref.tags || '').split(',').map(t => t.trim()).filter(Boolean);
-    tagsList.forEach(t => {
-      const tag = document.createElement('span');
-      tag.className = 'tag';
-      tag.style.cssText = 'background:var(--accent)22;color:var(--accent);border:1px solid var(--accent)44';
-      tag.textContent = t;
-      tagRow.appendChild(tag);
-    });
-    // Connections as smaller chips
-    (ref.conn_list || []).forEach(c => {
-      const name = c.split('|')[0].trim();
-      const chip = document.createElement('span');
-      chip.className = 'tag';
-      chip.title = c; // full "name | note" on hover
-      chip.style.cssText = 'background:#4285f411;color:#4285f4;border:1px solid #4285f433;font-size:10px';
-      chip.textContent = '⬡ ' + name;
-      tagRow.appendChild(chip);
-    });
-
-    // Annotation preview
-    if (ref.annotation) {
-      const annEl = document.createElement('div');
-      annEl.className = 'ref-annotation-preview';
-      annEl.textContent = ref.annotation.length > 200 ? ref.annotation.slice(0, 200) + '…' : ref.annotation;
-      card.appendChild(tagRow); card.appendChild(annEl);
-    } else {
+    const connList = ref.conn_list || [];
+    if (tagsList.length || connList.length) {
+      const tagRow = document.createElement('div');
+      tagRow.className = 'ref-tags';
+      tagsList.forEach(t => {
+        const chip = document.createElement('span');
+        chip.className = 'tag';
+        chip.style.cssText = 'background:var(--accent)22;color:var(--accent);border:1px solid var(--accent)44';
+        chip.textContent = t;
+        tagRow.appendChild(chip);
+      });
+      connList.forEach(c => {
+        const name = c.split('|')[0].trim();
+        const chip = document.createElement('span');
+        chip.className = 'tag';
+        chip.title = c;
+        chip.style.cssText = 'background:#4285f411;color:#4285f4;border:1px solid #4285f433;font-size:10px';
+        chip.textContent = '⬡ ' + name;
+        tagRow.appendChild(chip);
+      });
       card.appendChild(tagRow);
     }
-    if (ref.argument_connection) {
-      const argEl = document.createElement('div');
-      argEl.className = 'ref-argument-preview';
-      argEl.textContent = '⬡ ' + (ref.argument_connection.length > 150 ? ref.argument_connection.slice(0, 150) + '…' : ref.argument_connection);
-      card.appendChild(argEl);
-    }
 
+    // ── Action buttons ─────────────────────────────────────────────────
     const actions = document.createElement('div');
     actions.className = 'ref-actions';
-
     const launchBtn = document.createElement('button');
     launchBtn.className = 'ref-action';
     launchBtn.innerHTML = 'Launch Prompt &#8594;';
     launchBtn.onclick = () => launchPromptFromRef(ref._filename || '');
-
     const annotateBtn = document.createElement('button');
     annotateBtn.className = 'ref-action';
     annotateBtn.innerHTML = '&#9670; Annotate';
-    annotateBtn.onclick = function() { openEditModal(ref, true); };  // true = trigger annotation immediately
-
-    // Status badge — clickable cycle: surfaced → located → verified → surfaced
-    const statusBadge = document.createElement('span');
-    statusBadge.className = 'ref-status-badge status-' + (ref.verification_status || 'surfaced');
-    statusBadge.textContent = ref.verification_status || 'surfaced';
-    statusBadge.title = 'Click to change status';
-    statusBadge.onclick = () => cycleRefStatus(ref._filename || '', statusBadge);
-    topRow.appendChild(statusBadge);
-
+    annotateBtn.onclick = function() { openEditModal(ref, true); };
     const editBtn = document.createElement('button');
     editBtn.className = 'ref-action';
     editBtn.textContent = 'Edit';
     editBtn.onclick = () => openEditModal(ref);
-
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'ref-action ref-action-danger';
-    deleteBtn.textContent = '✕ Delete';
+    deleteBtn.textContent = '\u2715 Delete';
     deleteBtn.onclick = () => deleteRef(ref._filename || '', deleteBtn);
+    actions.appendChild(launchBtn);
+    actions.appendChild(annotateBtn);
+    actions.appendChild(editBtn);
+    actions.appendChild(deleteBtn);
+    card.appendChild(actions);
 
-    actions.appendChild(launchBtn); actions.appendChild(annotateBtn); actions.appendChild(editBtn); actions.appendChild(deleteBtn);
+    // ── Details section — below separator ─────────────────────────────
+    const hasDetails = (ref.theme_list && ref.theme_list.length) ||
+                       ref.annotation || ref.user_notes || ref.argument_connection;
+    if (hasDetails) {
+      const sep = document.createElement('hr');
+      sep.style.cssText = 'border:none;border-top:1px solid var(--border);margin:10px 0 8px';
+      card.appendChild(sep);
+    }
 
-    card.appendChild(topRow); card.appendChild(actions);
+    if (ref.theme_list && ref.theme_list.length) {
+      const label = document.createElement('div');
+      label.style.cssText = 'font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px';
+      label.textContent = 'Themes';
+      const el = document.createElement('div');
+      el.style.cssText = 'font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:6px';
+      const visible = ref.theme_list.slice(0, 2);
+      const rest    = ref.theme_list.slice(2);
+      el.textContent = visible.join(' · ') + (rest.length ? ' +' + rest.length + ' more' : '');
+      el.title = ref.theme_list.join('\n');
+      card.appendChild(label);
+      card.appendChild(el);
+    }
+
+    if (ref.annotation) {
+      const label = document.createElement('div');
+      label.style.cssText = 'font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px';
+      label.textContent = 'AI Annotation';
+      const el = document.createElement('div');
+      el.className = 'ref-annotation-preview';
+      el.textContent = ref.annotation.length > 300 ? ref.annotation.slice(0, 300) + '\u2026' : ref.annotation;
+      card.appendChild(label);
+      card.appendChild(el);
+    }
+
+    if (ref.user_notes) {
+      const label = document.createElement('div');
+      label.style.cssText = 'font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:8px 0 4px';
+      label.textContent = 'Your Annotation';
+      const el = document.createElement('div');
+      el.className = 'ref-annotation-preview';
+      el.textContent = ref.user_notes.length > 300 ? ref.user_notes.slice(0, 300) + '\u2026' : ref.user_notes;
+      card.appendChild(label);
+      card.appendChild(el);
+    }
+
+    if (ref.argument_connection) {
+      const label = document.createElement('div');
+      label.style.cssText = 'font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:8px 0 4px';
+      label.textContent = 'Argument Connection';
+      const el = document.createElement('div');
+      el.className = 'ref-argument-preview';
+      el.textContent = ref.argument_connection.length > 200 ? ref.argument_connection.slice(0, 200) + '\u2026' : ref.argument_connection;
+      card.appendChild(label);
+      card.appendChild(el);
+    }
+
     list.appendChild(card);
   });
   updateFilterLabels();
@@ -1755,8 +1804,8 @@ checkLocalModels();
       <textarea id="edit-annotation" style="font-style:italic;color:var(--muted)"></textarea>
     </div>
     <div class="edit-field">
-      <label>YOUR NOTES</label>
-      <textarea id="edit-user-notes" placeholder="Your own reading notes on this source..."></textarea>
+      <label>YOUR ANNOTATION <span style="font-weight:normal;text-transform:none;font-size:10px;color:var(--muted)">— your own scholarly reading</span></label>
+      <textarea id="edit-user-notes" placeholder="Your own critical reading of this source..."></textarea>
     </div>
     <div class="edit-field">
       <label>ARGUMENT CONNECTION</label>
