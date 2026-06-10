@@ -277,6 +277,8 @@
     /* tooltip shown via JS mouseover for fixed positioning */
 
     /* ── Hide inactive toggle ── */
+    .ref-annotation-preview { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 8px 0 4px; font-style: italic; border-left: 2px solid var(--border); padding-left: 10px; }
+    .ref-argument-preview { font-size: 11px; color: var(--accent); line-height: 1.5; margin: 4px 0; font-family: monospace; }
     .ref-status-badge { font-family: monospace; font-size: 10px; padding: 2px 7px; border-radius: 3px; cursor: pointer; user-select: none; margin-left: 8px; }
     .status-surfaced  { background: #c9a83222; color: #c9a832; border: 1px solid #c9a83244; }
     .status-located   { background: #4285f422; color: #4285f4; border: 1px solid #4285f444; }
@@ -1075,6 +1077,22 @@ function renderRefs() {
       tagRow.appendChild(tag);
     });
 
+    // Annotation preview
+    if (ref.annotation) {
+      const annEl = document.createElement('div');
+      annEl.className = 'ref-annotation-preview';
+      annEl.textContent = ref.annotation.length > 200 ? ref.annotation.slice(0, 200) + '…' : ref.annotation;
+      card.appendChild(tagRow); card.appendChild(annEl);
+    } else {
+      card.appendChild(tagRow);
+    }
+    if (ref.argument_connection) {
+      const argEl = document.createElement('div');
+      argEl.className = 'ref-argument-preview';
+      argEl.textContent = '⬡ ' + (ref.argument_connection.length > 150 ? ref.argument_connection.slice(0, 150) + '…' : ref.argument_connection);
+      card.appendChild(argEl);
+    }
+
     const actions = document.createElement('div');
     actions.className = 'ref-actions';
 
@@ -1086,7 +1104,7 @@ function renderRefs() {
     const annotateBtn = document.createElement('button');
     annotateBtn.className = 'ref-action';
     annotateBtn.innerHTML = '&#9670; Annotate';
-    annotateBtn.onclick = function() { annotateRef(ref._filename || '', this); };
+    annotateBtn.onclick = function() { openEditModal(ref, true); };  // true = trigger annotation immediately
 
     // Status badge — clickable cycle: surfaced → located → verified → surfaced
     const statusBadge = document.createElement('span');
@@ -1108,7 +1126,7 @@ function renderRefs() {
 
     actions.appendChild(launchBtn); actions.appendChild(annotateBtn); actions.appendChild(editBtn); actions.appendChild(deleteBtn);
 
-    card.appendChild(topRow); card.appendChild(tagRow); card.appendChild(actions);
+    card.appendChild(topRow); card.appendChild(actions);
     list.appendChild(card);
   });
 }
@@ -1306,6 +1324,30 @@ async function runLibrarySynthesis() {
   }
 }
 
+async function annotateInModal(filename) {
+  if (!filename) return;
+  const btn = document.getElementById('edit-annotate-btn');
+  if (btn) { btn.textContent = 'Annotating…'; btn.disabled = true; }
+  const localModels = [...activeModels].filter(m => ['deepseek','qwen','mistral','gemma','llama'].includes(m));
+  const allActive = [...activeModels];
+  const models = localModels.length > 0 ? localModels.slice(0,2) : allActive.length > 0 ? allActive.slice(0,1) : ['deepseek'];
+  try {
+    const res  = await fetch('/api/references/' + encodeURIComponent(filename) + '/annotate', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ models })
+    });
+    const data = await res.json();
+    if (data.status === 'annotated') {
+      document.getElementById('edit-annotation').value = data.synthesis || '';
+      if (btn) { btn.textContent = '✓ Done'; setTimeout(() => { btn.textContent = '陰 Run Annotation'; btn.disabled = false; }, 2000); }
+    } else {
+      if (btn) { btn.textContent = '⚠ ' + (data.error || 'Failed'); btn.disabled = false; }
+    }
+  } catch(e) {
+    if (btn) { btn.textContent = '⚠ Error'; btn.disabled = false; }
+  }
+}
+
 async function annotateRef(filename, btn) {
   if (!filename) return;
   const originalText = btn.textContent;
@@ -1377,7 +1419,7 @@ async function deleteRef(filename, btn) {
 
 // ── Edit modal ────────────────────────────────────────────────────────────
 let editingFilename = null;
-function openEditModal(ref) {
+function openEditModal(ref, runAnnotate) {
   editingFilename = ref._filename || null;
   document.getElementById('edit-title').value    = ref.title || '';
   document.getElementById('edit-authors').value  = ref.authors || '';
@@ -1388,6 +1430,9 @@ function openEditModal(ref) {
   document.getElementById('edit-annotation').value    = ref.annotation || '';
   document.getElementById('edit-argument').value      = ref.argument_connection || '';
   document.getElementById('edit-modal').style.display = 'flex';
+  if (runAnnotate) {
+    setTimeout(() => annotateInModal(ref._filename), 300);
+  }
 }
 function closeEditModal() {
   document.getElementById('edit-modal').style.display = 'none';
@@ -1576,7 +1621,13 @@ checkLocalModels();
     </div>
     <div class="edit-field"><label>DOI / URL</label><input id="edit-doi" type="text"></div>
     <div class="edit-field"><label>Themes / Keywords</label><input id="edit-themes" type="text"></div>
-    <div class="edit-field"><label>Annotation</label><textarea id="edit-annotation"></textarea></div>
+    <div class="edit-field">
+      <label style="display:flex;justify-content:space-between;align-items:center">
+        Annotation
+        <button class="btn-secondary" id="edit-annotate-btn" style="font-size:10px;padding:2px 8px;margin:0" onclick="annotateInModal(editingFilename)">&#9670; Run Annotation</button>
+      </label>
+      <textarea id="edit-annotation"></textarea>
+    </div>
     <div class="edit-field"><label>Argument Connection</label><textarea id="edit-argument"></textarea></div>
     <div class="edit-modal-actions">
       <button class="btn-secondary" onclick="closeEditModal()">Cancel</button>

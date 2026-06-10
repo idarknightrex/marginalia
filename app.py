@@ -148,6 +148,16 @@ def read_all_references() -> list:
                             k, v = line.split(": ", 1)
                             meta[k.strip()] = v.strip()
                     meta["_filename"] = filepath.name
+                    # Extract body sections
+                    body = parts[2]
+                    def extract_section(body, heading):
+                        if "## " + heading in body:
+                            raw = body.split("## " + heading)[1].split("\n## ")[0].strip()
+                            if raw and not raw.startswith("<!--"):
+                                return raw
+                        return ""
+                    meta["annotation"]          = extract_section(body, "Annotation")
+                    meta["argument_connection"] = extract_section(body, "Argument Connection")
                     refs.append(meta)
         except Exception:
             pass
@@ -688,9 +698,33 @@ def update_reference(ref_filename):
         if field in data:
             meta[field] = str(data[field]).strip()
 
-    # Reconstruct frontmatter
+    # Update annotation and argument in body sections if provided
+    body = parts[2]
+    def replace_section(body, heading, new_content):
+        if not new_content:
+            return body
+        marker = "## " + heading
+        if marker in body:
+            before = body.split(marker)[0]
+            rest   = body.split(marker)[1]
+            after  = ("\n## " + rest.split("\n## ", 1)[1]) if "\n## " in rest else ""
+            return before + marker + "\n" + new_content + "\n" + after
+        else:
+            return body.rstrip() + "\n\n" + marker + "\n" + new_content + "\n"
+
+    if "annotation" in data and data["annotation"]:
+        body = replace_section(body, "Annotation", data["annotation"])
+        meta.pop("annotation", None)
+    if "argument_connection" in data and data["argument_connection"]:
+        body = replace_section(body, "Argument Connection", data["argument_connection"])
+        meta.pop("argument_connection", None)
+
+    # Update updated_at timestamp
+    meta["updated_at"] = datetime.now().isoformat()
+
+    # Reconstruct frontmatter — preserve all existing keys
     fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v)
-    new_file = f"---\n{fm_lines}\n---\n{parts[2]}"
+    new_file = f"---\n{fm_lines}\n---\n{body}"
     filepath.write_text(new_file, encoding="utf-8")
     return jsonify({"status": "updated", "filename": ref_filename})
 
@@ -739,10 +773,15 @@ def update_reference_status(ref_filename):
     old_status = meta.get("verification_status", "surfaced")
     meta["verification_status"] = new_status
 
-    # Append status change log to body
+    # Append status change log as readable markdown
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-    log_entry = f"\n<!-- Status: {old_status} → {new_status} [{timestamp}] -->"
-    body = parts[2].rstrip() + log_entry + "\n"
+    body = parts[2]
+    log_marker = "## Status History"
+    log_line   = f"- {old_status} → **{new_status}** [{timestamp}]"
+    if log_marker in body:
+        body = body.rstrip() + "\n" + log_line + "\n"
+    else:
+        body = body.rstrip() + "\n\n" + log_marker + "\n" + log_line + "\n"
 
     fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v)
     filepath.write_text(f"---\n{fm_lines}\n---\n{body}", encoding="utf-8")
