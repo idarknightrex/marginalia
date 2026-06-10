@@ -52,3 +52,11 @@ BROADCAST_URL  = "https://raw.githubusercontent.com/idarknightrex/marginalia/mai
 # ─── Projects and Writing (canonical, committed) ──────────────────────────────
 PROJECTS_DIR   = CANONICAL_DIR / "projects"
 WRITING_DIR    = CANONICAL_DIR / "writing"
+
+# ─── Projects and Writing (canonical, committed) ──────────────────────────────
+PROJECTS_DIR   = CANONICAL_DIR / "projects"
+WRITING_DIR    = CANONICAL_DIR / "writing"
+
+# ─── Projects and Writing (canonical, committed) ──────────────────────────────
+PROJECTS_DIR   = CANONICAL_DIR / "projects"
+WRITING_DIR    = CANONICAL_DIR / "writing"

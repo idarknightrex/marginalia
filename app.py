@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 # ─── Paths ────────────────────────────────────────────────────────────────────
 from utils.paths import (
     APP_ROOT, CANONICAL_DIR, REFERENCES_DIR, SESSIONS_DIR,
-    CAPTURES_DIR, EXPORTS_DIR, SETTINGS_PATH, BROADCAST_URL
+    CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR, WRITING_DIR, SETTINGS_PATH, BROADCAST_URL
 )
 
 # ─── Bootstrap — load setup.env (visible), fall back to .env (legacy) ────────
