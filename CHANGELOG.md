@@ -2,6 +2,30 @@
 
 ---
 
+## v0.9.2.3 — 2026-06-10 — reference card complete
+
+### Fixed: Annotate
+- Falls back to any active model if no locals active, then deepseek as last resort
+- Shows error detail in button on failure instead of silent hang
+- Reloads reference list on success
+
+### Added: Edit
+- Edit button opens modal with all fields: title, authors, year, type, DOI, themes, annotation, argument connection
+- PUT /api/references/<filename> rewrites canonical frontmatter, preserves body
+- Closes and reloads on save
+
+### Added: Delete
+- Delete button with confirmation dialog
+- DELETE /api/references/<filename> removes canonical file
+- List reloads immediately
+
+### Added: Status cycle
+- Status badge on each card (surfaced / located / verified) — click to cycle
+- PATCH /api/references/<filename>/status updates canonical frontmatter
+- Appends timestamped log comment to file body on every change
+
+---
+
 ## v0.9.2.2 — 2026-06-10 — dynamic local model discovery
 
 ### Feature: unknown Ollama models surface automatically as chips

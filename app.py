@@ -657,6 +657,97 @@ def handle_prompt():
 
 
 
+
+@app.route("/api/references/<ref_filename>", methods=["PUT"])
+def update_reference(ref_filename):
+    """Update a reference's metadata fields. Rewrites canonical file."""
+    if "/" in ref_filename or "\\" in ref_filename or ".." in ref_filename:
+        return jsonify({"error": "Invalid filename"}), 400
+    filepath = (REFERENCES_DIR / ref_filename).resolve()
+    if REFERENCES_DIR.resolve() not in filepath.parents:
+        return jsonify({"error": "Invalid path"}), 400
+    if not filepath.exists():
+        return jsonify({"error": "Reference not found"}), 404
+
+    data = request.json or {}
+    text = filepath.read_text(encoding="utf-8")
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return jsonify({"error": "Invalid canonical format"}), 400
+
+    meta = {}
+    for line in parts[1].strip().splitlines():
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            meta[k.strip()] = v.strip()
+
+    # Update only provided fields
+    for field in ["title","authors","year","source_type","url_doi","themes",
+                  "annotation","argument_connection","verification_status",
+                  "physical_holding","holding_location"]:
+        if field in data:
+            meta[field] = str(data[field]).strip()
+
+    # Reconstruct frontmatter
+    fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v)
+    new_file = f"---\n{fm_lines}\n---\n{parts[2]}"
+    filepath.write_text(new_file, encoding="utf-8")
+    return jsonify({"status": "updated", "filename": ref_filename})
+
+
+@app.route("/api/references/<ref_filename>", methods=["DELETE"])
+def delete_reference(ref_filename):
+    """Delete a canonical reference file."""
+    if "/" in ref_filename or "\\" in ref_filename or ".." in ref_filename:
+        return jsonify({"error": "Invalid filename"}), 400
+    filepath = (REFERENCES_DIR / ref_filename).resolve()
+    if REFERENCES_DIR.resolve() not in filepath.parents:
+        return jsonify({"error": "Invalid path"}), 400
+    if not filepath.exists():
+        return jsonify({"error": "Reference not found"}), 404
+    filepath.unlink()
+    return jsonify({"status": "deleted", "filename": ref_filename})
+
+
+@app.route("/api/references/<ref_filename>/status", methods=["PATCH"])
+def update_reference_status(ref_filename):
+    """Update verification_status with a timestamped log entry."""
+    if "/" in ref_filename or "\\" in ref_filename or ".." in ref_filename:
+        return jsonify({"error": "Invalid filename"}), 400
+    filepath = (REFERENCES_DIR / ref_filename).resolve()
+    if REFERENCES_DIR.resolve() not in filepath.parents:
+        return jsonify({"error": "Invalid path"}), 400
+    if not filepath.exists():
+        return jsonify({"error": "Reference not found"}), 404
+
+    new_status = (request.json or {}).get("status", "")
+    valid = {"surfaced", "located", "verified"}
+    if new_status not in valid:
+        return jsonify({"error": f"Invalid status. Must be one of: {valid}"}), 400
+
+    text = filepath.read_text(encoding="utf-8")
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return jsonify({"error": "Invalid canonical format"}), 400
+
+    meta = {}
+    for line in parts[1].strip().splitlines():
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            meta[k.strip()] = v.strip()
+
+    old_status = meta.get("verification_status", "surfaced")
+    meta["verification_status"] = new_status
+
+    # Append status change log to body
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    log_entry = f"\n<!-- Status: {old_status} → {new_status} [{timestamp}] -->"
+    body = parts[2].rstrip() + log_entry + "\n"
+
+    fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v)
+    filepath.write_text(f"---\n{fm_lines}\n---\n{body}", encoding="utf-8")
+    return jsonify({"status": "updated", "verification_status": new_status})
+
 @app.route("/api/references/library-synthesis", methods=["POST"])
 def library_synthesis():
     """

@@ -277,6 +277,21 @@
     /* tooltip shown via JS mouseover for fixed positioning */
 
     /* ── Hide inactive toggle ── */
+    .ref-status-badge { font-family: monospace; font-size: 10px; padding: 2px 7px; border-radius: 3px; cursor: pointer; user-select: none; margin-left: 8px; }
+    .status-surfaced  { background: #c9a83222; color: #c9a832; border: 1px solid #c9a83244; }
+    .status-located   { background: #4285f422; color: #4285f4; border: 1px solid #4285f444; }
+    .status-verified  { background: #52c41a22; color: #52c41a; border: 1px solid #52c41a44; }
+    .ref-action-danger { color: #c94242 !important; border-color: #c9424244 !important; }
+    .ref-action-danger:hover { background: #c9424215 !important; }
+    /* Edit modal */
+    .edit-modal-overlay { display: none; position: fixed; inset: 0; background: #00000066; z-index: 1000; align-items: center; justify-content: center; }
+    .edit-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px; width: 580px; max-width: 95vw; max-height: 85vh; overflow-y: auto; }
+    .edit-modal h3 { font-size: 13px; font-family: monospace; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); margin: 0 0 16px; }
+    .edit-field { margin-bottom: 12px; }
+    .edit-field label { display: block; font-size: 11px; font-family: monospace; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; }
+    .edit-field input, .edit-field select, .edit-field textarea { width: 100%; padding: 7px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-family: Georgia, serif; font-size: 13px; box-sizing: border-box; }
+    .edit-field textarea { min-height: 80px; resize: vertical; }
+    .edit-modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
     .chips-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
     .hide-inactive-btn {
       font-family: monospace; font-size: 10px;
@@ -676,7 +691,7 @@
   <span class="status-online">&#9679; Marginalia running</span>
   <span id="session-time">Session: 0m</span>
   <span class="status-cost" id="cost-display">Claude: $0.0000</span>
-  <span class="status-project">v0.9.2.2 &middot; LLM</span>
+  <span class="status-project">v0.9.2.3 &middot; LLM</span>
 </div>
 
 <script>
@@ -1007,6 +1022,7 @@ async function sendPrompt() {
 }
 
 // ── References ────────────────────────────────────────────────────────────
+const loadRefs = () => loadReferences();
 async function loadReferences() {
   const res = await fetch('/api/references');
   allRefs = await res.json();
@@ -1072,11 +1088,25 @@ function renderRefs() {
     annotateBtn.innerHTML = '&#9670; Annotate';
     annotateBtn.onclick = function() { annotateRef(ref._filename || '', this); };
 
+    // Status badge — clickable cycle: surfaced → located → verified → surfaced
+    const statusBadge = document.createElement('span');
+    statusBadge.className = 'ref-status-badge status-' + (ref.verification_status || 'surfaced');
+    statusBadge.textContent = ref.verification_status || 'surfaced';
+    statusBadge.title = 'Click to change status';
+    statusBadge.onclick = () => cycleRefStatus(ref._filename || '', statusBadge);
+    topRow.appendChild(statusBadge);
+
     const editBtn = document.createElement('button');
     editBtn.className = 'ref-action';
     editBtn.textContent = 'Edit';
+    editBtn.onclick = () => openEditModal(ref);
 
-    actions.appendChild(launchBtn); actions.appendChild(annotateBtn); actions.appendChild(editBtn);
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'ref-action ref-action-danger';
+    deleteBtn.textContent = '✕ Delete';
+    deleteBtn.onclick = () => deleteRef(ref._filename || '', deleteBtn);
+
+    actions.appendChild(launchBtn); actions.appendChild(annotateBtn); actions.appendChild(editBtn); actions.appendChild(deleteBtn);
 
     card.appendChild(topRow); card.appendChild(tagRow); card.appendChild(actions);
     list.appendChild(card);
@@ -1282,9 +1312,10 @@ async function annotateRef(filename, btn) {
   btn.textContent = 'Annotating\u2026';
   btn.disabled = true;
 
-  // Use active local models, default to deepseek
+  // Use active models — prefer local, fall back to any active model, then deepseek
   const localModels = [...activeModels].filter(m => ['deepseek','qwen','mistral','gemma','llama'].includes(m));
-  const models = localModels.length > 0 ? localModels.slice(0,2) : ['deepseek'];
+  const allActive = [...activeModels];
+  const models = localModels.length > 0 ? localModels.slice(0,2) : allActive.length > 0 ? allActive.slice(0,1) : ['deepseek'];
 
   try {
     const res  = await fetch('/api/references/' + encodeURIComponent(filename) + '/annotate', {
@@ -1296,15 +1327,95 @@ async function annotateRef(filename, btn) {
     if (data.status === 'annotated') {
       btn.textContent = '\u2713 Annotated';
       btn.style.color = 'var(--verified)';
+      await loadRefs();
       setTimeout(() => { btn.textContent = originalText; btn.style.color = ''; btn.disabled = false; }, 3000);
     } else {
-      btn.textContent = '\u26a0 Failed';
-      btn.disabled = false;
+      btn.textContent = '\u26a0 ' + (data.error || 'Failed');
+      btn.style.color = '#c94242';
+      setTimeout(() => { btn.textContent = originalText; btn.style.color = ''; btn.disabled = false; }, 4000);
     }
   } catch(e) {
-    btn.textContent = '\u26a0 Error';
-    btn.disabled = false;
+    btn.textContent = '\u26a0 ' + e.message;
+    btn.style.color = '#c94242';
+    setTimeout(() => { btn.textContent = originalText; btn.style.color = ''; btn.disabled = false; }, 4000);
   }
+}
+
+
+// ── Reference status cycle ────────────────────────────────────────────────
+const STATUS_CYCLE = ['surfaced', 'located', 'verified'];
+async function cycleRefStatus(filename, badge) {
+  if (!filename) return;
+  const current = badge.textContent.trim();
+  const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(current) + 1) % STATUS_CYCLE.length];
+  try {
+    const res = await fetch('/api/references/' + encodeURIComponent(filename) + '/status', {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ status: next })
+    });
+    const data = await res.json();
+    if (data.verification_status) {
+      badge.textContent = data.verification_status;
+      badge.className = 'ref-status-badge status-' + data.verification_status;
+      await loadRefs();
+    }
+  } catch(e) { console.error('Status update failed:', e); }
+}
+
+// ── Delete reference ──────────────────────────────────────────────────────
+async function deleteRef(filename, btn) {
+  if (!filename) return;
+  if (!confirm('Delete this reference? This cannot be undone.')) return;
+  btn.textContent = 'Deleting…'; btn.disabled = true;
+  try {
+    const res = await fetch('/api/references/' + encodeURIComponent(filename), { method: 'DELETE' });
+    const data = await res.json();
+    if (data.status === 'deleted') { await loadRefs(); }
+    else { btn.textContent = '✕ Delete'; btn.disabled = false; alert(data.error || 'Delete failed'); }
+  } catch(e) { btn.textContent = '✕ Delete'; btn.disabled = false; }
+}
+
+// ── Edit modal ────────────────────────────────────────────────────────────
+let editingFilename = null;
+function openEditModal(ref) {
+  editingFilename = ref._filename || null;
+  document.getElementById('edit-title').value    = ref.title || '';
+  document.getElementById('edit-authors').value  = ref.authors || '';
+  document.getElementById('edit-year').value     = ref.year || '';
+  document.getElementById('edit-type').value     = ref.source_type || 'journal';
+  document.getElementById('edit-doi').value      = ref.url_doi || '';
+  document.getElementById('edit-themes').value   = ref.themes || '';
+  document.getElementById('edit-annotation').value    = ref.annotation || '';
+  document.getElementById('edit-argument').value      = ref.argument_connection || '';
+  document.getElementById('edit-modal').style.display = 'flex';
+}
+function closeEditModal() {
+  document.getElementById('edit-modal').style.display = 'none';
+  editingFilename = null;
+}
+async function saveEdit() {
+  if (!editingFilename) return;
+  const btn = document.getElementById('edit-save-btn');
+  btn.textContent = 'Saving…'; btn.disabled = true;
+  const payload = {
+    title:    document.getElementById('edit-title').value.trim(),
+    authors:  document.getElementById('edit-authors').value.trim(),
+    year:     document.getElementById('edit-year').value.trim(),
+    source_type: document.getElementById('edit-type').value,
+    url_doi:  document.getElementById('edit-doi').value.trim(),
+    themes:   document.getElementById('edit-themes').value.trim(),
+    annotation:         document.getElementById('edit-annotation').value.trim(),
+    argument_connection: document.getElementById('edit-argument').value.trim(),
+  };
+  try {
+    const res = await fetch('/api/references/' + encodeURIComponent(editingFilename), {
+      method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.status === 'updated') { closeEditModal(); await loadRefs(); }
+    else { alert(data.error || 'Save failed'); }
+  } catch(e) { alert('Save failed: ' + e.message); }
+  btn.textContent = 'Save'; btn.disabled = false;
 }
 
 function launchPromptFromRef(filename) {
@@ -1447,5 +1558,32 @@ checkKeyStatus();
 checkSetupStatus();
 checkLocalModels();
 </script>
+<!-- Edit Reference Modal -->
+<div class="edit-modal-overlay" id="edit-modal" onclick="if(event.target===this)closeEditModal()">
+  <div class="edit-modal">
+    <h3>Edit Reference</h3>
+    <div class="edit-field"><label>Title</label><input id="edit-title" type="text"></div>
+    <div class="edit-field"><label>Authors (semicolon-separated)</label><input id="edit-authors" type="text"></div>
+    <div class="edit-field" style="display:flex;gap:12px">
+      <div style="flex:1"><label>Year</label><input id="edit-year" type="text"></div>
+      <div style="flex:2"><label>Type</label>
+        <select id="edit-type">
+          <option value="journal">Journal</option><option value="book">Book</option>
+          <option value="chapter">Chapter</option><option value="conference">Conference</option>
+          <option value="thesis">Thesis</option><option value="web">Web</option><option value="other">Other</option>
+        </select>
+      </div>
+    </div>
+    <div class="edit-field"><label>DOI / URL</label><input id="edit-doi" type="text"></div>
+    <div class="edit-field"><label>Themes / Keywords</label><input id="edit-themes" type="text"></div>
+    <div class="edit-field"><label>Annotation</label><textarea id="edit-annotation"></textarea></div>
+    <div class="edit-field"><label>Argument Connection</label><textarea id="edit-argument"></textarea></div>
+    <div class="edit-modal-actions">
+      <button class="btn-secondary" onclick="closeEditModal()">Cancel</button>
+      <button class="btn-primary" id="edit-save-btn" onclick="saveEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
