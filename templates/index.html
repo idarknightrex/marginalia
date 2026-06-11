@@ -1266,13 +1266,16 @@ function renderRefs() {
       card.appendChild(el);
     }
 
-    // Footer: created_at + last updated
+    // Footer: created_at + last status change + last edit
     const footerEl = document.createElement('div');
-    footerEl.style.cssText = 'font-size:10px;font-family:monospace;color:var(--muted);margin-top:10px;padding-top:6px;border-top:1px solid var(--border)';
+    footerEl.style.cssText = 'font-size:10px;font-family:monospace;color:var(--muted);margin-top:10px;padding-top:6px;border-top:1px solid var(--border);line-height:1.8';
     const created = (ref.created_at || '').slice(0,16).replace('T',' ');
-    const updated = (ref.updated_at || '').slice(0,16).replace('T',' ');
-    footerEl.textContent = created ? 'Added ' + created + ' UTC' + (updated && updated !== created ? ' · Updated ' + updated + ' UTC' : '') : '';
-    if (created) card.appendChild(footerEl);
+    let footerLines = [];
+    if (created) footerLines.push('Added ' + created + ' UTC');
+    if (ref.last_status_change) footerLines.push('Status: ' + ref.last_status_change);
+    if (ref.last_edit) footerLines.push('Edited: ' + ref.last_edit);
+    footerEl.textContent = footerLines.join(' · ');
+    if (footerLines.length) card.appendChild(footerEl);
 
     list.appendChild(card);
   });

@@ -208,6 +208,20 @@ def read_all_references() -> list:
                     meta["tags_list"]  = [t.strip() for t in meta.get("tags","").split(",") if t.strip()]
                     meta["theme_list"] = [ln.lstrip("- ").strip() for ln in (meta["themes_body"] or "").splitlines() if ln.strip() and not ln.strip().startswith("<!--")]
                     meta["conn_list"]  = [ln.strip() for ln in (meta["connections"] or "").splitlines() if ln.strip() and not ln.strip().startswith("<!--")]
+                    # Last status change entry
+                    status_hist = extract_section(body, "Status History")
+                    if status_hist:
+                        lines = [l.strip() for l in status_hist.splitlines() if l.strip() and not l.startswith("<!--")]
+                        meta["last_status_change"] = lines[-1].lstrip("- ").strip() if lines else ""
+                    else:
+                        meta["last_status_change"] = ""
+                    # Last edit summary
+                    edit_hist = extract_section(body, "Edit History")
+                    if edit_hist:
+                        lines = [l.strip() for l in edit_hist.splitlines() if l.strip() and not l.startswith("<!--")]
+                        meta["last_edit"] = lines[-1].lstrip("- ").strip() if lines else ""
+                    else:
+                        meta["last_edit"] = ""
                     refs.append(meta)
         except Exception:
             pass
@@ -805,6 +819,20 @@ def update_reference(ref_filename):
 
     # Update updated_at timestamp
     meta["updated_at"] = datetime.utcnow().isoformat()
+
+    # Write edit history entry — log which top-level fields changed
+    tracked = ["title","authors","year","source_type","url_doi","tags","physical_holding","holding_location","verification_status"]
+    changed = [f for f in tracked if f in data and str(data[f]).strip() != str(meta.get(f,"")).strip()]
+    body_changed = [s for s in ["annotation","themes_body","connections","argument_connection","user_notes"] if s in data and data[s]]
+    all_changed = changed + body_changed
+    if all_changed:
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+        edit_line = f"- [{timestamp}] edited: {', '.join(all_changed)}"
+        log_marker = "## Edit History"
+        if log_marker in body:
+            body = body.rstrip() + "\n" + edit_line + "\n"
+        else:
+            body = body.rstrip() + "\n\n" + log_marker + "\n" + edit_line + "\n"
 
     # Reconstruct frontmatter — preserve all existing keys
     fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v)
