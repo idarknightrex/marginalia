@@ -961,6 +961,13 @@ def update_project(project_slug):
     for field in ["label", "status"]:
         if field in data:
             meta[field] = data[field]
+    # Handle slug rename — update frontmatter and rename file
+    new_slug = data.get("slug", "").strip().lower().replace(" ", "-")
+    if new_slug and new_slug != safe:
+        meta["slug"] = new_slug
+        new_filepath = PROJECTS_DIR / (new_slug + ".md")
+    else:
+        new_filepath = filepath
     meta["updated_at"] = datetime.utcnow().isoformat()
     body = parts[2]
     if "framing" in data and data["framing"]:
@@ -972,8 +979,10 @@ def update_project(project_slug):
         else:
             body = body.rstrip() + "\n\n## Framing\n" + data["framing"] + "\n"
     fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v)
-    filepath.write_text(f"---\n{fm_lines}\n---\n{body}", encoding="utf-8")
-    return jsonify({"status": "updated"})
+    new_filepath.write_text(f"---\n{fm_lines}\n---\n{body}", encoding="utf-8")
+    if new_filepath != filepath:
+        filepath.unlink()  # remove old file after writing new one
+    return jsonify({"status": "updated", "slug": new_slug or safe})
 
 
 @app.route("/api/projects", methods=["POST"])
@@ -1060,10 +1069,18 @@ def update_writing(writing_slug):
     for field in ["title", "type", "project", "status"]:
         if field in data:
             meta[field] = data[field]
+    new_slug = data.get("slug", "").strip().lower().replace(" ", "-")
+    if new_slug and new_slug != safe:
+        meta["slug"] = new_slug
+        new_filepath = WRITING_DIR / (new_slug + ".md")
+    else:
+        new_filepath = filepath
     meta["updated_at"] = datetime.utcnow().isoformat()
     fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v)
-    filepath.write_text(f"---\n{fm_lines}\n---\n{parts[2]}", encoding="utf-8")
-    return jsonify({"status": "updated"})
+    new_filepath.write_text(f"---\n{fm_lines}\n---\n{parts[2]}", encoding="utf-8")
+    if new_filepath != filepath:
+        filepath.unlink()
+    return jsonify({"status": "updated", "slug": new_slug or safe})
 
 
 @app.route("/api/writing", methods=["POST"])
