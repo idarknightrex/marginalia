@@ -621,7 +621,7 @@ def call_model(model, prompt):
         elif model == "mistral":
             return (model, call_ollama(local_cfg.get("europe",     "mistral:7b"),        prompt), None, 0, 0)
         elif model == "cohere":
-            return (model, call_ollama(local_cfg.get("canadian",   "command-r7b"),       prompt), None, 0, 0)
+            return (model, call_ollama(local_cfg.get("canadian",   "command-r7b:latest"),       prompt), None, 0, 0)
         elif model.startswith("ollama:"):
             return (model, call_ollama(model[len("ollama:"):], prompt), None, 0, 0)
         else:
@@ -1155,7 +1155,7 @@ def library_synthesis():
         "deepseek": local_cfg.get("reasoning",  "deepseek-r1:8b"),
         "qwen":     local_cfg.get("asia",       "qwen2.5:14b"),
         "mistral":  local_cfg.get("europe",     "mistral:7b"),
-        "cohere":   local_cfg.get("canadian",   "command-r7b"),
+        "cohere":   local_cfg.get("canadian",   "command-r7b:latest"),
         "gemma":    local_cfg.get("multimodal", "gemma4:latest"),
         "llama":    local_cfg.get("general",    "llama3.1:8b"),
     }
@@ -1282,7 +1282,7 @@ def sessions_synthesis():
         "deepseek": local_cfg.get("reasoning",  "deepseek-r1:8b"),
         "qwen":     local_cfg.get("asia",       "qwen2.5:14b"),
         "mistral":  local_cfg.get("europe",     "mistral:7b"),
-        "cohere":   local_cfg.get("canadian",   "command-r7b"),
+        "cohere":   local_cfg.get("canadian",   "command-r7b:latest"),
         "gemma":    local_cfg.get("multimodal", "gemma4:latest"),
         "llama":    local_cfg.get("general",    "llama3.1:8b"),
     }
