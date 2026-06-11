@@ -763,7 +763,7 @@
     </div>
     <div><div class="field-label">Themes — comma separated</div><input class="field-input" id="ref-themes" placeholder="embodied-learning, anxiety"></div>
     <div><div class="field-label">Annotation</div><textarea class="field-textarea" id="ref-annotation" placeholder="What does this source argue?"></textarea></div>
-    <div><div class="field-label">Argument Connection</div><textarea class="field-textarea" id="ref-argument" placeholder="How does this connect to your research?"></textarea></div>
+    <div><div class="field-label">Argument Connection</div><textarea class="field-textarea" id="ref-argument" placeholder="project-slug | how this source supports or challenges your argument&#10;writing-slug | specific relevance to this piece&#10;(slug must match a project or writing element)"></textarea></div>
   </div>
   <div class="panel-footer">
     <button class="btn-primary" style="flex:1" onclick="saveReference()">Save Reference</button>
@@ -1265,6 +1265,14 @@ function renderRefs() {
       card.appendChild(label);
       card.appendChild(el);
     }
+
+    // Footer: created_at + last updated
+    const footerEl = document.createElement('div');
+    footerEl.style.cssText = 'font-size:10px;font-family:monospace;color:var(--muted);margin-top:10px;padding-top:6px;border-top:1px solid var(--border)';
+    const created = (ref.created_at || '').slice(0,16).replace('T',' ');
+    const updated = (ref.updated_at || '').slice(0,16).replace('T',' ');
+    footerEl.textContent = created ? 'Added ' + created + ' UTC' + (updated && updated !== created ? ' · Updated ' + updated + ' UTC' : '') : '';
+    if (created) card.appendChild(footerEl);
 
     list.appendChild(card);
   });
@@ -2049,7 +2057,7 @@ checkLocalModels();
     </div>
     <div class="edit-field">
       <label>ARGUMENT CONNECTION</label>
-      <textarea id="edit-argument" placeholder="How does this source support, complicate, or challenge your research argument?"></textarea>
+      <textarea id="edit-argument" placeholder="project-slug | how this source supports or challenges your argument&#10;writing-slug | specific relevance to this piece&#10;(slug must match a project or writing element)"></textarea>
     </div>
     <div class="edit-modal-actions">
       <button class="btn-secondary" onclick="closeEditModal()">Cancel</button>

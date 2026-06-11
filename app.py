@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 # ─── Paths ────────────────────────────────────────────────────────────────────
 from utils.paths import (
     APP_ROOT, CANONICAL_DIR, REFERENCES_DIR, SESSIONS_DIR,
-    CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR, WRITING_DIR, SETTINGS_PATH, BROADCAST_URL
+    CAPTURES_DIR, EXPORTS_DIR, SETTINGS_PATH, BROADCAST_URL
 )
 
 # ─── Bootstrap — load setup.env (visible), fall back to .env (legacy) ────────
@@ -482,6 +482,27 @@ REFERENCE LIST:
             imported.append(write_canonical_reference(rec).name)
         except Exception as e:
             parse_errors.append(str(e))
+
+    # Write import log entry to canonical/sessions/imports.md
+    if imported:
+        log_path = SESSIONS_DIR / "imports.md"
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+        log_entry = f"\n### {timestamp} — {fmt} import\n"
+        log_entry += f"- Imported: {len(imported)}\n"
+        if skipped:  log_entry += f"- Skipped (no title): {len(skipped)}\n"
+        if parse_errors: log_entry += f"- Errors: {len(parse_errors)}\n"
+        for f_name in imported[:10]:  # first 10 filenames
+            log_entry += f"  - {f_name}\n"
+        if len(imported) > 10:
+            log_entry += f"  - ... and {len(imported)-10} more\n"
+        try:
+            if log_path.exists():
+                existing = log_path.read_text(encoding="utf-8")
+                log_path.write_text(existing.rstrip() + "\n" + log_entry, encoding="utf-8")
+            else:
+                log_path.write_text(f"# Import Log\n{log_entry}", encoding="utf-8")
+        except Exception:
+            pass
 
     return jsonify({"format": fmt, "imported": len(imported), "skipped": len(skipped), "errors": parse_errors, "files": imported})
 
