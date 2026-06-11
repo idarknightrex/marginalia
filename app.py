@@ -906,6 +906,7 @@ def update_reference_status(ref_filename):
 @app.route("/api/projects", methods=["GET"])
 def get_projects():
     projects = []
+    all_refs = read_all_references()
     for filepath in sorted(PROJECTS_DIR.glob("*.md")):
         try:
             text = filepath.read_text(encoding="utf-8")
@@ -918,28 +919,76 @@ def get_projects():
                             k, v = line.split(": ", 1)
                             meta[k.strip()] = v.strip()
                     meta["_filename"] = filepath.name
+                    # Ensure slug is set (migrate old name-only files)
+                    if not meta.get("slug"):
+                        meta["slug"] = meta.get("name", filepath.stem)
+                    if not meta.get("label"):
+                        meta["label"] = meta.get("slug", filepath.stem)
                     body = parts[2]
                     # Extract framing
                     if "## Framing" in body:
                         raw = body.split("## Framing")[1].split("\n## ")[0].strip()
                         meta["framing"] = raw if not raw.startswith("<!--") else ""
+                    # Count connected references
+                    slug = meta["slug"]
+                    connected = [r for r in all_refs
+                                 if any(slug in line.split("|")[0].strip()
+                                        for line in (r.get("conn_list") or []))]
+                    meta["ref_count"] = len(connected)
+                    meta["ref_titles"] = [r.get("title","")[:60] for r in connected[:5]]
                     projects.append(meta)
         except Exception:
             pass
     return jsonify(projects)
 
 
+@app.route("/api/projects/<project_slug>", methods=["PUT"])
+def update_project(project_slug):
+    safe = project_slug.replace("/","").replace("..","")
+    filepath = PROJECTS_DIR / (safe + ".md")
+    if not filepath.exists():
+        return jsonify({"error": "Not found"}), 404
+    data  = request.json or {}
+    text  = filepath.read_text(encoding="utf-8")
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return jsonify({"error": "Invalid format"}), 400
+    meta = {}
+    for line in parts[1].strip().splitlines():
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            meta[k.strip()] = v.strip()
+    for field in ["label", "status"]:
+        if field in data:
+            meta[field] = data[field]
+    meta["updated_at"] = datetime.utcnow().isoformat()
+    body = parts[2]
+    if "framing" in data and data["framing"]:
+        if "## Framing" in body:
+            before = body.split("## Framing")[0]
+            rest   = body.split("## Framing")[1]
+            after  = ("\n## " + rest.split("\n## ",1)[1]) if "\n## " in rest else ""
+            body   = before + "## Framing\n" + data["framing"] + "\n" + after
+        else:
+            body = body.rstrip() + "\n\n## Framing\n" + data["framing"] + "\n"
+    fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v)
+    filepath.write_text(f"---\n{fm_lines}\n---\n{body}", encoding="utf-8")
+    return jsonify({"status": "updated"})
+
+
 @app.route("/api/projects", methods=["POST"])
 def create_project():
     data = request.json or {}
-    name = data.get("name", "").strip().lower().replace(" ", "-")
-    if not name:
-        return jsonify({"error": "Project name required"}), 400
-    filename = name + ".md"
+    label = data.get("label", "").strip()  # human-readable name
+    slug  = data.get("slug", "").strip().lower().replace(" ", "-") or             "-".join(label.lower().split()[:4])
+    if not slug:
+        return jsonify({"error": "Project slug required"}), 400
+    filename = slug + ".md"
     filepath = PROJECTS_DIR / filename
-    framing = data.get("framing", "")
+    framing  = data.get("framing", "")
     canonical = f"""---
-name: {name}
+label: {label or slug}
+slug: {slug}
 status: active
 created_at: {datetime.utcnow().isoformat()}
 updated_at: {datetime.utcnow().isoformat()}
@@ -954,7 +1003,7 @@ updated_at: {datetime.utcnow().isoformat()}
 
 """
     filepath.write_text(canonical, encoding="utf-8")
-    return jsonify({"status": "created", "filename": filename, "name": name})
+    return jsonify({"status": "created", "filename": filename, "slug": slug, "label": label or slug})
 
 
 @app.route("/api/projects/<project_name>", methods=["GET"])
@@ -990,6 +1039,31 @@ def get_writing():
         except Exception:
             pass
     return jsonify(items)
+
+
+@app.route("/api/writing/<writing_slug>", methods=["PUT"])
+def update_writing(writing_slug):
+    safe = writing_slug.replace("/","").replace("..","")
+    filepath = WRITING_DIR / (safe + ".md")
+    if not filepath.exists():
+        return jsonify({"error": "Not found"}), 404
+    data  = request.json or {}
+    text  = filepath.read_text(encoding="utf-8")
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return jsonify({"error": "Invalid format"}), 400
+    meta = {}
+    for line in parts[1].strip().splitlines():
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            meta[k.strip()] = v.strip()
+    for field in ["title", "type", "project", "status"]:
+        if field in data:
+            meta[field] = data[field]
+    meta["updated_at"] = datetime.utcnow().isoformat()
+    fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v)
+    filepath.write_text(f"---\n{fm_lines}\n---\n{parts[2]}", encoding="utf-8")
+    return jsonify({"status": "updated"})
 
 
 @app.route("/api/writing", methods=["POST"])

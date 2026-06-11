@@ -655,11 +655,12 @@
     <div class="page-header"><h1>Projects</h1><small>Research projects and their connected sources</small></div>
     <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface)">
       <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Add project</div>
-      <div style="display:flex;gap:8px">
-        <input id="new-project-name" class="search-input" placeholder="project-slug (e.g. dissertation-ch2)" style="flex:1">
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input id="new-project-label" class="search-input" placeholder="Display name (e.g. PhD Core — Embodied Learning)" style="flex:2">
+        <input id="new-project-slug" class="search-input" placeholder="slug (e.g. phd-core)" style="flex:1">
         <button class="btn-primary" onclick="createProject()">+ Create</button>
       </div>
-      <div id="new-project-framing" style="margin-top:8px;display:none">
+      <div id="new-project-framing" style="display:none">
         <textarea id="project-framing-input" placeholder="Research question or framing for this project..." style="width:100%;min-height:60px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:Georgia,serif;font-size:13px;box-sizing:border-box;margin-bottom:8px"></textarea>
         <button class="btn-primary" onclick="saveNewProject()">Save project</button>
         <button class="btn-secondary" onclick="cancelNewProject()" style="margin-left:6px">Cancel</button>
@@ -1662,23 +1663,61 @@ async function loadProjects() {
   const data = await res.json();
   const list = document.getElementById('project-list');
   if (!data.length) {
-    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-family:monospace;font-size:12px">No projects yet — create one above or add connections to references</div>';
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-family:monospace;font-size:12px">No projects yet — create one above, or add a connection slug to a reference</div>';
     return;
   }
   list.innerHTML = '';
   data.forEach(p => {
+    const slug = p.slug || p.name || p._filename.replace('.md','');
+    const label = p.label || slug;
     const card = document.createElement('div');
-    card.style.cssText = 'border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:10px;background:var(--surface)';
-    const nameEl = document.createElement('div');
-    nameEl.style.cssText = 'font-family:monospace;font-size:13px;font-weight:bold;color:var(--accent);margin-bottom:4px';
-    nameEl.textContent = p.name || p._filename.replace('.md','');
+    card.style.cssText = 'border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px;padding:14px 16px;margin-bottom:10px;background:var(--surface)';
+
+    // Header row: label + slug chip + edit button
+    const headerRow = document.createElement('div');
+    headerRow.style.cssText = 'display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px';
+    const labelEl = document.createElement('div');
+    labelEl.style.cssText = 'font-family:Georgia,serif;font-size:15px;font-weight:bold;color:var(--text)';
+    labelEl.textContent = label;
+    const rightRow = document.createElement('div');
+    rightRow.style.cssText = 'display:flex;gap:6px;align-items:center';
+    const slugChip = document.createElement('span');
+    slugChip.style.cssText = 'font-family:monospace;font-size:10px;color:var(--accent);background:var(--accent)11;border:1px solid var(--accent)44;padding:2px 7px;border-radius:3px';
+    slugChip.textContent = slug;
+    const editBtn = document.createElement('button');
+    editBtn.className = 'ref-action';
+    editBtn.textContent = 'Edit';
+    editBtn.onclick = () => openProjectEdit(p);
+    rightRow.appendChild(slugChip); rightRow.appendChild(editBtn);
+    headerRow.appendChild(labelEl); headerRow.appendChild(rightRow);
+
+    // Framing
     const framingEl = document.createElement('div');
-    framingEl.style.cssText = 'font-size:12px;color:var(--muted);font-style:italic;margin-bottom:8px';
+    framingEl.style.cssText = 'font-size:12px;color:var(--muted);font-style:italic;margin:6px 0 8px';
     framingEl.textContent = p.framing || '— no framing set';
-    const metaEl = document.createElement('div');
-    metaEl.style.cssText = 'font-size:10px;font-family:monospace;color:var(--muted)';
-    metaEl.textContent = 'Created ' + (p.created_at || '').slice(0,10) + ' UTC';
-    card.appendChild(nameEl); card.appendChild(framingEl); card.appendChild(metaEl);
+
+    // Connected references
+    const refsEl = document.createElement('div');
+    refsEl.style.cssText = 'font-size:11px;font-family:monospace;color:var(--muted)';
+    if (p.ref_count) {
+      refsEl.textContent = p.ref_count + ' connected reference' + (p.ref_count !== 1 ? 's' : '');
+      if (p.ref_titles && p.ref_titles.length) {
+        const titlesEl = document.createElement('div');
+        titlesEl.style.cssText = 'font-size:10px;color:var(--muted);margin-top:3px';
+        titlesEl.textContent = p.ref_titles.join(' · ') + (p.ref_count > 5 ? ' +more' : '');
+        refsEl.appendChild(titlesEl);
+      }
+    } else {
+      refsEl.textContent = 'No references connected yet — add this slug to a reference's Connections field';
+    }
+
+    // Footer
+    const footerEl = document.createElement('div');
+    footerEl.style.cssText = 'font-size:10px;font-family:monospace;color:var(--muted);margin-top:8px;padding-top:6px;border-top:1px solid var(--border)';
+    footerEl.textContent = 'Created ' + (p.created_at || '').slice(0,16).replace('T',' ') + ' UTC';
+
+    card.appendChild(headerRow); card.appendChild(framingEl);
+    card.appendChild(refsEl); card.appendChild(footerEl);
     list.appendChild(card);
   });
   // Populate intelligence project filter
@@ -1687,35 +1726,72 @@ async function loadProjects() {
     sel.innerHTML = '<option value="">All references</option>';
     data.forEach(p => {
       const opt = document.createElement('option');
-      opt.value = p.name || p._filename.replace('.md','');
-      opt.textContent = opt.value;
+      const slug = p.slug || p.name || p._filename.replace('.md','');
+      opt.value = slug;
+      opt.textContent = (p.label || slug) + ' (' + slug + ')';
       sel.appendChild(opt);
     });
   }
 }
 
 function createProject() {
-  const name = document.getElementById('new-project-name').value.trim();
-  if (!name) return;
+  const label = document.getElementById('new-project-label').value.trim();
+  if (!label) return;
+  // Auto-fill slug if empty
+  const slugInput = document.getElementById('new-project-slug');
+  if (!slugInput.value.trim()) {
+    slugInput.value = label.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,30);
+  }
   document.getElementById('new-project-framing').style.display = 'block';
 }
 function cancelNewProject() {
   document.getElementById('new-project-framing').style.display = 'none';
-  document.getElementById('new-project-name').value = '';
+  document.getElementById('new-project-label').value = '';
+  document.getElementById('new-project-slug').value  = '';
 }
 async function saveNewProject() {
-  const name    = document.getElementById('new-project-name').value.trim();
+  const label   = document.getElementById('new-project-label').value.trim();
+  const slug    = document.getElementById('new-project-slug').value.trim();
   const framing = document.getElementById('project-framing-input').value.trim();
-  if (!name) return;
+  if (!label && !slug) return;
   await fetch('/api/projects', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ name, framing })
+    body: JSON.stringify({ label, slug, framing })
   });
-  document.getElementById('new-project-name').value = '';
+  document.getElementById('new-project-label').value = '';
+  document.getElementById('new-project-slug').value  = '';
   document.getElementById('project-framing-input').value = '';
   document.getElementById('new-project-framing').style.display = 'none';
   loadProjects();
-  loadAutocomplete(); // refresh connection autocomplete
+  loadAutocomplete();
+}
+
+// Project edit modal
+let _editingProjectSlug = null;
+function openProjectEdit(p) {
+  _editingProjectSlug = p.slug || p.name || p._filename.replace('.md','');
+  document.getElementById('proj-edit-label').value   = p.label || _editingProjectSlug;
+  document.getElementById('proj-edit-framing').value = p.framing || '';
+  document.getElementById('proj-edit-modal').style.display = 'flex';
+}
+function closeProjectEdit() {
+  document.getElementById('proj-edit-modal').style.display = 'none';
+  _editingProjectSlug = null;
+}
+async function saveProjectEdit() {
+  if (!_editingProjectSlug) return;
+  const btn = document.getElementById('proj-edit-save-btn');
+  btn.textContent = 'Saving…'; btn.disabled = true;
+  await fetch('/api/projects/' + encodeURIComponent(_editingProjectSlug), {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      label:   document.getElementById('proj-edit-label').value.trim(),
+      framing: document.getElementById('proj-edit-framing').value.trim()
+    })
+  });
+  btn.textContent = 'Save'; btn.disabled = false;
+  closeProjectEdit();
+  loadProjects();
 }
 
 // ── Writing ───────────────────────────────────────────────────────────────
@@ -1741,12 +1817,48 @@ async function loadWriting() {
     typeEl.style.cssText = 'font-family:monospace;font-size:10px;color:var(--muted);background:var(--bg);border:1px solid var(--border);padding:2px 7px;border-radius:3px';
     typeEl.textContent = WRITING_TYPE_LABELS[w.type] || w.type || 'other';
     top.appendChild(titleEl); top.appendChild(typeEl);
+    const editBtn = document.createElement('button');
+    editBtn.className = 'ref-action';
+    editBtn.textContent = 'Edit';
+    editBtn.onclick = () => openWritingEdit(w);
+    top.appendChild(editBtn);
     const meta = document.createElement('div');
     meta.style.cssText = 'font-size:11px;font-family:monospace;color:var(--muted)';
     meta.textContent = (w.slug || '') + (w.project ? ' · ' + w.project : '') + ' · ' + (w.status || 'drafting');
     card.appendChild(top); card.appendChild(meta);
     list.appendChild(card);
   });
+}
+
+let _editingWritingSlug = null;
+function openWritingEdit(w) {
+  _editingWritingSlug = w.slug || w._filename.replace('.md','');
+  document.getElementById('writing-edit-title').value   = w.title || '';
+  document.getElementById('writing-edit-type').value    = w.type || 'other';
+  document.getElementById('writing-edit-project').value = w.project || '';
+  document.getElementById('writing-edit-status').value  = w.status || 'drafting';
+  document.getElementById('writing-edit-modal').style.display = 'flex';
+}
+function closeWritingEdit() {
+  document.getElementById('writing-edit-modal').style.display = 'none';
+  _editingWritingSlug = null;
+}
+async function saveWritingEdit() {
+  if (!_editingWritingSlug) return;
+  const btn = document.getElementById('writing-edit-save-btn');
+  btn.textContent = 'Saving…'; btn.disabled = true;
+  await fetch('/api/writing/' + encodeURIComponent(_editingWritingSlug), {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      title:   document.getElementById('writing-edit-title').value.trim(),
+      type:    document.getElementById('writing-edit-type').value,
+      project: document.getElementById('writing-edit-project').value.trim(),
+      status:  document.getElementById('writing-edit-status').value
+    })
+  });
+  btn.textContent = 'Save'; btn.disabled = false;
+  closeWritingEdit();
+  loadWriting();
 }
 
 async function createWriting() {
@@ -2065,6 +2177,53 @@ checkLocalModels();
     <div class="edit-modal-actions">
       <button class="btn-secondary" onclick="closeEditModal()">Cancel</button>
       <button class="btn-primary" id="edit-save-btn" onclick="saveEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Project Edit Modal -->
+<div class="edit-modal-overlay" id="proj-edit-modal" onclick="if(event.target===this)closeProjectEdit()">
+  <div class="edit-modal">
+    <h3>Edit Project</h3>
+    <div class="edit-field"><label>Display Name</label><input id="proj-edit-label" type="text"></div>
+    <div class="edit-field"><label>Framing / Research Question</label><textarea id="proj-edit-framing" style="min-height:80px"></textarea></div>
+    <div class="edit-modal-actions">
+      <button class="btn-secondary" onclick="closeProjectEdit()">Cancel</button>
+      <button class="btn-primary" id="proj-edit-save-btn" onclick="saveProjectEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Writing Edit Modal -->
+<div class="edit-modal-overlay" id="writing-edit-modal" onclick="if(event.target===this)closeWritingEdit()">
+  <div class="edit-modal">
+    <h3>Edit Writing Element</h3>
+    <div class="edit-field"><label>Title</label><input id="writing-edit-title" type="text"></div>
+    <div class="edit-field" style="display:flex;gap:12px">
+      <div style="flex:1"><label>Type</label>
+        <select id="writing-edit-type" style="width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px">
+          <option value="blog">Blog post</option>
+          <option value="conference">Conference paper</option>
+          <option value="chapter">Dissertation chapter</option>
+          <option value="grant">Grant</option>
+          <option value="journal">Journal article</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div style="flex:1"><label>Status</label>
+        <select id="writing-edit-status" style="width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px">
+          <option value="drafting">Drafting</option>
+          <option value="in-progress">In progress</option>
+          <option value="submitted">Submitted</option>
+          <option value="published">Published</option>
+          <option value="archived">Archived</option>
+        </select>
+      </div>
+    </div>
+    <div class="edit-field"><label>Project Connection</label><input id="writing-edit-project" type="text" placeholder="project-slug (optional)"></div>
+    <div class="edit-modal-actions">
+      <button class="btn-secondary" onclick="closeWritingEdit()">Cancel</button>
+      <button class="btn-primary" id="writing-edit-save-btn" onclick="saveWritingEdit()">Save</button>
     </div>
   </div>
 </div>
