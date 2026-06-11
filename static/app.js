@@ -293,8 +293,14 @@ async function sendPrompt() {
   const grid = document.getElementById('response-grid');
   grid.innerHTML = '';
   document.getElementById('synthesis-panel').style.display = 'none';
-  const MODEL_ORDER = ['gemini', 'anthropic', 'openai', 'deepseek', 'qwen', 'mistral', 'gemma', 'llama'];
-  const models = MODEL_ORDER.filter(m => activeModels.has(m));
+  // Build model list from DOM chip order — cloud first, local after, dynamic ollama: chips last
+  // This means adding a new chip in HTML is all that's needed — no JS list to maintain
+  const CLOUD_CHIP_KEYS = new Set(['gemini', 'anthropic', 'openai']);
+  const allChips   = [...document.querySelectorAll('.model-chip[data-model]')];
+  const chipOrder  = allChips.map(c => c.dataset.model);
+  const cloudFirst = chipOrder.filter(m => CLOUD_CHIP_KEYS.has(m) && activeModels.has(m));
+  const localRest  = chipOrder.filter(m => !CLOUD_CHIP_KEYS.has(m) && activeModels.has(m));
+  const models     = [...cloudFirst, ...localRest];
   models.forEach(model => grid.appendChild(makeCard(model)));
   document.getElementById('cancel-btn').classList.add('visible');
   document.getElementById('send-btn').disabled = true;
@@ -860,7 +866,7 @@ async function annotateInModal(filename) {
   if (!filename) return;
   const btn = document.getElementById('edit-annotate-btn');
   if (btn) { btn.textContent = 'Annotating…'; btn.disabled = true; }
-  const localModels = [...activeModels].filter(m => ['deepseek','qwen','mistral','gemma','llama'].includes(m));
+  const localModels = [...activeModels].filter(m => ['deepseek','qwen','mistral','cohere','gemma','llama'].includes(m));
   const allActive   = [...activeModels];
   const models      = localModels.length > 0 ? localModels.slice(0,2) : allActive.length > 0 ? allActive.slice(0,1) : ['deepseek'];
   try {
@@ -883,7 +889,7 @@ async function annotateRef(filename, btn) {
   if (!filename) return;
   const originalText = btn.textContent;
   btn.textContent = 'Annotating\u2026'; btn.disabled = true;
-  const localModels = [...activeModels].filter(m => ['deepseek','qwen','mistral','gemma','llama'].includes(m));
+  const localModels = [...activeModels].filter(m => ['deepseek','qwen','mistral','cohere','gemma','llama'].includes(m));
   const allActive   = [...activeModels];
   const models      = localModels.length > 0 ? localModels.slice(0,2) : allActive.length > 0 ? allActive.slice(0,1) : ['deepseek'];
   try {
