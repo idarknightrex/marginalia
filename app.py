@@ -1148,17 +1148,43 @@ def library_synthesis():
     local_cfg = settings.get("models", {}).get("local", {})
     model_str = local_cfg.get("reasoning", "deepseek-r1:8b")
 
+    # Load project framing if scoped — inject so the model knows the research lens
+    framing = ""
+    if project:
+        proj_file = PROJECTS_DIR / (project + ".md")
+        if proj_file.exists():
+            try:
+                pt  = proj_file.read_text(encoding="utf-8")
+                pp  = pt.split("---", 2)
+                if len(pp) >= 3 and "## Framing" in pp[2]:
+                    raw = pp[2].split("## Framing")[1].split("\n## ")[0].strip()
+                    if raw and not raw.startswith("<!--"):
+                        framing = raw
+            except Exception:
+                pass
+
+    framing_block = f"\nRESEARCH FRAMING:\n{framing}\n" if framing else ""
     scope = f"project '{project}'" if project else "full library"
+
     lens_prompt = f"""You are a research librarian helping a PhD researcher understand their own collection.
-Read the following reference library ({scope}) and identify:
+Read the following reference library ({scope}) and produce exactly five sections using these exact headers:
 
-1. RECURRING THEMES: What topics and concepts appear most frequently?
-2. TENSIONS: Which sources seem to argue against each other?
-3. GAPS: What important perspectives or topics are missing from this collection?
-4. CONVERSATIONS: Which sources should be read together and why?
-5. RESEARCH QUESTION FIT: How well does this collection support research on embodied learning, community-building, and performance anxiety in undergraduates?
+## RECURRING THEMES
+What topics and concepts appear most frequently? Be specific — cite author names and years.
 
-Be specific — cite author names and years. This is the researcher's own curated material, not general knowledge.
+## TENSIONS
+Which sources argue against each other, or represent competing frameworks? Cite directly.
+
+## ABSENT VOICES
+What perspectives, epistemological traditions, or communities are missing from this collection? Who is not in the room?
+
+## CONVERSATIONS
+Which sources should be read together and why? Surface unexpected connections.
+
+## RESEARCH QUESTION FIT
+How well does this collection serve the research framing? Where are the strongest supports and the weakest coverage?
+{framing_block}
+Use only the researcher's own curated material — do not introduce outside sources.
 
 LIBRARY:
 {library_text}"""
@@ -1240,18 +1266,44 @@ def sessions_synthesis():
     local_cfg = settings.get("models", {}).get("local", {})
     model_str = local_cfg.get("reasoning", "deepseek-r1:8b")
 
-    scope = f"project '{project}'" if project else "all projects"
+    # Load project framing if scoped
+    framing = ""
+    if project:
+        proj_file = PROJECTS_DIR / (project + ".md")
+        if proj_file.exists():
+            try:
+                pt  = proj_file.read_text(encoding="utf-8")
+                pp  = pt.split("---", 2)
+                if len(pp) >= 3 and "## Framing" in pp[2]:
+                    raw = pp[2].split("## Framing")[1].split("\n## ")[0].strip()
+                    if raw and not raw.startswith("<!--"):
+                        framing = raw
+            except Exception:
+                pass
+
+    framing_block = f"\nRESEARCH FRAMING:\n{framing}\n" if framing else ""
+    scope        = f"project '{project}'" if project else "all projects"
     session_text = "\n\n---\n\n".join(summaries)
+
     lens_prompt = f"""You are a research assistant helping a PhD researcher understand their own thinking over time.
-Read the following research session log ({scope}) and identify:
+Read the following research session log ({scope}) and produce exactly five sections using these exact headers:
 
-1. RECURRING QUESTIONS: What questions or problems keep coming up?
-2. EVOLUTION: How has the thinking shifted across sessions?
-3. UNRESOLVED: What threads were raised but never followed up?
-4. MOMENTUM: Where is the research moving? What seems to be building?
-5. GAPS: What important questions haven't been asked yet?
+## RECURRING QUESTIONS
+What questions or problems keep coming up across sessions? Reference specific dates.
 
-Be specific — reference session dates and prompts. This is the researcher's own work, not general knowledge.
+## EVOLUTION
+How has the thinking shifted across sessions? What changed and when?
+
+## UNRESOLVED
+What threads were raised but never followed up? What was left hanging?
+
+## MOMENTUM
+Where is the research moving? What seems to be building toward something?
+
+## ABSENT VOICES
+What important questions haven't been asked yet? What is conspicuously absent from the inquiry?
+{framing_block}
+Be specific — reference session dates and prompts. This is the researcher's own work.
 
 SESSIONS:
 {session_text}"""

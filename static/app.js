@@ -1179,8 +1179,9 @@ async function createWriting() {
 
 
 // ── Intelligence ──────────────────────────────────────────────────────────
-let _intelMode    = 'library';
+let _intelMode     = 'library';
 let _lastSynthesis = '';
+let _intelAbort    = null;
 
 function setIntelMode(mode, btn) {
   _intelMode = mode;
@@ -1188,7 +1189,7 @@ function setIntelMode(mode, btn) {
     .forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   const descs = {
-    library:  'Themes, tensions, gaps, and conversations across your connected sources',
+    library:  'Themes, tensions, absent voices, and conversations across your connected sources',
     sessions: 'Recurring questions, evolution of thinking, and unresolved threads across your sessions',
     both:     'Full picture — references and sessions synthesised together'
   };
@@ -1196,79 +1197,136 @@ function setIntelMode(mode, btn) {
   if (descEl) descEl.textContent = descs[mode];
 }
 
+function cancelIntelSynthesis() {
+  if (_intelAbort) { _intelAbort.abort(); _intelAbort = null; }
+  const textEl    = document.getElementById('library-synthesis-text');
+  const cancelBtn = document.getElementById('intel-cancel-btn');
+  const runBtn    = document.getElementById('intel-run-btn');
+  if (textEl)    { textEl.innerHTML = ''; textEl.style.fontStyle = 'italic'; textEl.style.color = 'var(--muted)'; textEl.textContent = 'Cancelled — model may still be running locally.'; }
+  if (cancelBtn) cancelBtn.style.display = 'none';
+  if (runBtn)    runBtn.disabled = false;
+}
+
+function renderSynthesisSections(raw, container) {
+  container.innerHTML = '';
+  const sectionColors = {
+    'RECURRING THEMES':     '#4285f4',
+    'RECURRING QUESTIONS':  '#4285f4',
+    'TENSIONS':             '#c94242',
+    'ABSENT VOICES':        '#6e56cf',
+    'CONVERSATIONS':        '#3d8b37',
+    'UNRESOLVED':           '#c9a832',
+    'EVOLUTION':            '#0891b2',
+    'MOMENTUM':             '#52c41a',
+    'RESEARCH QUESTION FIT':'#8b4513',
+  };
+  const parts = raw.split(/\n##\s+/);
+  const preamble = parts[0].trim();
+  if (preamble && !preamble.startsWith('##')) {
+    const pre = document.createElement('div');
+    pre.style.cssText = 'font-size:12px;color:var(--muted);font-style:italic;margin-bottom:12px;line-height:1.6';
+    pre.textContent = preamble;
+    container.appendChild(pre);
+  }
+  parts.slice(1).forEach(part => {
+    const nl = part.indexOf('\n');
+    if (nl === -1) return;
+    const title   = part.slice(0, nl).trim().toUpperCase();
+    const content = part.slice(nl + 1).trim();
+    if (!content) return;
+    const color = sectionColors[title] || 'var(--accent)';
+    const card  = document.createElement('div');
+    card.style.cssText = `border:1px solid var(--border);border-left:3px solid ${color};border-radius:4px;padding:12px 14px;margin-bottom:10px;background:var(--surface)`;
+    const heading = document.createElement('div');
+    heading.style.cssText = `font-family:monospace;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:${color};margin-bottom:8px`;
+    heading.textContent = title.charAt(0) + title.slice(1).toLowerCase().replace(/_/g,' ');
+    const body = document.createElement('div');
+    body.style.cssText = 'font-size:12px;color:var(--text);line-height:1.7;white-space:pre-wrap';
+    body.textContent = content;
+    card.appendChild(heading);
+    card.appendChild(body);
+    container.appendChild(card);
+  });
+  if (container.children.length === 0) {
+    container.style.cssText = 'white-space:pre-wrap;font-size:12px;line-height:1.7';
+    container.textContent = raw;
+  }
+}
+
 async function runIntelSynthesis() {
-  const project = (document.getElementById('intelligence-project-filter')?.value || '').trim();
-  const panel   = document.getElementById('library-synthesis-panel');
-  const text    = document.getElementById('library-synthesis-text');
-  const label   = document.getElementById('library-synthesis-label');
-  const note    = document.getElementById('intel-scope-note');
-  const saveBtn = document.getElementById('save-synthesis-btn');
+  const project   = (document.getElementById('intelligence-project-filter')?.value || '').trim();
+  const panel     = document.getElementById('library-synthesis-panel');
+  const textEl    = document.getElementById('library-synthesis-text');
+  const label     = document.getElementById('library-synthesis-label');
+  const note      = document.getElementById('intel-scope-note');
+  const saveBtn   = document.getElementById('save-synthesis-btn');
+  const cancelBtn = document.getElementById('intel-cancel-btn');
+  const runBtn    = document.getElementById('intel-run-btn');
 
   panel.classList.add('visible');
-  text.style.fontStyle = 'italic';
-  text.style.color = 'var(--muted)';
-  text.textContent = 'Reading your research\u2026 DeepSeek R1 is mapping your collection.';
-  if (label) label.textContent = '\u9670 Synthesis';
-  if (note)  note.textContent  = '';
-  if (saveBtn) saveBtn.style.display = 'none';
+  textEl.innerHTML = '';
+  textEl.style.color = 'var(--muted)';
+  textEl.style.fontStyle = 'italic';
+  textEl.textContent = 'Reading your research\u2026 DeepSeek R1 is mapping your collection.';
+  if (label)     label.textContent       = '\u9670 Synthesis';
+  if (note)      note.textContent        = '';
+  if (saveBtn)   saveBtn.style.display   = 'none';
+  if (cancelBtn) cancelBtn.style.display = 'inline-block';
+  if (runBtn)    runBtn.disabled         = true;
 
+  _intelAbort = new AbortController();
+  const signal = _intelAbort.signal;
   const results = {};
 
-  if (_intelMode === 'library' || _intelMode === 'both') {
-    try {
+  try {
+    if (_intelMode === 'library' || _intelMode === 'both') {
       const res  = await fetch('/api/references/library-synthesis', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ project })
+        body: JSON.stringify({ project }), signal
       });
       const data = await res.json();
-      if (data.error) {
-        results.library = '\u26a0 References: ' + data.error;
-      } else {
-        results.library   = data.synthesis;
-        results.refCount  = data.ref_count;
-      }
-    } catch(e) {
-      results.library = '\u26a0 References error: ' + e.message;
+      if (data.error) results.library = '\u26a0 References: ' + data.error;
+      else { results.library = data.synthesis; results.refCount = data.ref_count; }
     }
-  }
-
-  if (_intelMode === 'sessions' || _intelMode === 'both') {
-    try {
+    if (_intelMode === 'sessions' || _intelMode === 'both') {
       const res  = await fetch('/api/sessions/synthesis', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ project })
+        body: JSON.stringify({ project }), signal
       });
       const data = await res.json();
-      if (data.error) {
-        results.sessions = '\u26a0 Sessions: ' + data.error;
-      } else {
-        results.sessions      = data.synthesis;
-        results.sessionCount  = data.session_count;
-      }
-    } catch(e) {
-      results.sessions = '\u26a0 Sessions error: ' + e.message;
+      if (data.error) results.sessions = '\u26a0 Sessions: ' + data.error;
+      else { results.sessions = data.synthesis; results.sessionCount = data.session_count; }
     }
+  } catch(e) {
+    if (e.name === 'AbortError') return;
+    textEl.textContent = '\u26a0 Error: ' + e.message;
+    textEl.style.color = '#c94242';
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    if (runBtn)    runBtn.disabled = false;
+    return;
   }
 
-  let output = '';
+  _intelAbort = null;
+  if (cancelBtn) cancelBtn.style.display = 'none';
+  if (runBtn)    runBtn.disabled = false;
+
+  let raw = '';
   if (_intelMode === 'both' && results.library && results.sessions) {
-    output = '\u2500\u2500 REFERENCES \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n' + results.library +
-             '\n\n\u2500\u2500 SESSIONS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n' + results.sessions;
+    raw = results.library + '\n\n## SESSIONS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n' + results.sessions;
   } else {
-    output = results.library || results.sessions || '\u26a0 No results returned.';
+    raw = results.library || results.sessions || '\u26a0 No results returned.';
   }
 
-  text.style.fontStyle = 'normal';
-  text.style.color     = 'var(--text)';
-  text.textContent     = output;
-  _lastSynthesis       = output;
+  _lastSynthesis = raw;
+  textEl.style.fontStyle = 'normal';
+  textEl.style.color     = 'var(--text)';
+  renderSynthesisSections(raw, textEl);
 
   const parts = [];
   if (results.refCount     !== undefined) parts.push(results.refCount + ' references');
   if (results.sessionCount !== undefined) parts.push(results.sessionCount + ' sessions');
   const scopeLabel = project ? 'project: ' + project : 'all projects';
   if (note) note.textContent = parts.join(' \u00b7 ') + ' \u00b7 ' + scopeLabel;
-
   if (saveBtn && project) saveBtn.style.display = 'inline-block';
 }
 
@@ -1299,7 +1357,6 @@ async function saveSynthesis() {
   btn.textContent = 'Saved \u2713';
   setTimeout(() => { btn.textContent = 'Save to project'; btn.disabled = false; }, 2000);
 }
-
 
 // ── Broadcast ─────────────────────────────────────────────────────────────
 async function checkBroadcast() {
