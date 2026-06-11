@@ -11,16 +11,17 @@ let doiPreviewData = null;
 let pasteFormat = 'bibtex';
 
 const STATUS_COLORS = { verified: '#3d8b37', located: '#c9a832', surfaced: '#6e56cf', rejected: '#c94242' };
-const MODEL_COLORS  = { gemini: '#4285f4', anthropic: '#c96442', openai: '#10a37f', llama: '#9c6ade', deepseek: '#52c41a', gemma: '#ffab00', qwen: '#0891b2', mistral: '#ff7000' };
+const MODEL_COLORS  = { gemini: '#4285f4', anthropic: '#c96442', openai: '#10a37f', llama: '#9c6ade', deepseek: '#52c41a', gemma: '#ffab00', qwen: '#0891b2', mistral: '#ff7000', cohere: '#0d9488' };
 const MODEL_META = {
   gemini:    { type: 'cloud',  web: true,  label: 'web' },
   anthropic: { type: 'cloud',  web: false, label: 'cloud' },
   openai:    { type: 'cloud',  web: false, label: 'cloud' },
-  deepseek:  { type: 'local',  web: false, label: 'local · China · ~1yr cutoff' },
-  qwen:      { type: 'local',  web: false, label: 'local · Asia/Global South · ~1yr cutoff' },
-  mistral:   { type: 'local',  web: false, label: 'local · Europe · ~1yr cutoff' },
-  gemma:     { type: 'local',  web: false, label: 'local · Western · ~1yr cutoff' },
-  llama:     { type: 'local',  web: false, label: 'local · Global · ~1yr cutoff' },
+  deepseek:  { type: 'local',  web: false, label: 'local · China · knowledge to ~early 2024' },
+  qwen:      { type: 'local',  web: false, label: 'local · Asia/Global South · knowledge to ~mid 2024' },
+  mistral:   { type: 'local',  web: false, label: 'local · Europe · knowledge to ~early 2023' },
+  gemma:     { type: 'local',  web: false, label: 'local · Western · knowledge to ~early 2025' },
+  llama:     { type: 'local',  web: false, label: 'local · Global · knowledge to ~early 2024' },
+  cohere:    { type: 'local',  web: false, label: 'local · Canada · knowledge to ~early 2024' },
 };
 function getModelMeta(model) {
   if (MODEL_META[model]) return MODEL_META[model];
@@ -419,6 +420,21 @@ function setFilter(btn) {
   renderRefs();
 }
 
+function populateRefProjectFilter(projects) {
+  const sel = document.getElementById('ref-project-filter');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">All projects</option>';
+  projects.forEach(p => {
+    const slug = p.slug || p.name || (p._filename || '').replace('.md','');
+    const opt  = document.createElement('option');
+    opt.value       = slug;
+    opt.textContent = (p.label || slug) + ' — ' + slug;
+    sel.appendChild(opt);
+  });
+  if (current) sel.value = current;
+}
+
 function updateFilterLabels() {
   const counts = { all: allRefs.length, verified: 0, located: 0, surfaced: 0 };
   const lastChanged = { verified: null, located: null, surfaced: null };
@@ -441,13 +457,15 @@ function updateFilterLabels() {
 }
 
 function renderRefs() {
-  const q    = document.getElementById('ref-search').value.toLowerCase();
-  const list = document.getElementById('ref-list');
+  const q       = document.getElementById('ref-search').value.toLowerCase();
+  const slug    = (document.getElementById('ref-project-filter')?.value || '').trim();
+  const list    = document.getElementById('ref-list');
   list.innerHTML = '';
   const filtered = allRefs.filter(r => {
-    const matchFilter = activeFilter === 'all' || r.verification_status === activeFilter;
-    const matchSearch = !q || [r.title, r.authors, r.themes].some(f => f && f.toLowerCase().includes(q));
-    return matchFilter && matchSearch;
+    const matchFilter  = activeFilter === 'all' || r.verification_status === activeFilter;
+    const matchSearch  = !q || [r.title, r.authors, r.themes].some(f => f && f.toLowerCase().includes(q));
+    const matchProject = !slug || (r.conn_list || []).some(line => line.split('|')[0].trim() === slug);
+    return matchFilter && matchSearch && matchProject;
   });
   document.getElementById('ref-count').textContent = filtered.length + ' of ' + allRefs.length + ' sources';
   if (!filtered.length) {
@@ -976,9 +994,11 @@ async function loadProjects() {
     list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-family:monospace;font-size:12px">No projects yet — create one above, or add a connection slug to a reference</div>';
     return;
   }
+  populateRefProjectFilter(data);
+  populateSynthProjectDropdown(data);
   list.innerHTML = '';
   data.forEach(p => {
-    const slug  = p.slug || p.name || p._filename.replace('.md','');
+    const slug  = p.slug || p.name || (p._filename || '').replace('.md','');
     const label = p.label || slug;
     const card  = document.createElement('div');
     card.style.cssText = 'border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px;padding:14px 16px;margin-bottom:10px;background:var(--surface)';
@@ -1282,7 +1302,7 @@ async function runIntelSynthesis() {
     if (_intelMode === 'library' || _intelMode === 'both') {
       const res  = await fetch('/api/references/library-synthesis', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ project }), signal
+        body: JSON.stringify({ project, model: document.getElementById('intel-model-select')?.value || 'deepseek' }), signal
       });
       const data = await res.json();
       if (data.error) results.library = '\u26a0 References: ' + data.error;
@@ -1291,7 +1311,7 @@ async function runIntelSynthesis() {
     if (_intelMode === 'sessions' || _intelMode === 'both') {
       const res  = await fetch('/api/sessions/synthesis', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ project }), signal
+        body: JSON.stringify({ project, model: document.getElementById('intel-model-select')?.value || 'deepseek' }), signal
       });
       const data = await res.json();
       if (data.error) results.sessions = '\u26a0 Sessions: ' + data.error;
@@ -1445,6 +1465,117 @@ setInterval(() => {
   // Session note prompt every 2 hours
   if (sessionMinutes % 120 === 0) showSessionNotePrompt();
 }, 60000);
+
+
+// ── Prompt synthesis save to project ─────────────────────────────────────
+async function saveSynthesisToProject() {
+  const project  = document.getElementById('synth-save-project')?.value?.trim();
+  if (!project) { alert('Select a project first.'); return; }
+  const synthesis = document.getElementById('synthesis-text')?.textContent?.trim();
+  if (!synthesis) return;
+  const btn    = document.getElementById('synth-save-btn');
+  const status = document.getElementById('synth-save-status');
+  btn.disabled = true;
+  try {
+    await fetch('/api/projects/' + encodeURIComponent(project) + '/synthesis', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ synthesis })
+    });
+    if (status) { status.style.display = 'inline'; setTimeout(() => { status.style.display = 'none'; }, 3000); }
+  } catch(e) { alert('Save failed: ' + e.message); }
+  btn.disabled = false;
+}
+
+function populateSynthProjectDropdown(projects) {
+  const sel = document.getElementById('synth-save-project');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Save to project\u2026</option>';
+  projects.forEach(p => {
+    const slug = p.slug || p.name || (p._filename || '').replace('.md','');
+    const opt  = document.createElement('option');
+    opt.value       = slug;
+    opt.textContent = p.label || slug;
+    sel.appendChild(opt);
+  });
+}
+
+
+// ── PDF folder scan ───────────────────────────────────────────────────────
+async function scanPDFFolder() {
+  const path     = document.getElementById('pdf-folder-path')?.value?.trim() || '';
+  const resultEl = document.getElementById('pdf-scan-result');
+  const ocrEl    = document.getElementById('pdf-ocr-needed');
+  resultEl.className = 'import-result'; resultEl.style.display = 'none';
+  if (ocrEl) ocrEl.style.display = 'none';
+  const btn = document.querySelector('[onclick="scanPDFFolder()"]');
+  if (btn) { btn.textContent = 'Scanning\u2026'; btn.disabled = true; }
+  try {
+    const res  = await fetch('/api/ingest/scan-pdf-folder', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ path })
+    });
+    const data = await res.json();
+    if (data.error) {
+      resultEl.className = 'import-result error'; resultEl.style.display = 'block';
+      resultEl.textContent = data.error;
+    } else {
+      resultEl.className = 'import-result success'; resultEl.style.display = 'block';
+      resultEl.textContent = data.message;
+      if (data.ocr_needed && data.ocr_needed.length) {
+        ocrEl.style.display  = 'block';
+        ocrEl.textContent    = '\u26a0 ' + data.ocr_needed.length + ' file(s) need Gemma OCR \u2014 drop them in Capture below: ' + data.ocr_needed.slice(0,5).join(', ') + (data.ocr_needed.length > 5 ? ' +more' : '');
+      }
+      if (data.imported > 0) loadReferences();
+    }
+  } catch(e) {
+    resultEl.className = 'import-result error'; resultEl.style.display = 'block';
+    resultEl.textContent = 'Scan failed: ' + e.message;
+  }
+  if (btn) { btn.textContent = '\u{1F4C4} Scan'; btn.disabled = false; }
+}
+
+
+// ── Capture OCR ───────────────────────────────────────────────────────────
+function handleCaptureDragOver(e) { e.preventDefault(); document.getElementById('capture-drop-zone').classList.add('drag-over'); }
+function handleCaptureDragLeave() { document.getElementById('capture-drop-zone').classList.remove('drag-over'); }
+function handleCaptureDrop(e)     { e.preventDefault(); document.getElementById('capture-drop-zone').classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f) runCapture(f); }
+function handleCaptureSelect(e)   { const f = e.target.files[0]; if (f) runCapture(f); }
+
+async function runCapture(file) {
+  const label    = document.getElementById('capture-drop-label');
+  const resultEl = document.getElementById('capture-result');
+  const preview  = document.getElementById('capture-text-preview');
+  const note     = document.getElementById('capture-note')?.value?.trim() || '';
+  resultEl.style.display = 'none';
+  preview.style.display  = 'none';
+
+  const isPDF = file.name.toLowerCase().endsWith('.pdf');
+  label.textContent = isPDF
+    ? 'Extracting\u2026 typed PDF: seconds \u00b7 scanned: Gemma OCR ~15\u201345s'
+    : 'Running Gemma 4 OCR\u2026 (~15\u201345s)';
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('note', note);
+
+  try {
+    const res  = await fetch('/api/ingest/ocr', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.error) {
+      resultEl.className = 'import-result error'; resultEl.style.display = 'block';
+      resultEl.textContent = data.error;
+    } else {
+      resultEl.className = 'import-result success'; resultEl.style.display = 'block';
+      resultEl.textContent = data.message + ' \u2014 saved to captures';
+      preview.style.display = 'block';
+      preview.textContent   = data.text;
+    }
+  } catch(e) {
+    resultEl.className = 'import-result error'; resultEl.style.display = 'block';
+    resultEl.textContent = 'Capture failed: ' + e.message;
+  }
+  label.textContent = 'Click to choose or drag and drop';
+}
 
 
 // ── Init ──────────────────────────────────────────────────────────────────

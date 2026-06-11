@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v0.9.2.5
+Marginalia — app.py  v0.9.8
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -545,6 +545,7 @@ def get_local_models():
         "mistral":  ["mistral"],
         "gemma":    ["gemma4", "gemma"],
         "llama":    ["llama3.1", "llama3", "llama"],
+        "cohere":   ["command-r7b", "command-r"],
     }
     installed = {}
     try:
@@ -585,6 +586,7 @@ def key_status():
         "llama":     True,
         "qwen":      True,
         "mistral":   True,
+        "cohere":    True,
     })
 
 
@@ -618,6 +620,8 @@ def call_model(model, prompt):
             return (model, call_ollama(local_cfg.get("asia",       "qwen2.5:14b"),       prompt), None, 0, 0)
         elif model == "mistral":
             return (model, call_ollama(local_cfg.get("europe",     "mistral:7b"),        prompt), None, 0, 0)
+        elif model == "cohere":
+            return (model, call_ollama(local_cfg.get("canadian",   "command-r7b"),       prompt), None, 0, 0)
         elif model.startswith("ollama:"):
             return (model, call_ollama(model[len("ollama:"):], prompt), None, 0, 0)
         else:
@@ -626,9 +630,9 @@ def call_model(model, prompt):
         return (model, None, str(e), 0, 0)
 
 
-MODEL_ORDER  = ["gemini", "anthropic", "openai", "deepseek", "qwen", "mistral", "gemma", "llama"]
+MODEL_ORDER  = ["gemini", "anthropic", "openai", "deepseek", "qwen", "mistral", "cohere", "gemma", "llama"]
 CLOUD_MODELS = {"gemini", "anthropic", "openai"}
-LOCAL_MODELS = {"deepseek", "gemma", "llama", "qwen", "mistral"}
+LOCAL_MODELS = {"deepseek", "gemma", "llama", "qwen", "mistral", "cohere"}
 
 
 @app.route("/api/prompt", methods=["POST"])
@@ -1109,7 +1113,8 @@ def get_all_connections():
 @app.route("/api/references/library-synthesis", methods=["POST"])
 def library_synthesis():
     data    = request.json or {}
-    project = data.get("project", "").strip()  # optional slug filter
+    project = data.get("project", "").strip()
+    req_model = data.get("model", "").strip()
 
     all_refs = read_all_references()
     if not all_refs:
@@ -1146,7 +1151,15 @@ def library_synthesis():
     library_text = "\n\n".join(ref_summaries)
     settings  = load_settings()
     local_cfg = settings.get("models", {}).get("local", {})
-    model_str = local_cfg.get("reasoning", "deepseek-r1:8b")
+    _model_map = {
+        "deepseek": local_cfg.get("reasoning",  "deepseek-r1:8b"),
+        "qwen":     local_cfg.get("asia",       "qwen2.5:14b"),
+        "mistral":  local_cfg.get("europe",     "mistral:7b"),
+        "cohere":   local_cfg.get("canadian",   "command-r7b"),
+        "gemma":    local_cfg.get("multimodal", "gemma4:latest"),
+        "llama":    local_cfg.get("general",    "llama3.1:8b"),
+    }
+    model_str = _model_map.get(req_model, local_cfg.get("reasoning", "deepseek-r1:8b"))
 
     # Load project framing if scoped — inject so the model knows the research lens
     framing = ""
@@ -1199,7 +1212,8 @@ LIBRARY:
 @app.route("/api/sessions/synthesis", methods=["POST"])
 def sessions_synthesis():
     data    = request.json or {}
-    project = data.get("project", "").strip()  # optional slug filter
+    project = data.get("project", "").strip()
+    req_model = data.get("model", "").strip()
 
     session_files = sorted(SESSIONS_DIR.glob("session_*.md"), reverse=True)
     if not session_files:
@@ -1264,7 +1278,15 @@ def sessions_synthesis():
 
     settings  = load_settings()
     local_cfg = settings.get("models", {}).get("local", {})
-    model_str = local_cfg.get("reasoning", "deepseek-r1:8b")
+    _model_map = {
+        "deepseek": local_cfg.get("reasoning",  "deepseek-r1:8b"),
+        "qwen":     local_cfg.get("asia",       "qwen2.5:14b"),
+        "mistral":  local_cfg.get("europe",     "mistral:7b"),
+        "cohere":   local_cfg.get("canadian",   "command-r7b"),
+        "gemma":    local_cfg.get("multimodal", "gemma4:latest"),
+        "llama":    local_cfg.get("general",    "llama3.1:8b"),
+    }
+    model_str = _model_map.get(req_model, local_cfg.get("reasoning", "deepseek-r1:8b"))
 
     # Load project framing if scoped
     framing = ""
@@ -1395,6 +1417,219 @@ Provide a scholarly annotation suitable for a PhD research bibliography."""
     return jsonify({"status": "annotated", "filename": ref_filename, "models_used": list(results.keys()), "synthesis": synthesis})
 
 
+@app.route("/api/ingest/scan-pdf-folder", methods=["POST"])
+def scan_pdf_folder():
+    """
+    Scan ~/Documents/Research/PDFs/ for PDF files.
+    For each file matching AuthorLastname_Year_ShortTitle.pdf naming convention,
+    attempt text extraction via pdfplumber first.
+    If extraction returns nothing (scanned/image PDF), flag for Gemma OCR.
+    Creates reference stubs from filename + any extracted metadata.
+    """
+    import re
+    pdf_dir = Path.home() / "Documents" / "Research" / "PDFs"
+    custom_path = (request.json or {}).get("path", "")
+    if custom_path:
+        pdf_dir = Path(custom_path).expanduser()
+
+    if not pdf_dir.exists():
+        return jsonify({"error": f"PDF folder not found: {pdf_dir}", "path": str(pdf_dir)}), 404
+
+    results = {"scanned": 0, "imported": 0, "skipped": 0, "ocr_needed": [], "errors": []}
+    existing_refs = {r.get("_filename", "") for r in read_all_references()}
+
+    for pdf_path in sorted(pdf_dir.glob("*.pdf")):
+        results["scanned"] += 1
+        stem = pdf_path.stem  # AuthorLastname_Year_ShortTitle
+
+        # Parse filename convention: Author_Year_Title
+        parts = stem.split("_", 2)
+        author = parts[0].strip() if len(parts) > 0 else ""
+        year   = parts[1].strip() if len(parts) > 1 else ""
+        title  = parts[2].replace("-", " ").replace("_", " ").strip() if len(parts) > 2 else stem
+
+        # Validate year looks like a year
+        if not re.match(r'^\d{4}$', year):
+            year, title = "", stem  # filename doesn't follow convention — use whole stem as title
+
+        # Skip if already in library (loose match on author+year)
+        already_exists = any(
+            author.lower() in fn.lower() and year in fn
+            for fn in existing_refs
+        )
+        if already_exists:
+            results["skipped"] += 1
+            continue
+
+        # Attempt text extraction
+        text_extracted = ""
+        needs_ocr = False
+        try:
+            import pdfplumber
+            with pdfplumber.open(str(pdf_path)) as pdf:
+                pages_text = []
+                for page in pdf.pages[:3]:  # first 3 pages for metadata
+                    t = page.extract_text()
+                    if t:
+                        pages_text.append(t)
+                text_extracted = "\n".join(pages_text).strip()
+        except Exception as e:
+            results["errors"].append(f"{pdf_path.name}: pdfplumber error — {e}")
+
+        if not text_extracted:
+            needs_ocr = True
+            results["ocr_needed"].append(pdf_path.name)
+
+        # Build reference stub
+        rec = {
+            "title":             title,
+            "authors":           author,
+            "year":              year,
+            "source_type":       "other",
+            "url_doi":           "",
+            "verification_status": "surfaced",
+            "physical_holding":  "pdf",
+            "holding_location":  str(pdf_path),
+            "annotation":        text_extracted[:500] if text_extracted else "<!-- Scanned PDF — run Gemma OCR to extract content -->",
+            "tags":              "pdf-import",
+        }
+
+        try:
+            write_canonical_reference(rec)
+            results["imported"] += 1
+        except Exception as e:
+            results["errors"].append(f"{pdf_path.name}: {e}")
+
+    return jsonify({
+        **results,
+        "path": str(pdf_dir),
+        "message": _scan_summary(results)
+    })
+
+
+def _scan_summary(r):
+    parts = []
+    if r["imported"]:   parts.append(f"{r['imported']} imported")
+    if r["skipped"]:    parts.append(f"{r['skipped']} already in library")
+    if r["ocr_needed"]: parts.append(f"{len(r['ocr_needed'])} need Gemma OCR")
+    if r["errors"]:     parts.append(f"{len(r['errors'])} errors")
+    return " · ".join(parts) if parts else "Nothing new found"
+
+
+@app.route("/api/ingest/ocr", methods=["POST"])
+def ocr_capture():
+    """
+    Run Gemma 4 OCR on an uploaded image or scanned PDF.
+    Returns extracted text as a capture record.
+    Saves to canonical/sessions/ as a capture file.
+    """
+    import base64
+
+    file        = request.files.get("file")
+    source_note = request.form.get("note", "")   # optional context from researcher
+    if not file:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    filename  = file.filename.lower()
+    file_data = file.read()
+    is_pdf    = filename.endswith(".pdf")
+    is_image  = any(filename.endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"])
+
+    if not is_pdf and not is_image:
+        return jsonify({"error": "Unsupported file type — use PDF, JPG, PNG, or WEBP"}), 400
+
+    # For PDFs: try text extraction first
+    if is_pdf:
+        try:
+            import pdfplumber, io
+            with pdfplumber.open(io.BytesIO(file_data)) as pdf:
+                pages_text = []
+                for page in pdf.pages:
+                    t = page.extract_text()
+                    if t:
+                        pages_text.append(t)
+                extracted = "\n".join(pages_text).strip()
+            if extracted:
+                # Typed PDF — no OCR needed
+                capture = _write_capture(extracted, file.filename, source_note, method="pdfplumber")
+                return jsonify({
+                    "status":   "extracted",
+                    "method":   "pdfplumber",
+                    "message":  f"Text extracted — {len(pdf.pages)} pages",
+                    "text":     extracted[:1000],
+                    "capture":  capture,
+                })
+        except Exception:
+            pass  # fall through to Gemma
+
+    # Image or scanned PDF — send to Gemma 4 via Ollama multimodal
+    try:
+        import urllib.request as _ur
+        b64 = base64.b64encode(file_data).decode("utf-8")
+        settings  = load_settings()
+        local_cfg = settings.get("models", {}).get("local", {})
+        model_str = local_cfg.get("multimodal", "gemma4:latest")
+
+        ocr_prompt = "Please transcribe all text visible in this image exactly as written. Preserve line breaks where meaningful. If handwritten, do your best — note any words you are uncertain about with [?]."
+        if source_note:
+            ocr_prompt += f"\n\nContext from researcher: {source_note}"
+
+        payload = json.dumps({
+            "model":      model_str,
+            "prompt":     ocr_prompt,
+            "images":     [b64],
+            "stream":     False,
+            "keep_alive": 0
+        }).encode()
+        req = _ur.Request(
+            f"{OLLAMA_BASE}/api/generate",
+            data=payload,
+            headers={"Content-Type": "application/json"}
+        )
+        with _ur.urlopen(req, timeout=120) as r:
+            ocr_text = json.loads(r.read()).get("response", "").strip()
+
+        capture = _write_capture(ocr_text, file.filename, source_note, method="gemma-ocr")
+        return jsonify({
+            "status":  "ocr_complete",
+            "method":  "gemma-ocr",
+            "message": "Handwritten or scanned — Gemma OCR complete",
+            "text":    ocr_text[:1000],
+            "capture": capture,
+        })
+
+    except Exception as e:
+        return jsonify({"error": f"Gemma OCR failed: {e}"}), 500
+
+
+def _write_capture(text: str, source_filename: str, note: str, method: str) -> str:
+    """Write a capture canonical file and return its filename."""
+    capture_id = str(uuid.uuid4())
+    timestamp  = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
+    filename   = f"capture_{timestamp}.md"
+    canonical  = f"""---
+id: {capture_id}
+created_at: {datetime.utcnow().isoformat()}
+source_type: capture
+capture_method: {method}
+source_file: {source_filename}
+status: raw-capture
+---
+
+## Source Note
+{note or "<!-- Add context: where was this from, who wrote it, what situation? -->"}
+
+## Extracted Text
+{text}
+
+## Your Annotation
+<!-- What does this capture mean for your research? -->
+"""
+    filepath = SESSIONS_DIR / filename
+    filepath.write_text(canonical, encoding="utf-8")
+    return filename
+
+
 @app.route("/api/broadcast", methods=["GET"])
 def get_broadcast():
     try:
@@ -1425,6 +1660,6 @@ def serve_assets(filename):
 if __name__ == "__main__":
     port = int(os.environ.get("MARGINALIA_PORT", 5000))
     threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{port}")).start()
-    print(f"\n  Marginalia v0.9.2.5 running at http://localhost:{port}\n")
+    print(f"\n  Marginalia v0.9.8 running at http://localhost:{port}\n")
     print(f"  Keys loaded from: {'setup.env' if setup_env.exists() else '.env (legacy)'}\n")
     app.run(host="0.0.0.0", port=port, debug=False)

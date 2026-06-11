@@ -107,31 +107,37 @@
           <div class="model-chip active" data-model="deepseek" data-local="true" style="background:rgba(82,196,26,.1);border-color:rgba(82,196,26,.3)" onclick="toggleModel(this)">
             <div class="chip-dot" style="background:#52c41a"></div><span style="color:#52c41a">DeepSeek R1</span>
           </div>
-          <span class="chip-tooltip">🔒 Local · DeepSeek R1 8B · China<br>Runs on your machine · Private · No internet<br>Reasoning model · Knowledge: ~1yr behind<br>Also runs the synthesis pass<br>Models unload after each response to free RAM</span>
+          <span class="chip-tooltip">🔒 Local · DeepSeek R1 8B · China<br>Runs on your machine · Private · No internet<br>Reasoning model · Also runs the synthesis pass<br>Training knowledge: current to approx. early 2024<br>Models unload after each response to free RAM</span>
         </div>
         <div class="chip-wrapper">
           <div class="model-chip inactive" data-model="qwen" data-local="true" style="background:rgba(8,145,178,.1);border-color:rgba(8,145,178,.3)" onclick="toggleModel(this)">
             <div class="chip-dot" style="background:#e8490f"></div><span style="color:#e8490f">Qwen 2.5</span>
           </div>
-          <span class="chip-tooltip">🔒 Local · Qwen 2.5 14B · Asia / Global South<br>Alibaba · Runs on your machine · Private · No internet<br>Immense Asian cultural, historical & academic training data<br>Strong English reasoning · Knowledge: ~1yr behind<br>~9GB · Models unload after each response</span>
+          <span class="chip-tooltip">🔒 Local · Qwen 2.5 14B · Asia / Global South<br>Alibaba · Runs on your machine · Private · No internet<br>Immense Asian cultural, historical &amp; academic training data<br>Training knowledge: current to approx. mid 2024<br>~9GB · Models unload after each response</span>
         </div>
         <div class="chip-wrapper">
           <div class="model-chip inactive" data-model="mistral" data-local="true" style="background:rgba(255,112,0,.1);border-color:rgba(255,112,0,.3)" onclick="toggleModel(this)">
             <div class="chip-dot" style="background:#ff7000"></div><span style="color:#ff7000">Mistral</span>
           </div>
-          <span class="chip-tooltip">🔒 Local · Mistral 7B · Europe<br>Mistral AI Paris · Runs on your machine · Private · No internet<br>European legal, pedagogical & societal training data<br>Apache 2.0 · Knowledge: ~1yr behind<br>~4GB</span>
+          <span class="chip-tooltip">🔒 Local · Mistral 7B · Europe<br>Mistral AI Paris · Runs on your machine · Private · No internet<br>European legal, pedagogical &amp; societal training data<br>Training knowledge: current to approx. early 2023<br>~4GB</span>
+        </div>
+        <div class="chip-wrapper">
+          <div class="model-chip inactive" data-model="cohere" data-local="true" style="background:rgba(13,148,136,.1);border-color:rgba(13,148,136,.3)" onclick="toggleModel(this)">
+            <div class="chip-dot" style="background:#0d9488"></div><span style="color:#0d9488">Command R7B</span>
+          </div>
+          <span class="chip-tooltip">🔒 Local · Cohere Command R7B · Canada<br>Cohere · Toronto · Runs on your machine · Private · No internet<br>Strong RAG and tool use · 23 languages<br>Training knowledge: current to approx. early 2024<br>~5.1GB · 8K context window</span>
         </div>
         <div class="chip-wrapper">
           <div class="model-chip inactive" data-model="gemma" data-local="true" style="background:rgba(255,171,0,.1);border-color:rgba(255,171,0,.3)" onclick="toggleModel(this)">
             <div class="chip-dot" style="background:#ffab00"></div><span style="color:#ffab00">Gemma 4</span>
           </div>
-          <span class="chip-tooltip">🔒 Local · Gemma 4 (Google)<br>Runs on your machine · Private · No internet<br>Multimodal capable · Knowledge: ~1yr behind<br>9.6GB — keep inactive on 16GB when DeepSeek is running</span>
+          <span class="chip-tooltip">🔒 Local · Gemma 4 (Google)<br>Runs on your machine · Private · No internet<br>Multimodal capable — handles images and handwritten notes<br>Training knowledge: current to approx. early 2025<br>9.6GB — keep inactive on 16GB when DeepSeek is running</span>
         </div>
         <div class="chip-wrapper">
           <div class="model-chip inactive" data-model="llama" data-local="true" style="background:rgba(156,106,222,.1);border-color:rgba(156,106,222,.3)" onclick="toggleModel(this)">
             <div class="chip-dot" style="background:#9c6ade"></div><span style="color:#9c6ade">Llama 3.1</span>
           </div>
-          <span class="chip-tooltip">🔒 Local · Llama 3.1 8B (Meta)<br>Runs on your machine · Private · No internet<br>General purpose · Knowledge: ~1yr behind<br>Pull first: ollama pull llama3.1:8b</span>
+          <span class="chip-tooltip">🔒 Local · Llama 3.1 8B (Meta)<br>Runs on your machine · Private · No internet<br>General purpose · Training knowledge: current to approx. early 2024<br>Pull first: ollama pull llama3.1:8b</span>
         </div>
         <!-- dynamic local chips injected here by checkLocalModels() -->
       </div>
@@ -163,9 +169,13 @@
         </select>
       </div>
       <div id="synthesis-text"></div>
-      <div style="margin-top:10px;display:flex;gap:6px">
+      <div style="margin-top:10px;display:flex;gap:6px;align-items:center">
         <button class="ref-action">Flag Reference</button>
-        <button class="ref-action">Session Saved &#10003;</button>
+        <select id="synth-save-project" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:monospace;font-size:10px">
+          <option value="">Save to project…</option>
+        </select>
+        <button class="ref-action" id="synth-save-btn" onclick="saveSynthesisToProject()">Save</button>
+        <span id="synth-save-status" style="font-family:monospace;font-size:10px;color:var(--verified);display:none">Saved ✓</span>
       </div>
     </div>
   </div>
@@ -195,6 +205,13 @@
       <input class="search-input" id="ref-search" placeholder="Search author, title, or theme..." oninput="filterRefs()">
       <button class="btn-secondary" onclick="showView('ingest', document.querySelector('[onclick*=\'ingest\']'))">&#8853; Import</button>
       <button class="btn-primary" onclick="openAddPanel()">+ Add</button>
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+      <select id="ref-project-filter" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;flex:1" onchange="filterRefs()">
+        <option value="">All projects</option>
+      </select>
+      <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="document.getElementById('ref-project-filter').value='';filterRefs()">Clear</button>
     </div>
 
     <div class="filter-row">
@@ -240,9 +257,46 @@
       <div class="import-result" id="paste-import-result"></div>
     </div>
 
-    <div class="import-section" style="opacity:.5">
-      <div class="import-section-title">&#9685; Capture (Phase 4)</div>
-      <div style="font-family:monospace;font-size:11px;color:var(--muted)">Photo / PDF / Audio — coming soon. Gemma 4 as primary OCR engine.</div>
+    <!-- PDF folder scan -->
+    <div class="import-section">
+      <div class="import-section-title">&#128196; Scan PDF Folder</div>
+      <div style="font-family:monospace;font-size:11px;color:var(--muted);margin-bottom:10px">
+        Scans <code style="background:var(--bg);padding:1px 5px;border-radius:2px">~/Documents/Research/PDFs/</code> for new PDFs.<br>
+        Typed PDFs extract instantly. Scanned or handwritten PDFs are flagged for Gemma OCR.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <input id="pdf-folder-path" class="search-input" style="flex:1;font-family:monospace;font-size:11px"
+          placeholder="~/Documents/Research/PDFs/ (leave blank for default)">
+        <button class="btn-primary" onclick="scanPDFFolder()">&#128196; Scan</button>
+      </div>
+      <div class="import-result" id="pdf-scan-result"></div>
+      <div id="pdf-ocr-needed" style="display:none;margin-top:8px;font-family:monospace;font-size:11px;color:#c9a832"></div>
+    </div>
+
+    <!-- Photo / handwritten note capture -->
+    <div class="import-section">
+      <div class="import-section-title">&#9685; Capture — Photo or Scanned PDF</div>
+      <div style="font-family:monospace;font-size:11px;color:var(--muted);margin-bottom:10px">
+        Drop a photo of handwritten notes, a scanned page, or a PDF.<br>
+        Typed PDFs extract in seconds. Handwritten or scanned files run Gemma 4 OCR (~15–45s).
+      </div>
+      <div class="import-drop-zone" id="capture-drop-zone"
+        onclick="document.getElementById('capture-file-input').click()"
+        ondragover="handleCaptureDragOver(event)"
+        ondragleave="handleCaptureDragLeave(event)"
+        ondrop="handleCaptureDrop(event)">
+        <input type="file" id="capture-file-input" accept=".pdf,.jpg,.jpeg,.png,.webp"
+          onchange="handleCaptureSelect(event)">
+        <div class="import-drop-icon">&#9685;</div>
+        <div class="import-drop-label" id="capture-drop-label">Click to choose or drag and drop</div>
+        <div class="import-drop-types">.pdf &nbsp;&#183;&nbsp; .jpg &nbsp;&#183;&nbsp; .png &nbsp;&#183;&nbsp; .webp</div>
+      </div>
+      <div style="margin-top:8px">
+        <input id="capture-note" class="search-input" style="font-family:monospace;font-size:11px"
+          placeholder="Optional context — where is this from? what situation?">
+      </div>
+      <div class="import-result" id="capture-result"></div>
+      <div id="capture-text-preview" style="display:none;margin-top:10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:10px;font-family:monospace;font-size:11px;color:var(--text);white-space:pre-wrap;max-height:200px;overflow-y:auto"></div>
     </div>
   </div>
 
@@ -323,7 +377,15 @@
       </div>
 
       <!-- Step 3: Run -->
-      <div style="display:flex;gap:8px;align-items:center">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select class="synthesis-model-select" id="intel-model-select" title="Model used for synthesis">
+          <option value="deepseek">DeepSeek R1</option>
+          <option value="qwen">Qwen 2.5</option>
+          <option value="mistral">Mistral</option>
+          <option value="cohere">Command R7B</option>
+          <option value="gemma">Gemma 4</option>
+          <option value="llama">Llama 3.1</option>
+        </select>
         <button class="btn-primary" id="intel-run-btn" onclick="runIntelSynthesis()">&#9670; Run synthesis</button>
         <button class="cancel-btn" id="intel-cancel-btn" style="display:none" onclick="cancelIntelSynthesis()">&#9632; Cancel</button>
         <button class="btn-secondary" id="save-synthesis-btn" style="display:none" onclick="saveSynthesis()">Save to project</button>
@@ -526,7 +588,7 @@
   <span class="status-online">&#9679; Marginalia running</span>
   <span id="session-time">Session: 0m</span>
   <span class="status-cost" id="cost-display">Claude: $0.0000</span>
-  <span class="status-project">v0.9.2.5 &middot; LLM</span>
+  <span class="status-project">v0.9.8 &middot; LLM</span>
 </div>
 
 <script src="/static/app.js"></script>
