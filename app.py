@@ -140,10 +140,11 @@ updated_at: {datetime.utcnow().isoformat()}
     return filepath
 
 
-def write_canonical_session(prompt: str, responses: dict, synthesis: str = "") -> Path:
-    session_id = str(uuid.uuid4())
-    timestamp  = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
-    filename   = f"session_{timestamp}.md"
+def write_canonical_session(prompt: str, responses: dict, synthesis: str = "", project: str = "") -> Path:
+    session_id    = str(uuid.uuid4())
+    timestamp     = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
+    filename      = f"session_{timestamp}.md"
+    prompt_label  = prompt.strip().replace("\n", " ")[:80]
     response_blocks = "\n\n".join(
         f"### {model.capitalize()}\n{text}" for model, text in responses.items() if text
     )
@@ -152,6 +153,8 @@ def write_canonical_session(prompt: str, responses: dict, synthesis: str = "") -
 id: {session_id}
 created_at: {datetime.utcnow().isoformat()}
 models: {list(responses.keys())}
+project: {project}
+prompt_label: {prompt_label}
 ---
 
 ## Prompt
@@ -1105,9 +1108,22 @@ def get_all_connections():
 
 @app.route("/api/references/library-synthesis", methods=["POST"])
 def library_synthesis():
-    refs = read_all_references()
-    if not refs:
+    data    = request.json or {}
+    project = data.get("project", "").strip()  # optional slug filter
+
+    all_refs = read_all_references()
+    if not all_refs:
         return jsonify({"error": "No references found in library"}), 400
+
+    # Filter by project slug when set — match against conn_list
+    if project:
+        refs = [r for r in all_refs
+                if any(project in line.split("|")[0].strip()
+                       for line in (r.get("conn_list") or []))]
+        if not refs:
+            return jsonify({"error": f"No references connected to project '{project}'"}), 400
+    else:
+        refs = all_refs
 
     ref_summaries = []
     for ref in refs:
@@ -1132,8 +1148,9 @@ def library_synthesis():
     local_cfg = settings.get("models", {}).get("local", {})
     model_str = local_cfg.get("reasoning", "deepseek-r1:8b")
 
+    scope = f"project '{project}'" if project else "full library"
     lens_prompt = f"""You are a research librarian helping a PhD researcher understand their own collection.
-Read the following reference library and identify:
+Read the following reference library ({scope}) and identify:
 
 1. RECURRING THEMES: What topics and concepts appear most frequently?
 2. TENSIONS: Which sources seem to argue against each other?
@@ -1148,7 +1165,100 @@ LIBRARY:
 
     try:
         synthesis = call_ollama(model_str, lens_prompt)
-        return jsonify({"synthesis": synthesis, "ref_count": len(refs)})
+        return jsonify({"synthesis": synthesis, "ref_count": len(refs), "project": project})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sessions/synthesis", methods=["POST"])
+def sessions_synthesis():
+    data    = request.json or {}
+    project = data.get("project", "").strip()  # optional slug filter
+
+    session_files = sorted(SESSIONS_DIR.glob("session_*.md"), reverse=True)
+    if not session_files:
+        return jsonify({"error": "No sessions found"}), 400
+
+    summaries = []
+    matched   = 0
+    for filepath in session_files:
+        try:
+            text  = filepath.read_text(encoding="utf-8")
+            parts = text.split("---", 2)
+            if len(parts) < 3:
+                continue
+            # Parse frontmatter
+            meta = {}
+            for line in parts[1].strip().splitlines():
+                if ": " in line:
+                    k, v = line.split(": ", 1)
+                    meta[k.strip()] = v.strip()
+            body = parts[2]
+
+            # Filter logic: frontmatter project field first, text match fallback
+            if project:
+                fm_project = meta.get("project", "").strip()
+                if fm_project:
+                    if fm_project != project:
+                        continue  # frontmatter present, doesn't match — skip
+                else:
+                    # Old session — fall back to text match on prompt + responses
+                    if project.lower() not in body.lower():
+                        continue
+
+            # Extract prompt
+            prompt_text = ""
+            if "## Prompt" in body:
+                prompt_text = body.split("## Prompt")[1].split("\n## ")[0].strip()[:300]
+
+            # Extract synthesis if present
+            synth_text = ""
+            if "## Synthesis" in body:
+                raw = body.split("## Synthesis")[1].split("\n## ")[0].strip()
+                if raw and not raw.startswith("<!--"):
+                    synth_text = raw[:300]
+
+            label    = meta.get("prompt_label", "") or prompt_text[:80]
+            created  = meta.get("created_at", "")[:16].replace("T", " ")
+            models   = meta.get("models", "")
+            entry    = f"[{created}] {label}\nModels: {models}"
+            if synth_text:
+                entry += f"\nSynthesis: {synth_text}"
+            elif prompt_text:
+                entry += f"\nPrompt: {prompt_text}"
+            summaries.append(entry)
+            matched += 1
+            if matched >= 20:  # cap at 20 sessions to avoid context overflow
+                break
+        except Exception:
+            continue
+
+    if not summaries:
+        return jsonify({"error": f"No sessions found{' for project ' + project if project else ''}"}), 400
+
+    settings  = load_settings()
+    local_cfg = settings.get("models", {}).get("local", {})
+    model_str = local_cfg.get("reasoning", "deepseek-r1:8b")
+
+    scope = f"project '{project}'" if project else "all projects"
+    session_text = "\n\n---\n\n".join(summaries)
+    lens_prompt = f"""You are a research assistant helping a PhD researcher understand their own thinking over time.
+Read the following research session log ({scope}) and identify:
+
+1. RECURRING QUESTIONS: What questions or problems keep coming up?
+2. EVOLUTION: How has the thinking shifted across sessions?
+3. UNRESOLVED: What threads were raised but never followed up?
+4. MOMENTUM: Where is the research moving? What seems to be building?
+5. GAPS: What important questions haven't been asked yet?
+
+Be specific — reference session dates and prompts. This is the researcher's own work, not general knowledge.
+
+SESSIONS:
+{session_text}"""
+
+    try:
+        synthesis = call_ollama(model_str, lens_prompt)
+        return jsonify({"synthesis": synthesis, "session_count": matched, "project": project})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

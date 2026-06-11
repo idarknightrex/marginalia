@@ -888,26 +888,8 @@ async function annotateRef(filename, btn) {
 }
 
 
-// ── Library intelligence ──────────────────────────────────────────────────
-async function runLibrarySynthesis() {
-  const panel = document.getElementById('library-synthesis-panel');
-  const text  = document.getElementById('library-synthesis-text');
-  panel.classList.add('visible');
-  text.style.fontStyle = 'italic'; text.style.color = 'var(--muted)';
-  text.textContent = 'Reading your library\u2026 DeepSeek R1 is mapping your collection.';
-  try {
-    const res  = await fetch('/api/references/library-synthesis', { method: 'POST', headers: {'Content-Type':'application/json'} });
-    const data = await res.json();
-    if (data.error) {
-      text.textContent = '\u26a0 ' + data.error; text.style.color = '#c94242';
-    } else {
-      text.style.fontStyle = 'normal'; text.style.color = 'var(--text)';
-      text.textContent = data.synthesis;
-    }
-  } catch(e) {
-    text.textContent = 'Error: ' + e.message; text.style.color = '#c94242';
-  }
-}
+// ── Library intelligence (alias — do not remove) ──────────────────────────
+function runLibrarySynthesis() { runIntelSynthesis(); }
 
 
 // ── Tag and connection autocomplete ──────────────────────────────────────
@@ -1197,31 +1179,124 @@ async function createWriting() {
 
 
 // ── Intelligence ──────────────────────────────────────────────────────────
+let _intelMode    = 'library';
+let _lastSynthesis = '';
+
+function setIntelMode(mode, btn) {
+  _intelMode = mode;
+  document.querySelectorAll('#intel-mode-library, #intel-mode-sessions, #intel-mode-both')
+    .forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const descs = {
+    library:  'Themes, tensions, gaps, and conversations across your connected sources',
+    sessions: 'Recurring questions, evolution of thinking, and unresolved threads across your sessions',
+    both:     'Full picture — references and sessions synthesised together'
+  };
+  const descEl = document.getElementById('intel-mode-desc');
+  if (descEl) descEl.textContent = descs[mode];
+}
+
+async function runIntelSynthesis() {
+  const project = (document.getElementById('intelligence-project-filter')?.value || '').trim();
+  const panel   = document.getElementById('library-synthesis-panel');
+  const text    = document.getElementById('library-synthesis-text');
+  const label   = document.getElementById('library-synthesis-label');
+  const note    = document.getElementById('intel-scope-note');
+  const saveBtn = document.getElementById('save-synthesis-btn');
+
+  panel.classList.add('visible');
+  text.style.fontStyle = 'italic';
+  text.style.color = 'var(--muted)';
+  text.textContent = 'Reading your research\u2026 DeepSeek R1 is mapping your collection.';
+  if (label) label.textContent = '\u9670 Synthesis';
+  if (note)  note.textContent  = '';
+  if (saveBtn) saveBtn.style.display = 'none';
+
+  const results = {};
+
+  if (_intelMode === 'library' || _intelMode === 'both') {
+    try {
+      const res  = await fetch('/api/references/library-synthesis', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ project })
+      });
+      const data = await res.json();
+      if (data.error) {
+        results.library = '\u26a0 References: ' + data.error;
+      } else {
+        results.library   = data.synthesis;
+        results.refCount  = data.ref_count;
+      }
+    } catch(e) {
+      results.library = '\u26a0 References error: ' + e.message;
+    }
+  }
+
+  if (_intelMode === 'sessions' || _intelMode === 'both') {
+    try {
+      const res  = await fetch('/api/sessions/synthesis', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ project })
+      });
+      const data = await res.json();
+      if (data.error) {
+        results.sessions = '\u26a0 Sessions: ' + data.error;
+      } else {
+        results.sessions      = data.synthesis;
+        results.sessionCount  = data.session_count;
+      }
+    } catch(e) {
+      results.sessions = '\u26a0 Sessions error: ' + e.message;
+    }
+  }
+
+  let output = '';
+  if (_intelMode === 'both' && results.library && results.sessions) {
+    output = '\u2500\u2500 REFERENCES \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n' + results.library +
+             '\n\n\u2500\u2500 SESSIONS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n' + results.sessions;
+  } else {
+    output = results.library || results.sessions || '\u26a0 No results returned.';
+  }
+
+  text.style.fontStyle = 'normal';
+  text.style.color     = 'var(--text)';
+  text.textContent     = output;
+  _lastSynthesis       = output;
+
+  const parts = [];
+  if (results.refCount     !== undefined) parts.push(results.refCount + ' references');
+  if (results.sessionCount !== undefined) parts.push(results.sessionCount + ' sessions');
+  const scopeLabel = project ? 'project: ' + project : 'all projects';
+  if (note) note.textContent = parts.join(' \u00b7 ') + ' \u00b7 ' + scopeLabel;
+
+  if (saveBtn && project) saveBtn.style.display = 'inline-block';
+}
+
 async function loadIntelligenceProjects() {
   const res  = await fetch('/api/projects');
   const data = await res.json();
   const sel  = document.getElementById('intelligence-project-filter');
   if (!sel) return;
-  sel.innerHTML = '<option value="">All references</option>';
+  sel.innerHTML = '<option value="">All projects \u2014 full library &amp; all sessions</option>';
   data.forEach(p => {
-    const opt = document.createElement('option');
-    opt.value = p.name || p._filename.replace('.md','');
-    opt.textContent = opt.value;
+    const opt  = document.createElement('option');
+    const slug = p.slug || p.name || (p._filename || '').replace('.md','');
+    opt.value       = slug;
+    opt.textContent = (p.label || slug) + ' \u2014 ' + slug;
     sel.appendChild(opt);
   });
 }
 
-let _lastSynthesis = '';
 async function saveSynthesis() {
-  const project = document.getElementById('intelligence-project-filter').value;
+  const project = (document.getElementById('intelligence-project-filter')?.value || '').trim();
   if (!project || !_lastSynthesis) return;
   const btn = document.getElementById('save-synthesis-btn');
-  btn.textContent = 'Saving…'; btn.disabled = true;
+  btn.textContent = 'Saving\u2026'; btn.disabled = true;
   await fetch('/api/projects/' + encodeURIComponent(project) + '/synthesis', {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ synthesis: _lastSynthesis })
   });
-  btn.textContent = 'Saved ✓';
+  btn.textContent = 'Saved \u2713';
   setTimeout(() => { btn.textContent = 'Save to project'; btn.disabled = false; }, 2000);
 }
 

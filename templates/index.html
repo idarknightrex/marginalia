@@ -193,7 +193,6 @@
 
     <div class="search-row">
       <input class="search-input" id="ref-search" placeholder="Search author, title, or theme..." oninput="filterRefs()">
-      <button class="btn-secondary" onclick="runLibrarySynthesis()">&#9670; What's in my library?</button>
       <button class="btn-secondary" onclick="showView('ingest', document.querySelector('[onclick*=\'ingest\']'))">&#8853; Import</button>
       <button class="btn-primary" onclick="openAddPanel()">+ Add</button>
     </div>
@@ -204,11 +203,6 @@
       <button class="filter-btn" data-filter="verified" id="filter-verified" onclick="setFilter(this)">verified</button>
       <button class="filter-btn" data-filter="located" id="filter-located" onclick="setFilter(this)">located</button>
       <button class="filter-btn" data-filter="surfaced" id="filter-surfaced" onclick="setFilter(this)">surfaced</button>
-    </div>
-
-    <div class="library-synthesis-panel" id="library-synthesis-panel">
-      <div class="library-synthesis-label">&#9670; What's in my library?</div>
-      <div class="library-synthesis-text" id="library-synthesis-text"></div>
     </div>
 
     <div id="ref-list"></div>
@@ -303,27 +297,52 @@
   <div id="view-intelligence" class="view">
     <div class="page-header"><h1>Intelligence</h1><small>What does your research know?</small></div>
 
+    <!-- Synthesis engine -->
     <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface)">
-      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">What's in my library?</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Cross-reference synthesis — themes, tensions, gaps, conversations across your collected sources</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-        <select id="intelligence-project-filter" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px">
-          <option value="">All references</option>
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Synthesis</div>
+
+      <!-- Step 1: Project scope -->
+      <div style="margin-bottom:10px">
+        <div style="font-size:11px;font-family:monospace;color:var(--muted);margin-bottom:4px">Scope</div>
+        <select id="intelligence-project-filter" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;width:100%">
+          <option value="">All projects — full library &amp; all sessions</option>
         </select>
-        <button class="btn-primary" onclick="runLibrarySynthesis()">&#9670; Run synthesis</button>
+      </div>
+
+      <!-- Step 2: Mode -->
+      <div style="margin-bottom:12px">
+        <div style="font-size:11px;font-family:monospace;color:var(--muted);margin-bottom:6px">What to synthesise</div>
+        <div style="display:flex;gap:6px">
+          <button class="format-btn active" id="intel-mode-library" onclick="setIntelMode('library', this)">&#9678; References</button>
+          <button class="format-btn" id="intel-mode-sessions" onclick="setIntelMode('sessions', this)">&#9672; Sessions</button>
+          <button class="format-btn" id="intel-mode-both" onclick="setIntelMode('both', this)">&#9670; Both</button>
+        </div>
+        <div style="font-size:11px;font-family:monospace;color:var(--muted);margin-top:6px" id="intel-mode-desc">
+          Themes, tensions, gaps, and conversations across your connected sources
+        </div>
+      </div>
+
+      <!-- Step 3: Run -->
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn-primary" onclick="runIntelSynthesis()">&#9670; Run synthesis</button>
         <button class="btn-secondary" id="save-synthesis-btn" style="display:none" onclick="saveSynthesis()">Save to project</button>
       </div>
-      <div class="library-synthesis-panel" id="library-synthesis-panel">
-        <div class="library-synthesis-label">&#9670; What's in my library?</div>
+
+      <!-- Output -->
+      <div class="library-synthesis-panel" id="library-synthesis-panel" style="margin-top:14px">
+        <div class="library-synthesis-label" id="library-synthesis-label">&#9670; Synthesis</div>
         <div class="library-synthesis-text" id="library-synthesis-text" style="max-height:400px;overflow-y:auto;padding-right:6px"></div>
+        <div style="font-size:10px;font-family:monospace;color:var(--muted);margin-top:8px" id="intel-scope-note"></div>
       </div>
     </div>
 
+    <!-- What am I missing? — v0.9.3 -->
     <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface);opacity:.6">
       <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">What am I missing? <span style="color:var(--accent)">— v0.9.3</span></div>
       <div style="font-size:12px;color:var(--muted)">Predictive gap analysis — surfaces unasked questions and argument weaknesses across your sessions</div>
     </div>
 
+    <!-- Network map — v1.0 -->
     <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;background:var(--surface);opacity:.6">
       <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Network map <span style="color:var(--accent)">— v1.0</span></div>
       <div style="font-size:12px;color:var(--muted)">Force-directed graph — references, projects, and writing elements as nodes, connections as edges</div>
