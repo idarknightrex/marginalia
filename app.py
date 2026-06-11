@@ -799,6 +799,22 @@ def update_reference(ref_filename):
         else:
             return body.rstrip() + "\n\n" + marker + "\n" + new_content + "\n"
 
+    def ensure_sections(body):
+        """Add missing canonical sections to old reference files."""
+        for section in ["Themes", "Connections", "Annotation", "Argument Connection", "Your Annotation", "Edit History", "Status History"]:
+            if "## " + section not in body:
+                placeholder = {
+                    "Themes": "<!-- Conceptual themes — full phrases, one per line as: - theme -->",
+                    "Connections": "<!-- Connections to writing/projects: name | note -->",
+                    "Annotation": "<!-- AI annotation — run Generate to populate -->",
+                    "Argument Connection": "<!-- How does this source support, complicate, or challenge your research argument? -->",
+                    "Your Annotation": "<!-- Your own critical reading of this source -->",
+                }.get(section, "")
+                if placeholder:
+                    body = body.rstrip() + "\n\n## " + section + "\n" + placeholder + "\n"
+        return body
+
+    body = ensure_sections(body)
     if "annotation" in data and data["annotation"]:
         body = replace_section(body, "Annotation", data["annotation"])
         meta.pop("annotation", None)

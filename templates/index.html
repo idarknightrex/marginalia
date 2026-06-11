@@ -2119,7 +2119,7 @@ checkLocalModels();
 </script>
 <!-- Edit Reference Modal -->
 <div class="edit-modal-overlay" id="edit-modal" onclick="if(event.target===this)closeEditModal()">
-  <div class="edit-modal">
+  <div class="edit-modal" onclick="event.stopPropagation()">
     <h3>Edit Reference</h3>
     <div class="edit-field"><label>Title</label><input id="edit-title" type="text"></div>
     <div class="edit-field"><label>Authors (semicolon-separated)</label><input id="edit-authors" type="text"></div>
@@ -2187,7 +2187,7 @@ checkLocalModels();
 
 <!-- Project Edit Modal -->
 <div class="edit-modal-overlay" id="proj-edit-modal" onclick="if(event.target===this)closeProjectEdit()">
-  <div class="edit-modal">
+  <div class="edit-modal" onclick="event.stopPropagation()">
     <h3>Edit Project</h3>
     <div class="edit-field"><label>Display Name</label><input id="proj-edit-label" type="text"></div>
     <div class="edit-field"><label>SLUG <span style="font-weight:normal;text-transform:none;font-size:10px;color:var(--muted)">— used in reference connections, changing this breaks existing links</span></label><input id="proj-edit-slug" type="text"></div>
@@ -2201,7 +2201,7 @@ checkLocalModels();
 
 <!-- Writing Edit Modal -->
 <div class="edit-modal-overlay" id="writing-edit-modal" onclick="if(event.target===this)closeWritingEdit()">
-  <div class="edit-modal">
+  <div class="edit-modal" onclick="event.stopPropagation()">
     <h3>Edit Writing Element</h3>
     <div class="edit-field"><label>Title</label><input id="writing-edit-title" type="text"></div>
     <div class="edit-field"><label>SLUG <span style="font-weight:normal;text-transform:none;font-size:10px;color:var(--muted)">— used in reference connections, changing breaks existing links</span></label><input id="writing-edit-slug" type="text"></div>
