@@ -711,7 +711,7 @@
       </div>
       <div class="library-synthesis-panel" id="library-synthesis-panel">
         <div class="library-synthesis-label">&#9670; What's in my library?</div>
-        <div class="library-synthesis-text" id="library-synthesis-text"></div>
+        <div class="library-synthesis-text" id="library-synthesis-text" style="max-height:400px;overflow-y:auto;padding-right:6px"></div>
       </div>
     </div>
 
@@ -1270,6 +1270,13 @@ function renderRefs() {
     // Footer: created_at + last status change + last edit
     const footerEl = document.createElement('div');
     footerEl.style.cssText = 'font-size:10px;font-family:monospace;color:var(--muted);margin-top:10px;padding-top:6px;border-top:1px solid var(--border);line-height:1.8';
+    // Show holding location if set
+    if (ref.holding_location && ref.holding_location !== '') {
+      const holdEl = document.createElement('div');
+      holdEl.style.cssText = 'font-size:11px;font-family:monospace;color:var(--muted);margin-top:6px';
+      holdEl.textContent = '\u2117 ' + ref.holding_location + (ref.physical_holding && ref.physical_holding !== 'none' ? ' (' + ref.physical_holding + ')' : '');
+      card.appendChild(holdEl);
+    }
     const created = (ref.created_at || '').slice(0,16).replace('T',' ');
     let footerLines = [];
     if (created) footerLines.push('Added ' + created + ' UTC');
@@ -1609,6 +1616,7 @@ function openEditModal(ref, runAnnotate) {
   document.getElementById('edit-type').value     = ref.source_type || 'journal';
   document.getElementById('edit-doi').value      = ref.url_doi || '';
   document.getElementById('edit-tags').value        = ref.tags || '';
+  document.getElementById('edit-status').value           = ref.verification_status || 'surfaced';
   document.getElementById('edit-holding').value          = ref.physical_holding || 'none';
   document.getElementById('edit-holding-location').value = ref.holding_location || '';
   document.getElementById('edit-themes-body').value = ref.themes_body || (ref.themes ? ref.themes.split(',').map(t => '- ' + t.trim()).join('\n') : '');
@@ -1636,6 +1644,7 @@ async function saveEdit() {
     source_type: document.getElementById('edit-type').value,
     url_doi:  document.getElementById('edit-doi').value.trim(),
     tags:             document.getElementById('edit-tags').value.trim(),
+    verification_status: document.getElementById('edit-status').value,
     physical_holding: document.getElementById('edit-holding').value,
     holding_location: document.getElementById('edit-holding-location').value.trim(),
     themes_body: document.getElementById('edit-themes-body').value.trim(),
@@ -2134,6 +2143,14 @@ checkLocalModels();
       </div>
     </div>
     <div class="edit-field"><label>DOI / URL</label><input id="edit-doi" type="text"></div>
+    <div class="edit-field">
+      <label>STATUS</label>
+      <select id="edit-status" style="width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px">
+        <option value="surfaced">Surfaced</option>
+        <option value="located">Located</option>
+        <option value="verified">Verified</option>
+      </select>
+    </div>
     <div class="edit-field">
       <label>PHYSICAL HOLDING</label>
       <select id="edit-holding" style="width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px">

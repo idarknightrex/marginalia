@@ -225,6 +225,42 @@ annotation and argument_connection fields in canonical references are downstream
 ---
 
 
+
+---
+
+## Session log — 2026-06-10 (build session)
+
+### Completed this session
+- v0.9.2.1 — local chip multi-select restored
+- v0.9.2.2 — dynamic local model discovery (any ollama pull auto-surfaces as chip)
+- v0.9.2.3 — reference card complete: edit, delete, status cycle, annotate merged into edit modal, AI annotation + Your Annotation + Argument Connection fields, tags/themes/connections architecture, card timestamps + history log
+- v0.9.2.4 — six-tab navigation: Prompt · References · Ingest · Projects · Writing · Intelligence; Projects with label/slug/framing/connected refs; Writing with type/status/project; Intelligence tab with library synthesis; modal stopPropagation fix; UTC timestamps throughout; import log to canonical/sessions/imports.md; status + holding in edit modal; holding location on card
+
+### Known issues / build list for next session
+**Prompt tab**
+- Synthesis output: extract named sources and offer one-click Add to library
+- Flag Reference from prompt view should be wired
+
+**References tab**
+- Project substring match may produce false positives — tighten to exact slug match
+
+**Projects tab**
+- Writing elements need reference connection field
+
+**Intelligence tab**
+- Library synthesis fully in Intelligence (trigger + output) — References tab no longer shows it
+- Three synthesis modes: Library (all) / Project (scoped) / Writing (scoped)
+- Synthesis prompt seeded with project framings + writing elements + dominant tags
+- Output scrollable, max-height constrained ✓ (done this session)
+- Retry/regenerate button persists after run and on timeout
+
+**Architecture notes**
+- Synthesis output is a session artifact, not a reference — lives in canonical/sessions/
+- Named sources within synthesis output should be scrapeable → Add to library
+- "What's in my library?" is the serendipity layer — keep it broad, seed it with researcher context
+
+---
+
 ---
 
 ## Versioning Roadmap — locked June 2026
