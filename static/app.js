@@ -181,7 +181,7 @@ document.getElementById('prompt-input').addEventListener('input', function() {
 
 const MODEL_TIMEOUT = {
   gemini: 60000, anthropic: 60000, openai: 60000,
-  deepseek: 300000, gemma: 300000, llama: 300000, qwen: 300000, mistral: 300000
+  deepseek: 300000, gemma: 300000, llama: 300000, qwen: 300000, mistral: 300000, cohere: 300000
 };
 let activeReader = null;
 
@@ -234,7 +234,7 @@ function stopLiveTimer(model) {
 const countdownTimers = {};
 function startCardCountdown(model) { startTimeoutBar(model); }
 function startTimeoutBar(model) {
-  const total  = (MODEL_TIMEOUT[model] || 30000) / 1000;
+  const total  = (MODEL_TIMEOUT[model] || (model.startsWith('ollama:') ? 300000 : 30000)) / 1000;
   const cdEl   = document.getElementById('cd-' + model);
   const fillEl = document.getElementById('cdfill-' + model);
   const secEl  = document.getElementById('cdsec-' + model);
@@ -263,6 +263,21 @@ function startTimeoutBar(model) {
     }
   }
   if (secEl) secEl.textContent = total + 's';
+  // After 10s on a local model, hint that first-load from disk is expected
+  const isLocal = !['gemini','anthropic','openai'].includes(model);
+  if (isLocal) {
+    setTimeout(() => {
+      const card = document.getElementById('card-' + model);
+      if (card && card.classList.contains('loading')) {
+        const rt = card.querySelector('.response-text');
+        if (rt && !rt.textContent) {
+          rt.textContent = 'Loading model from disk\u2026 first run takes ~20s on cold start.';
+          rt.style.fontStyle = 'italic';
+          rt.style.color = 'var(--muted)';
+        }
+      }
+    }, 10000);
+  }
   countdownTimers[model] = setTimeout(tick, 1000);
 }
 function stopTimeoutBar(model) {
