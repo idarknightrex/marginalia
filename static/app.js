@@ -1252,6 +1252,9 @@ function cancelIntelSynthesis() {
 function renderSynthesisSections(raw, container) {
   container.innerHTML = '';
   const sectionColors = {
+    'CONSENSUS':            '#3d8b37',
+    'DIVERGENCE':           '#c94242',
+    'UNIQUE CONTRIBUTIONS': '#4285f4',
     'RECURRING THEMES':     '#4285f4',
     'RECURRING QUESTIONS':  '#4285f4',
     'TENSIONS':             '#c94242',
@@ -1310,7 +1313,7 @@ async function runIntelSynthesis() {
   textEl.style.color = 'var(--muted)';
   textEl.style.fontStyle = 'italic';
   textEl.textContent = 'Reading your research\u2026 DeepSeek R1 is mapping your collection.';
-  if (label)     label.textContent       = '\u9670 Synthesis';
+  if (label)     label.textContent       = '\u25C6 Synthesis';
   if (note)      note.textContent        = '';
   if (saveBtn)   saveBtn.style.display   = 'none';
   if (cancelBtn) cancelBtn.style.display = 'inline-block';

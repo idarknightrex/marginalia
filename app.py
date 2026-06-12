@@ -256,11 +256,19 @@ RESEARCHER'S QUESTION:
 MODEL RESPONSES:
 {response_block}
 
-Provide a synthesis identifying:
-1. CONSENSUS: What do the models agree on?
-2. DIVERGENCE: Where do they differ, and why?
-3. UNIQUE CONTRIBUTIONS: What does each model add that others missed?
-4. GAPS: What important angles did none address?
+Produce exactly four sections using these exact headers (the ## prefix is required):
+
+## CONSENSUS
+What do the models agree on?
+
+## DIVERGENCE
+Where do they differ, and why? Name which model said what.
+
+## UNIQUE CONTRIBUTIONS
+What does each model add that others missed? Name each model.
+
+## ABSENT VOICES
+What important angles did none of the models address?
 
 Be concise. The researcher will use this to decide what to investigate further."""
     try:
