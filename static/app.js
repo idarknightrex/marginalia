@@ -392,9 +392,10 @@ async function sendPrompt() {
           const panel = document.getElementById('synthesis-panel');
           const text  = document.getElementById('synthesis-text');
           panel.classList.remove('pulsing');
-          text.style.color = 'var(--text)';
+          text.style.color     = 'var(--text)';
           text.style.fontStyle = 'normal';
-          text.textContent = evt.text;
+          _lastSynthesis = evt.text;
+          renderSynthesisSections(evt.text, text);
         } else if (evt.event === 'done') {
           document.getElementById('cancel-btn').classList.remove('visible');
           document.getElementById('send-btn').disabled = false;
@@ -1492,7 +1493,7 @@ setInterval(() => {
 async function saveSynthesisToProject() {
   const project  = document.getElementById('synth-save-project')?.value?.trim();
   if (!project) { alert('Select a project first.'); return; }
-  const synthesis = document.getElementById('synthesis-text')?.textContent?.trim();
+  const synthesis = _lastSynthesis;
   if (!synthesis) return;
   const btn    = document.getElementById('synth-save-btn');
   const status = document.getElementById('synth-save-status');
