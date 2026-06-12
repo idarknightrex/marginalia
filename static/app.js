@@ -1594,6 +1594,10 @@ async function runCapture(file) {
   resultEl.style.display = 'none';
   preview.style.display  = 'none';
 
+  // Clear any previous action buttons
+  const existingActions = document.getElementById('capture-actions');
+  if (existingActions) existingActions.remove();
+
   const isPDF = file.name.toLowerCase().endsWith('.pdf');
   label.textContent = isPDF
     ? 'Extracting\u2026 typed PDF: seconds \u00b7 scanned: Gemma OCR ~15\u201345s'
@@ -1611,15 +1615,73 @@ async function runCapture(file) {
       resultEl.textContent = data.error;
     } else {
       resultEl.className = 'import-result success'; resultEl.style.display = 'block';
-      resultEl.textContent = data.message + ' \u2014 saved to captures';
+      resultEl.textContent = data.message;
       preview.style.display = 'block';
       preview.textContent   = data.text;
+
+      // Action buttons — save extracted text as Note or Reference
+      const actions = document.createElement('div');
+      actions.id = 'capture-actions';
+      actions.style.cssText = 'display:flex;gap:8px;margin-top:10px;align-items:center';
+
+      const saveNoteBtn = document.createElement('button');
+      saveNoteBtn.className = 'btn-primary';
+      saveNoteBtn.style.fontSize = '11px';
+      saveNoteBtn.textContent = '\u9670 Save as Note';
+      saveNoteBtn.onclick = () => captureToNote(data.text, file.name, note);
+
+      const saveRefBtn = document.createElement('button');
+      saveRefBtn.className = 'btn-secondary';
+      saveRefBtn.style.fontSize = '11px';
+      saveRefBtn.textContent = '\u2117 Save as Reference';
+      saveRefBtn.onclick = () => captureToReference(data.text, file.name);
+
+      const hint = document.createElement('span');
+      hint.style.cssText = 'font-family:monospace;font-size:10px;color:var(--muted)';
+      hint.textContent = 'Note = your thinking \u00b7 Reference = someone else\u2019s work';
+
+      actions.appendChild(saveNoteBtn);
+      actions.appendChild(saveRefBtn);
+      actions.appendChild(hint);
+      preview.parentNode.insertBefore(actions, preview.nextSibling);
     }
   } catch(e) {
     resultEl.className = 'import-result error'; resultEl.style.display = 'block';
     resultEl.textContent = 'Capture failed: ' + e.message;
   }
   label.textContent = 'Click to choose or drag and drop';
+}
+
+function captureToNote(text, filename, contextNote) {
+  // Pre-fill note editor and switch to Notes tab
+  const titleInput = document.getElementById('new-note-title');
+  const bodyInput  = document.getElementById('new-note-body');
+  const sourceInput = document.getElementById('new-note-source');
+  if (titleInput)  titleInput.value  = filename.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+  if (sourceInput) sourceInput.value = filename;
+  if (bodyInput)   bodyInput.value   = text;
+  // Also pre-fill context note if provided
+  if (contextNote && document.getElementById('new-note-body')) {
+    document.getElementById('new-note-body').value = contextNote
+      ? contextNote + '\n\n---\n\n' + text
+      : text;
+  }
+  // Switch to Notes tab
+  const notesBtn = document.querySelector('[onclick*="notes"]');
+  showView('notes', notesBtn);
+  // Scroll to new note form
+  setTimeout(() => {
+    if (titleInput) titleInput.focus();
+  }, 100);
+}
+
+function captureToReference(text, filename) {
+  // Pre-fill the Add Reference panel with extracted text as annotation
+  openAddPanel();
+  const titleInput = document.getElementById('ref-title');
+  const annoInput  = document.getElementById('ref-annotation');
+  if (titleInput) titleInput.value = filename.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+  if (annoInput)  annoInput.value  = text.slice(0, 1000); // annotation field limit
 }
 
 
