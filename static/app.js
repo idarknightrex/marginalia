@@ -33,6 +33,7 @@ function getModelMeta(model) {
 function showView(name, btn) {
   if (name === 'projects')     loadProjects();
   if (name === 'writing')      loadWriting();
+  if (name === 'notes')        loadNotes();
   if (name === 'intelligence') loadIntelligenceProjects();
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -1018,6 +1019,7 @@ async function loadProjects() {
   }
   populateRefProjectFilter(data);
   populateSynthProjectDropdown(data);
+  populateNoteProjectFilter(data);
   list.innerHTML = '';
   data.forEach(p => {
     const slug  = p.slug || p.name || (p._filename || '').replace('.md','');
@@ -1227,13 +1229,14 @@ let _intelAbort    = null;
 
 function setIntelMode(mode, btn) {
   _intelMode = mode;
-  document.querySelectorAll('#intel-mode-library, #intel-mode-sessions, #intel-mode-both')
+  document.querySelectorAll('#intel-mode-library, #intel-mode-sessions, #intel-mode-both, #intel-mode-predict')
     .forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   const descs = {
     library:  'Themes, tensions, absent voices, and conversations across your connected sources',
     sessions: 'Recurring questions, evolution of thinking, and unresolved threads across your sessions',
-    both:     'Full picture — references and sessions synthesised together'
+    both:     'Full picture — references and sessions synthesised together',
+    predict:  'What am I missing? Argument weaknesses, unasked questions, examiner challenges'
   };
   const descEl = document.getElementById('intel-mode-desc');
   if (descEl) descEl.textContent = descs[mode];
@@ -1264,6 +1267,11 @@ function renderSynthesisSections(raw, container) {
     'EVOLUTION':            '#0891b2',
     'MOMENTUM':             '#52c41a',
     'RESEARCH QUESTION FIT':'#8b4513',
+    'UNASKED QUESTIONS':    '#6e56cf',
+    'ARGUMENT WEAKNESSES':  '#c94242',
+    'MISSING PERSPECTIVES': '#0891b2',
+    'EXAMINER CHALLENGES':  '#c9a832',
+    'NEXT MOVES':           '#3d8b37',
   };
   const parts = raw.split(/\n##\s+/);
   const preamble = parts[0].trim();
@@ -1342,6 +1350,16 @@ async function runIntelSynthesis() {
       if (data.error) results.sessions = '\u26a0 Sessions: ' + data.error;
       else { results.sessions = data.synthesis; results.sessionCount = data.session_count; }
     }
+
+    if (_intelMode === 'predict') {
+      const res  = await fetch('/api/sessions/predict', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ project, model: document.getElementById('intel-model-select')?.value || 'deepseek' }), signal
+      });
+      const data = await res.json();
+      if (data.error) results.predict = '\u26a0 ' + data.error;
+      else { results.predict = data.synthesis; results.sessionCount = data.session_count; }
+    }
   } catch(e) {
     if (e.name === 'AbortError') return;
     textEl.textContent = '\u26a0 Error: ' + e.message;
@@ -1358,6 +1376,8 @@ async function runIntelSynthesis() {
   let raw = '';
   if (_intelMode === 'both' && results.library && results.sessions) {
     raw = results.library + '\n\n## SESSIONS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n' + results.sessions;
+  } else if (_intelMode === 'predict') {
+    raw = results.predict || '\u26a0 No results returned.';
   } else {
     raw = results.library || results.sessions || '\u26a0 No results returned.';
   }
@@ -1600,6 +1620,176 @@ async function runCapture(file) {
     resultEl.textContent = 'Capture failed: ' + e.message;
   }
   label.textContent = 'Click to choose or drag and drop';
+}
+
+
+// ── Notes ─────────────────────────────────────────────────────────────────
+let allNotes = [];
+
+async function loadNotes() {
+  const res  = await fetch('/api/notes');
+  allNotes   = await res.json();
+  renderNotes();
+}
+
+function filterNotes() { renderNotes(); }
+
+function renderNotes() {
+  const q       = (document.getElementById('note-search')?.value || '').toLowerCase();
+  const project = (document.getElementById('note-project-filter')?.value || '').trim();
+  const list    = document.getElementById('note-list');
+  if (!list) return;
+  const filtered = allNotes.filter(n => {
+    const matchSearch  = !q || [n.title, n.body, n.questions, n.connections, n.source].some(f => f && f.toLowerCase().includes(q));
+    const matchProject = !project || (n.project || '').trim() === project;
+    return matchSearch && matchProject;
+  });
+  if (!filtered.length) {
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-family:monospace;font-size:12px">No notes match</div>';
+    return;
+  }
+  list.innerHTML = '';
+  filtered.forEach(note => {
+    const card = document.createElement('div');
+    card.style.cssText = 'border:1px solid var(--border);border-left:3px solid var(--surfaced);border-radius:4px;padding:12px 14px;margin-bottom:8px;background:var(--surface)';
+    // Header
+    const topRow = document.createElement('div');
+    topRow.style.cssText = 'display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px';
+    const titleEl = document.createElement('div');
+    titleEl.style.cssText = 'font-family:Georgia,serif;font-size:14px;font-weight:bold;color:var(--text)';
+    titleEl.textContent = note.title || '';
+    const metaEl = document.createElement('div');
+    metaEl.style.cssText = 'font-family:monospace;font-size:10px;color:var(--muted)';
+    metaEl.textContent = (note.created_at || '').slice(0,10);
+    topRow.appendChild(titleEl);
+    topRow.appendChild(metaEl);
+    card.appendChild(topRow);
+    // Chips
+    const chips = [
+      note.source  ? { label: '\u2117 ' + note.source,  color: '#4285f4' } : null,
+      note.project ? { label: '\u25c6 ' + note.project, color: 'var(--accent)' } : null,
+      note.writing ? { label: '\u270e ' + note.writing, color: '#0891b2' } : null,
+    ].filter(Boolean);
+    if (chips.length) {
+      const chipRow = document.createElement('div');
+      chipRow.style.cssText = 'margin-bottom:8px';
+      chips.forEach(c => {
+        const chip = document.createElement('span');
+        chip.className = 'tag';
+        chip.style.cssText = `background:${c.color}18;color:${c.color};border:1px solid ${c.color}44`;
+        chip.textContent = c.label;
+        chipRow.appendChild(chip);
+      });
+      card.appendChild(chipRow);
+    }
+    // Body preview
+    if (note.body) {
+      const bodyEl = document.createElement('div');
+      bodyEl.style.cssText = 'font-size:12px;color:var(--text);line-height:1.7;margin-bottom:8px;font-family:Georgia,serif';
+      bodyEl.textContent = note.body.length > 300 ? note.body.slice(0,300) + '\u2026' : note.body;
+      card.appendChild(bodyEl);
+    }
+    // Questions preview
+    if (note.questions) {
+      const qEl = document.createElement('div');
+      qEl.style.cssText = 'font-size:11px;color:var(--muted);font-style:italic;border-left:2px solid var(--border);padding-left:8px;margin-bottom:8px';
+      qEl.textContent = note.questions.length > 150 ? note.questions.slice(0,150) + '\u2026' : note.questions;
+      card.appendChild(qEl);
+    }
+    // Actions
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:6px;margin-top:6px';
+    const editBtn = document.createElement('button');
+    editBtn.className = 'ref-action';
+    editBtn.textContent = 'Edit';
+    editBtn.onclick = () => openNoteEdit(note);
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'ref-action ref-action-danger';
+    deleteBtn.textContent = '\u2715 Delete';
+    deleteBtn.onclick = () => deleteNote(note._filename, deleteBtn);
+    actions.appendChild(editBtn);
+    actions.appendChild(deleteBtn);
+    card.appendChild(actions);
+    list.appendChild(card);
+  });
+}
+
+async function saveNote() {
+  const title   = document.getElementById('new-note-title')?.value?.trim();
+  const source  = document.getElementById('new-note-source')?.value?.trim() || '';
+  const project = document.getElementById('new-note-project')?.value?.trim() || '';
+  const writing = document.getElementById('new-note-writing')?.value?.trim() || '';
+  const body    = document.getElementById('new-note-body')?.value?.trim() || '';
+  if (!title) { alert('Title required.'); return; }
+  await fetch('/api/notes', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ title, source, project, writing, body })
+  });
+  document.getElementById('new-note-title').value  = '';
+  document.getElementById('new-note-source').value = '';
+  document.getElementById('new-note-project').value = '';
+  document.getElementById('new-note-writing').value = '';
+  document.getElementById('new-note-body').value   = '';
+  loadNotes();
+}
+
+let _editingNoteFilename = null;
+function openNoteEdit(note) {
+  _editingNoteFilename = note._filename;
+  document.getElementById('note-edit-title').value       = note.title || '';
+  document.getElementById('note-edit-source').value      = note.source || '';
+  document.getElementById('note-edit-project').value     = note.project || '';
+  document.getElementById('note-edit-writing').value     = note.writing || '';
+  document.getElementById('note-edit-body').value        = note.body || '';
+  document.getElementById('note-edit-questions').value   = note.questions || '';
+  document.getElementById('note-edit-connections').value = note.connections || '';
+  document.getElementById('note-edit-modal').style.display = 'flex';
+}
+function closeNoteEdit() {
+  document.getElementById('note-edit-modal').style.display = 'none';
+  _editingNoteFilename = null;
+}
+async function saveNoteEdit() {
+  if (!_editingNoteFilename) return;
+  const btn = document.getElementById('note-edit-save-btn');
+  btn.textContent = 'Saving\u2026'; btn.disabled = true;
+  await fetch('/api/notes/' + encodeURIComponent(_editingNoteFilename), {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      title:       document.getElementById('note-edit-title').value.trim(),
+      source:      document.getElementById('note-edit-source').value.trim(),
+      project:     document.getElementById('note-edit-project').value.trim(),
+      writing:     document.getElementById('note-edit-writing').value.trim(),
+      body:        document.getElementById('note-edit-body').value.trim(),
+      questions:   document.getElementById('note-edit-questions').value.trim(),
+      connections: document.getElementById('note-edit-connections').value.trim(),
+    })
+  });
+  btn.textContent = 'Save'; btn.disabled = false;
+  closeNoteEdit();
+  loadNotes();
+}
+async function deleteNote(filename, btn) {
+  if (!filename) return;
+  if (!confirm('Delete this note? This cannot be undone.')) return;
+  btn.textContent = 'Deleting\u2026'; btn.disabled = true;
+  await fetch('/api/notes/' + encodeURIComponent(filename), { method: 'DELETE' });
+  loadNotes();
+}
+
+function populateNoteProjectFilter(projects) {
+  const sel = document.getElementById('note-project-filter');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">All projects</option>';
+  projects.forEach(p => {
+    const slug = p.slug || p.name || (p._filename || '').replace('.md','');
+    const opt  = document.createElement('option');
+    opt.value       = slug;
+    opt.textContent = p.label || slug;
+    sel.appendChild(opt);
+  });
+  if (current) sel.value = current;
 }
 
 

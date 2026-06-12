@@ -39,14 +39,20 @@ KEYS = {
 
 OLLAMA_BASE = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 
+# Research PDF folder — configurable in setup.env, defaults to ~/Documents/Research/PDFs/
+_research_pdf_path = os.getenv("RESEARCH_PDF_PATH", "")
+RESEARCH_PDF_DIR = Path(_research_pdf_path).expanduser() if _research_pdf_path else Path.home() / "Documents" / "Research" / "PDFs"
+
 # If OLLAMA_MODELS_PATH is set in setup.env, inject it into the environment
 # so Ollama finds models on external drives (e.g. Vault SSD on Mac Mini)
 _ollama_models_path = os.getenv("OLLAMA_MODELS_PATH", "")
 if _ollama_models_path:
     os.environ["OLLAMA_MODELS"] = _ollama_models_path
 
-for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR, WRITING_DIR, APP_ROOT / "db"]:
+for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR, WRITING_DIR, APP_ROOT / "db", APP_ROOT / "canonical" / "notes"]:
     d.mkdir(parents=True, exist_ok=True)
+
+NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── App ──────────────────────────────────────────────────────────────────────
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -140,7 +146,7 @@ updated_at: {datetime.utcnow().isoformat()}
     return filepath
 
 
-def write_canonical_session(prompt: str, responses: dict, synthesis: str = "", project: str = "") -> Path:
+def write_canonical_session(prompt: str, responses: dict, synthesis: str = "", project: str = "", notes: str = "") -> Path:
     session_id    = str(uuid.uuid4())
     timestamp     = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
     filename      = f"session_{timestamp}.md"
@@ -154,6 +160,7 @@ id: {session_id}
 created_at: {datetime.utcnow().isoformat()}
 models: {list(responses.keys())}
 project: {project}
+notes: {notes}
 prompt_label: {prompt_label}
 ---
 
@@ -1345,7 +1352,142 @@ SESSIONS:
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/references/<ref_filename>/annotate", methods=["POST"])
+@app.route("/api/sessions/predict", methods=["POST"])
+def sessions_predict():
+    """
+    v0.9.3 — What am I missing?
+    Predictive gap analysis: reads sessions and references for a project,
+    surfaces argument weaknesses, unasked questions, missing perspectives.
+    The instrument auditing its own gaps.
+    """
+    data      = request.json or {}
+    project   = data.get("project", "").strip()
+    req_model = data.get("model", "").strip()
+
+    # Load sessions — same logic as sessions_synthesis
+    session_files = sorted(SESSIONS_DIR.glob("session_*.md"), reverse=True)
+    summaries = []
+    matched   = 0
+    for filepath in session_files:
+        try:
+            text  = filepath.read_text(encoding="utf-8")
+            parts = text.split("---", 2)
+            if len(parts) < 3:
+                continue
+            meta = {}
+            for line in parts[1].strip().splitlines():
+                if ": " in line:
+                    k, v = line.split(": ", 1)
+                    meta[k.strip()] = v.strip()
+            body = parts[2]
+            if project:
+                fm_project = meta.get("project", "").strip()
+                if fm_project:
+                    if fm_project != project:
+                        continue
+                else:
+                    if project.lower() not in body.lower():
+                        continue
+            prompt_text = ""
+            if "## Prompt" in body:
+                prompt_text = body.split("## Prompt")[1].split("\n## ")[0].strip()[:400]
+            synth_text = ""
+            if "## Synthesis" in body:
+                raw = body.split("## Synthesis")[1].split("\n## ")[0].strip()
+                if raw and not raw.startswith("<!--"):
+                    synth_text = raw[:300]
+            label   = meta.get("prompt_label", "") or prompt_text[:80]
+            created = meta.get("created_at", "")[:16].replace("T", " ")
+            entry   = f"[{created}] {label}"
+            if synth_text:
+                entry += f"\nSynthesis: {synth_text}"
+            elif prompt_text:
+                entry += f"\nPrompt: {prompt_text}"
+            summaries.append(entry)
+            matched += 1
+            if matched >= 20:
+                break
+        except Exception:
+            continue
+
+    if not summaries:
+        return jsonify({"error": f"No sessions found{' for project ' + project if project else ''}"}), 400
+
+    # Also pull connected reference titles for context
+    ref_context = ""
+    if project:
+        all_refs = read_all_references()
+        connected = [r for r in all_refs
+                     if any(project in line.split("|")[0].strip()
+                            for line in (r.get("conn_list") or []))]
+        if connected:
+            ref_context = "\n\nCONNECTED REFERENCES:\n" + "\n".join(
+                f"- {r.get('authors','')} ({r.get('year','')}) {r.get('title','')}"
+                for r in connected[:20]
+            )
+
+    # Load project framing
+    framing = ""
+    if project:
+        proj_file = PROJECTS_DIR / (project + ".md")
+        if proj_file.exists():
+            try:
+                pt  = proj_file.read_text(encoding="utf-8")
+                pp  = pt.split("---", 2)
+                if len(pp) >= 3 and "## Framing" in pp[2]:
+                    raw = pp[2].split("## Framing")[1].split("\n## ")[0].strip()
+                    if raw and not raw.startswith("<!--"):
+                        framing = raw
+            except Exception:
+                pass
+
+    framing_block = f"\nRESEARCH FRAMING:\n{framing}\n" if framing else ""
+    scope        = f"project '{project}'" if project else "all sessions"
+    session_text = "\n\n---\n\n".join(summaries)
+
+    settings  = load_settings()
+    local_cfg = settings.get("models", {}).get("local", {})
+    _model_map = {
+        "deepseek": local_cfg.get("reasoning",  "deepseek-r1:8b"),
+        "qwen":     local_cfg.get("asia",       "qwen2.5:14b"),
+        "mistral":  local_cfg.get("europe",     "mistral:7b"),
+        "cohere":   local_cfg.get("canadian",   "command-r7b:latest"),
+        "gemma":    local_cfg.get("multimodal", "gemma4:latest"),
+        "llama":    local_cfg.get("general",    "llama3.1:8b"),
+    }
+    model_str = _model_map.get(req_model, local_cfg.get("reasoning", "deepseek-r1:8b"))
+
+    lens_prompt = f"""You are a critical research supervisor reviewing a PhD researcher's work in progress.
+Your job is NOT to summarise what is there — it is to find what is missing, what is weak, and what the researcher has not yet asked.
+Be direct. Be specific. This is the most useful thing you can do.
+
+Scope: {scope}
+{framing_block}
+Produce exactly five sections using these exact headers:
+
+## UNASKED QUESTIONS
+What important questions has this researcher not yet asked? What should they be investigating that they aren't?
+
+## ARGUMENT WEAKNESSES
+Where is the reasoning soft? What claims are made without sufficient support in the sessions?
+
+## MISSING PERSPECTIVES
+What disciplinary lenses, theoretical frameworks, or communities of practice are entirely absent from this inquiry?
+
+## EXAMINER CHALLENGES
+What would a skeptical dissertation examiner ask that this researcher has not yet addressed?
+
+## NEXT MOVES
+What are the three most important things this researcher should do next to strengthen their work?
+{framing_block}
+SESSIONS:
+{session_text}{ref_context}"""
+
+    try:
+        synthesis = call_ollama(model_str, lens_prompt)
+        return jsonify({"synthesis": synthesis, "session_count": matched, "project": project})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 def annotate_reference(ref_filename):
     data   = request.json or {}
     models = data.get("models", ["deepseek"])
@@ -1435,7 +1577,7 @@ def scan_pdf_folder():
     Creates reference stubs from filename + any extracted metadata.
     """
     import re
-    pdf_dir = Path.home() / "Documents" / "Research" / "PDFs"
+    pdf_dir = RESEARCH_PDF_DIR
     custom_path = (request.json or {}).get("path", "")
     if custom_path:
         pdf_dir = Path(custom_path).expanduser()
@@ -1636,6 +1778,127 @@ status: raw-capture
     filepath = SESSIONS_DIR / filename
     filepath.write_text(canonical, encoding="utf-8")
     return filename
+
+
+@app.route("/api/notes", methods=["GET"])
+def get_notes():
+    notes = []
+    for filepath in sorted(NOTES_DIR.glob("*.md"), reverse=True):
+        try:
+            text  = filepath.read_text(encoding="utf-8")
+            parts = text.split("---", 2)
+            if len(parts) >= 3:
+                meta = {}
+                for line in parts[1].strip().splitlines():
+                    if ": " in line:
+                        k, v = line.split(": ", 1)
+                        meta[k.strip()] = v.strip()
+                meta["_filename"] = filepath.name
+                body = parts[2]
+                def extract_note_section(body, heading):
+                    if "## " + heading in body:
+                        raw = body.split("## " + heading)[1].split("\n## ")[0].strip()
+                        if raw and not raw.startswith("<!--"):
+                            return raw
+                    return ""
+                meta["body"]        = extract_note_section(body, "What I'm sitting with")
+                meta["questions"]   = extract_note_section(body, "Questions it raised")
+                meta["connections"] = extract_note_section(body, "Connections I'm noticing")
+                notes.append(meta)
+        except Exception:
+            pass
+    return jsonify(notes)
+
+
+@app.route("/api/notes", methods=["POST"])
+def create_note():
+    data     = request.json or {}
+    title    = data.get("title", "").strip()
+    if not title:
+        return jsonify({"error": "Title required"}), 400
+    note_id  = str(uuid.uuid4())
+    slug     = "-".join(title.lower().split()[:5])
+    slug     = "".join(c for c in slug if c.isalnum() or c == "-")
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
+    filename  = f"note_{timestamp}_{slug[:30]}.md"
+    body      = data.get("body", "") or "<!-- What are you sitting with? -->"
+    canonical = f"""---
+id: {note_id}
+title: {title}
+source: {data.get("source", "")}
+project: {data.get("project", "")}
+writing: {data.get("writing", "")}
+status: active
+created_at: {datetime.utcnow().isoformat()}
+updated_at: {datetime.utcnow().isoformat()}
+---
+
+## What I'm sitting with
+{body}
+
+## Questions it raised
+<!-- Questions this reading or thought provoked -->
+
+## Connections I'm noticing
+<!-- Links to other ideas, sources, or threads -->
+"""
+    filepath = NOTES_DIR / filename
+    filepath.write_text(canonical, encoding="utf-8")
+    return jsonify({"status": "created", "filename": filename, "slug": slug})
+
+
+@app.route("/api/notes/<note_filename>", methods=["PUT"])
+def update_note(note_filename):
+    if "/" in note_filename or "\\" in note_filename or ".." in note_filename:
+        return jsonify({"error": "Invalid filename"}), 400
+    filepath = (NOTES_DIR / note_filename).resolve()
+    if not filepath.exists():
+        return jsonify({"error": "Note not found"}), 404
+    data  = request.json or {}
+    text  = filepath.read_text(encoding="utf-8")
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return jsonify({"error": "Invalid format"}), 400
+    meta = {}
+    for line in parts[1].strip().splitlines():
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            meta[k.strip()] = v.strip()
+    for field in ["title", "source", "project", "writing", "status"]:
+        if field in data:
+            meta[field] = data[field]
+    meta["updated_at"] = datetime.utcnow().isoformat()
+    body = parts[2]
+    def replace_note_section(body, heading, new_content):
+        if not new_content:
+            return body
+        marker = "## " + heading
+        if marker in body:
+            before = body.split(marker)[0]
+            rest   = body.split(marker)[1]
+            after  = ("\n## " + rest.split("\n## ", 1)[1]) if "\n## " in rest else ""
+            return before + marker + "\n" + new_content + "\n" + after
+        return body.rstrip() + "\n\n" + marker + "\n" + new_content + "\n"
+    if "body" in data:
+        body = replace_note_section(body, "What I'm sitting with", data["body"])
+    if "questions" in data:
+        body = replace_note_section(body, "Questions it raised", data["questions"])
+    if "connections" in data:
+        body = replace_note_section(body, "Connections I'm noticing", data["connections"])
+    fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v is not None)
+    filepath.write_text(f"---\n{fm_lines}\n---\n{body}", encoding="utf-8")
+    return jsonify({"status": "updated"})
+
+
+@app.route("/api/notes/<note_filename>", methods=["DELETE"])
+def delete_note(note_filename):
+    if "/" in note_filename or "\\" in note_filename or ".." in note_filename:
+        return jsonify({"error": "Invalid filename"}), 400
+    filepath = (NOTES_DIR / note_filename).resolve()
+    if not filepath.exists():
+        return jsonify({"error": "Note not found"}), 404
+    filepath.unlink()
+    return jsonify({"status": "deleted"})
 
 
 @app.route("/api/broadcast", methods=["GET"])

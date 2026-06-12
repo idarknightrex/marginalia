@@ -19,6 +19,7 @@
   <button class="nav-btn" onclick="showView('ingest', this)">&#8853; Ingest</button>
   <button class="nav-btn" onclick="showView('projects', this)">&#9678; Projects</button>
   <button class="nav-btn" onclick="showView('writing', this)">&#10000; Writing</button>
+  <button class="nav-btn" onclick="showView('notes', this)">&#9670; Notes</button>
   <button class="nav-btn" onclick="showView('intelligence', this)">&#9672; Intelligence</button>
   <div class="nav-right">
     <button class="btn-secondary" id="save-break-btn" onclick="saveAndBreak()">&#8593; Save &amp; Take a Break</button>
@@ -261,8 +262,9 @@
     <div class="import-section">
       <div class="import-section-title">&#128196; Scan PDF Folder</div>
       <div style="font-family:monospace;font-size:11px;color:var(--muted);margin-bottom:10px">
-        Scans <code style="background:var(--bg);padding:1px 5px;border-radius:2px">~/Documents/Research/PDFs/</code> for new PDFs.<br>
-        Typed PDFs extract instantly. Scanned or handwritten PDFs are flagged for Gemma OCR.
+        Scans your configured Research PDF folder for new PDFs.<br>
+        Typed PDFs extract instantly. Scanned or handwritten PDFs are flagged for Gemma OCR.<br>
+        Set <code style="background:var(--bg);padding:1px 5px;border-radius:2px">RESEARCH_PDF_PATH</code> in setup.env to change the folder.
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
         <input id="pdf-folder-path" class="search-input" style="flex:1;font-family:monospace;font-size:11px"
@@ -347,6 +349,39 @@
   </div>
 
 
+  <!-- ── Notes view ── -->
+  <div id="view-notes" class="view">
+    <div class="page-header"><h1>Notes</h1><small>Deep reading &amp; accumulation — no destination required</small></div>
+
+    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface)">
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">New note</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input id="new-note-title" class="search-input" placeholder="Title or working thought..." style="flex:2">
+        <input id="new-note-source" class="search-input" placeholder="Source reference (optional)" style="flex:1">
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input id="new-note-project" class="search-input" placeholder="Project connection (optional)" style="flex:1">
+        <input id="new-note-writing" class="search-input" placeholder="Writing connection (optional)" style="flex:1">
+      </div>
+      <textarea id="new-note-body" class="search-input" rows="4"
+        style="width:100%;box-sizing:border-box;font-family:Georgia,serif;font-size:13px;resize:vertical;line-height:1.6;padding:10px"
+        placeholder="What are you sitting with? Questions, fragments, connections you're noticing — no structure required."></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px;gap:8px">
+        <button class="btn-primary" onclick="saveNote()">+ Save Note</button>
+      </div>
+    </div>
+
+    <div class="search-row" style="margin-bottom:10px">
+      <input class="search-input" id="note-search" placeholder="Search notes..." oninput="filterNotes()">
+      <select id="note-project-filter" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px" onchange="filterNotes()">
+        <option value="">All projects</option>
+      </select>
+    </div>
+
+    <div id="note-list"><div style="text-align:center;padding:40px;color:var(--muted);font-family:monospace;font-size:12px">No notes yet — start accumulating</div></div>
+  </div>
+
+
   <!-- ── Intelligence view ── -->
   <div id="view-intelligence" class="view">
     <div class="page-header"><h1>Intelligence</h1><small>What does your research know?</small></div>
@@ -366,13 +401,14 @@
       <!-- Step 2: Mode -->
       <div style="margin-bottom:12px">
         <div style="font-size:11px;font-family:monospace;color:var(--muted);margin-bottom:6px">What to synthesise</div>
-        <div style="display:flex;gap:6px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="format-btn active" id="intel-mode-library" onclick="setIntelMode('library', this)">&#9678; References</button>
           <button class="format-btn" id="intel-mode-sessions" onclick="setIntelMode('sessions', this)">&#9672; Sessions</button>
           <button class="format-btn" id="intel-mode-both" onclick="setIntelMode('both', this)">&#9670; Both</button>
+          <button class="format-btn" id="intel-mode-predict" onclick="setIntelMode('predict', this)" style="color:#6e56cf;border-color:#6e56cf44">&#9650; What am I missing?</button>
         </div>
         <div style="font-size:11px;font-family:monospace;color:var(--muted);margin-top:6px" id="intel-mode-desc">
-          Themes, tensions, gaps, and conversations across your connected sources
+          Themes, tensions, absent voices, and conversations across your connected sources
         </div>
       </div>
 
@@ -397,12 +433,6 @@
         <div class="library-synthesis-text" id="library-synthesis-text" style="max-height:400px;overflow-y:auto;padding-right:6px"></div>
         <div style="font-size:10px;font-family:monospace;color:var(--muted);margin-top:8px" id="intel-scope-note"></div>
       </div>
-    </div>
-
-    <!-- What am I missing? — v0.9.3 -->
-    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface);opacity:.6">
-      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">What am I missing? <span style="color:var(--accent)">— v0.9.3</span></div>
-      <div style="font-size:12px;color:var(--muted)">Predictive gap analysis — surfaces unasked questions and argument weaknesses across your sessions</div>
     </div>
 
     <!-- Network map — v1.0 -->
@@ -560,6 +590,27 @@
     <div class="edit-modal-actions">
       <button class="btn-secondary" onclick="closeWritingEdit()">Cancel</button>
       <button class="btn-primary" id="writing-edit-save-btn" onclick="saveWritingEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Note Edit Modal -->
+<div class="edit-modal-overlay" id="note-edit-modal" onclick="if(event.target===this)closeNoteEdit()">
+  <div class="edit-modal" onclick="event.stopPropagation()">
+    <h3>Edit Note</h3>
+    <div class="edit-field"><label>Title</label><input id="note-edit-title" type="text"></div>
+    <div class="edit-field" style="display:flex;gap:12px">
+      <div style="flex:1"><label>Source reference</label><input id="note-edit-source" type="text" placeholder="reference slug or filename"></div>
+      <div style="flex:1"><label>Project</label><input id="note-edit-project" type="text"></div>
+    </div>
+    <div class="edit-field"><label>Writing connection</label><input id="note-edit-writing" type="text"></div>
+    <div class="edit-field"><label>What I'm sitting with</label><textarea id="note-edit-body" rows="6"></textarea></div>
+    <div class="edit-field"><label>Questions it raised</label><textarea id="note-edit-questions" rows="3"></textarea></div>
+    <div class="edit-field"><label>Connections I'm noticing</label><textarea id="note-edit-connections" rows="3"></textarea></div>
+    <div class="edit-modal-actions">
+      <button class="btn-secondary" onclick="closeNoteEdit()">Cancel</button>
+      <button class="btn-primary" id="note-edit-save-btn" onclick="saveNoteEdit()">Save</button>
     </div>
   </div>
 </div>
