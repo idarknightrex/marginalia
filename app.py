@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.0.4
+Marginalia — app.py  v1.0.5
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -468,7 +468,7 @@ def lookup_doi(doi: str) -> dict:
 
 # ─── API routes ───────────────────────────────────────────────────────────────
 
-APP_VERSION = "1.0.4"
+APP_VERSION = "1.0.5"
 
 @app.route("/")
 def index():
@@ -1818,7 +1818,6 @@ def ocr_capture():
     # Image or scanned PDF — send to Gemma 4 via Ollama multimodal
     try:
         import urllib.request as _ur
-        b64 = base64.b64encode(file_data).decode("utf-8")
         settings  = load_settings()
         local_cfg = settings.get("models", {}).get("local", {})
         model_str = local_cfg.get("multimodal", "gemma4:latest")
@@ -1827,26 +1826,53 @@ def ocr_capture():
         if source_note:
             ocr_prompt += f"\n\nContext from researcher: {source_note}"
 
-        payload = json.dumps({
-            "model":      model_str,
-            "prompt":     ocr_prompt,
-            "images":     [b64],
-            "stream":     False,
-            "keep_alive": 0
-        }).encode()
-        req = _ur.Request(
-            f"{OLLAMA_BASE}/api/generate",
-            data=payload,
-            headers={"Content-Type": "application/json"}
-        )
-        with _ur.urlopen(req, timeout=120) as r:
-            ocr_text = json.loads(r.read()).get("response", "").strip()
+        def _gemma_ocr_image(image_b64):
+            """Send a single image to Gemma and return transcribed text."""
+            payload = json.dumps({
+                "model":      model_str,
+                "prompt":     ocr_prompt,
+                "images":     [image_b64],
+                "stream":     False,
+                "keep_alive": 0
+            }).encode()
+            req = _ur.Request(
+                f"{OLLAMA_BASE}/api/generate",
+                data=payload,
+                headers={"Content-Type": "application/json"}
+            )
+            with _ur.urlopen(req, timeout=120) as r:
+                return json.loads(r.read()).get("response", "").strip()
 
-        capture = _write_capture(ocr_text, file.filename, source_note, method="gemma-ocr")
+        # Multi-page handwritten PDF — rasterize each page and OCR individually
+        if is_pdf and mode == "handwritten":
+            try:
+                from pdf2image import convert_from_bytes
+                import io as _io
+                pages = convert_from_bytes(file_data, dpi=200)
+                page_texts = []
+                for i, page_img in enumerate(pages):
+                    buf = _io.BytesIO()
+                    page_img.save(buf, format="PNG")
+                    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+                    text = _gemma_ocr_image(b64)
+                    page_texts.append(f"--- Page {i+1} ---\n{text}")
+                ocr_text = "\n\n".join(page_texts)
+                page_count = len(pages)
+                method_label = f"gemma-ocr-{page_count}p"
+            except ImportError:
+                return jsonify({"error": "pdf2image not installed — run: pip install pdf2image and brew install poppler"}), 500
+        else:
+            # Single image or single-page PDF
+            b64 = base64.b64encode(file_data).decode("utf-8")
+            ocr_text = _gemma_ocr_image(b64)
+            method_label = "gemma-ocr"
+            page_count = 1
+
+        capture = _write_capture(ocr_text, file.filename, source_note, method=method_label)
         return jsonify({
             "status":  "ocr_complete",
-            "method":  "gemma-ocr",
-            "message": "Handwritten or scanned — Gemma OCR complete",
+            "method":  method_label,
+            "message": f"Gemma OCR complete — {page_count} page(s)",
             "text":    ocr_text[:1000],
             "capture": capture,
         })
@@ -2034,6 +2060,6 @@ def serve_assets(filename):
 if __name__ == "__main__":
     port = int(os.environ.get("MARGINALIA_PORT", 5000))
     threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{port}")).start()
-    print(f"\n  Marginalia v1.0.4 running at http://localhost:{port}\n")
+    print(f"\n  Marginalia v1.0.5 running at http://localhost:{port}\n")
     print(f"  Keys loaded from: {'setup.env' if setup_env.exists() else '.env (legacy)'}\n")
     app.run(host="0.0.0.0", port=port, debug=False)
