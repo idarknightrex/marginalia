@@ -491,6 +491,7 @@ if [[ -f "$PLIST_DST" ]]; then
   ok "launchd service already installed."
   if ask "Reinstall / update it?"; then
     launchctl unload "$PLIST_DST" 2>/dev/null || true
+    mkdir -p "$HOME/Library/LaunchAgents"
     cp "$PLIST_SRC" "$PLIST_DST"
     launchctl load "$PLIST_DST"
     ok "launchd service updated and loaded."

@@ -160,6 +160,17 @@ updated_at: {datetime.utcnow().isoformat()}
 {user_notes}
 """
     filepath = REFERENCES_DIR / filename
+
+    # De-dupe check: warn if a file with this name already exists
+    # (same first author + year + title slug = likely duplicate)
+    if filepath.exists():
+        # Append a short uuid fragment to avoid silent overwrite
+        dedup_suffix = str(uuid.uuid4())[:6]
+        filename     = f"{first_author}_{year}_{title_slug}_{dedup_suffix}.md"
+        filepath     = REFERENCES_DIR / filename
+        import logging
+        logging.warning(f"Duplicate reference detected — saving as {filename}")
+
     filepath.write_text(canonical, encoding="utf-8")
     return filepath
 
@@ -1266,6 +1277,47 @@ LIBRARY:
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/sessions/list", methods=["GET"])
+def sessions_list():
+    """
+    Return session metadata for the related-sessions strip.
+    Optional ?project=slug filter. Returns up to 20 most recent.
+    """
+    project_filter = request.args.get("project", "").strip()
+    sessions = []
+    if SESSIONS_DIR.exists():
+        for f in sorted(SESSIONS_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
+            if not f.name.endswith(".md"):
+                continue
+            try:
+                text = f.read_text(encoding="utf-8")
+                # Extract frontmatter fields
+                fm = {}
+                if text.startswith("---"):
+                    end = text.find("---", 3)
+                    if end > 0:
+                        for line in text[3:end].splitlines():
+                            if ":" in line:
+                                k, v = line.split(":", 1)
+                                fm[k.strip()] = v.strip()
+                # Skip captures
+                if fm.get("source_type") == "capture":
+                    continue
+                proj = fm.get("project", "")
+                if project_filter and proj != project_filter:
+                    continue
+                sessions.append({
+                    "filename": f.name,
+                    "title":    fm.get("title") or fm.get("prompt", "")[:60] or f.stem,
+                    "project":  proj,
+                    "created":  fm.get("created_at", ""),
+                })
+                if len(sessions) >= 20:
+                    break
+            except Exception:
+                continue
+    return jsonify({"sessions": sessions})
+
 @app.route("/api/sessions/synthesis", methods=["POST"])
 def sessions_synthesis():
     data    = request.json or {}
@@ -1719,6 +1771,7 @@ def ocr_capture():
 
     file        = request.files.get("file")
     source_note = request.form.get("note", "")   # optional context from researcher
+    mode        = request.form.get("mode", "typed")  # "typed" or "handwritten"
     if not file:
         return jsonify({"error": "No file uploaded"}), 400
 
@@ -1730,8 +1783,9 @@ def ocr_capture():
     if not is_pdf and not is_image:
         return jsonify({"error": "Unsupported file type — use PDF, JPG, PNG, or WEBP"}), 400
 
-    # For PDFs: try text extraction first
-    if is_pdf:
+    # For PDFs in typed mode: try pdfplumber text extraction first
+    # In handwritten mode: skip pdfplumber entirely — go straight to Gemma
+    if is_pdf and mode != "handwritten":
         try:
             import pdfplumber, io
             with pdfplumber.open(io.BytesIO(file_data)) as pdf:

@@ -1,382 +1,325 @@
 # Marginalia — Thread Handoff
-**Version:** v0.9.2.4
+**Version:** v1.0
+**Date:** June 14, 2026
 **Purpose:** Copy this into a new Claude thread to restore full context
 
 ---
 
 ## The Tool
 Marginalia (Largely Local Marginalia / LLM) — a local-first PhD research workbench.
-**Repo:** https://github.com/idarknightrex/marginalia
+**Repo:** https://github.com/idarknightrex/marginalia (public, code only)
+**Canonical:** https://github.com/idarknightrex/marginalia-canonical (private, research data)
 **Ko-fi:** https://ko-fi.com/llmarginalia
 **License:** MIT
 
 ---
 
-## Current Hardware State (Mac Mini M4 — "Solaris")
-- Marginalia running at localhost:5001 via `./bootstrap.command`
-- Working repo: `/Users/rajboora/Developer/marginalia/` (flat, push from here)
-- Claude Haiku working (Anthropic key in setup.env — monitor credits)
-- Gemini working (Google key in setup.env)
-- OpenAI GPT-4o — key needed, get from platform.openai.com/api-keys
-- Perplexity — key needed, get from perplexity.ai/settings/api
-- DeepSeek R1 8B on Vault — confirmed working
-- Gemma 4 on Vault — confirmed downloaded (gemma4:latest, 9.6GB)
-- Python 3.9 on Mini — needs upgrade to 3.12 via Homebrew (not yet done)
-- Homebrew not yet installed on Mini
-- Ollama models path: `/Volumes/Vault/Marginalia/ollama/models`
-- SSD: Vault, ~450GB free, mounted at /Volumes/Vault
-- MacBook Air M5 15" arriving end of next week
+## Hardware State
+**Mac Mini M4 — "Solaris"** — headless, Tailscale IP: 100.126.14.57
+- Marginalia running via `nohup ./bootstrap.command > /tmp/marginalia.log 2>&1 &`
+- launchd plist installed — survives power cycles (com.marginalia.server.plist)
+
+**Restart commands (SSH into Solaris first):**
+```bash
+# Preferred — launchd (survives power cycles)
+launchctl unload ~/Library/LaunchAgents/com.marginalia.server.plist
+launchctl load  ~/Library/LaunchAgents/com.marginalia.server.plist
+
+# Manual fallback — if launchd is not responding
+pkill -f "python.*app.py" 2>/dev/null || true
+cd ~/Developer/marginalia
+nohup ./bootstrap.command > /tmp/marginalia.log 2>&1 &
+
+# Check status
+tail -f /tmp/marginalia.log
+curl -s http://localhost:5001 | head -5
+```
+
+- Working repo: `/Users/rajboora/Developer/marginalia/`
+- Canonical repo: `/Users/rajboora/Developer/marginalia/canonical/`
+- Access from anywhere: `http://100.126.14.57:5001`
+- SSH: `ssh rajboora@100.126.14.57`
+- Logs: `tail -f /tmp/marginalia.log`
+
+**Models — all on internal NVMe (migrated from Vault this session):**
+| Model | Size | Status |
+|-------|------|--------|
+| deepseek-r1:8b | 5.2GB | ✅ Working |
+| gemma4:latest | 9.6GB | ✅ Working |
+| qwen2.5:14b | 9.0GB | ✅ Working |
+| mistral:7b | 4.4GB | ✅ Working |
+| llama3.1:8b | 4.9GB | ✅ Working |
+| command-r7b:latest | 5.1GB | ✅ Working (Cohere, Canada) |
+
+**MacBook Air M5 15" — "forkd"** — development machine
+- Tailscale connected, SSH access to Solaris confirmed
+- marginalia repo cloned at ~/Developer/marginalia (for reference/editing)
 
 ---
 
 ## API Keys — setup.env
-All keys live in `~/Developer/marginalia/setup.env` (visible, gitignored).
-No hidden .env file needed. Fields:
-- ANTHROPIC_API_KEY — has key, credits low, top up at console.anthropic.com
-- GOOGLE_API_KEY — has key, working
-- OPENAI_API_KEY — **empty, needs key** from platform.openai.com/api-keys
-- PERPLEXITY_API_KEY — **empty, needs key** from perplexity.ai/settings/api
-- OLLAMA_HOST — http://127.0.0.1:11434 (default)
-- MARGINALIA_PORT — 5000 (running on 5001 because 5000 was taken)
-
----
-
-## Model Chips (v0.9.2)
-| Chip | Model | Status |
-|---|---|---|
-| Gemini 2.5 Flash | gemini-2.5-flash | ✅ Working |
-| Claude Haiku | claude-haiku-4-5 | ✅ Working |
-| GPT-4o | gpt-4o (direct OpenAI) | ⚠️ Key needed |
-| Llama 3.1 | llama3.1:8b (local) | ⚠️ Pull needed: ollama pull llama3.1:8b |
-| DeepSeek R1 | deepseek-r1:8b (local) | ✅ Working |
-| Gemma 4 | gemma4:latest (local) | ✅ Downloaded, start inactive on 16GB |
-
----
-
-## Known Issues
-- `ollama list` requires `OLLAMA_MODELS` env var in same shell session
-  Workaround: `OLLAMA_MODELS=/Volumes/Vault/Marginalia/ollama/models ollama list`
-  Fix needed: launchctl env var or Ollama GUI config
-- Python 3.9 still in .venv — needs rebuild with 3.12 after Homebrew install
-- GPT-4o and Perplexity chips show but error until keys added
-- Synthesis panel working — DeepSeek R1 does meta-pass locally after multi-model prompts
-
----
-
-## File Locations
 ```
-~/Developer/marginalia/          ← working repo, push from here
-/Volumes/Vault/Marginalia/       ← SSD: ollama models, future PDF backup
-~/.ollama/                       ← identity keys only (models on Vault)
-~/Documents/Research/PDFs/       ← PDFs live here, never inside repo
+GOOGLE_API_KEY=        # configured, working (Gemini free tier)
+ANTHROPIC_API_KEY=     # empty — add from console.anthropic.com
+OPENAI_API_KEY=        # empty — add from platform.openai.com/api-keys
+OLLAMA_HOST=http://127.0.0.1:11434
+OLLAMA_MODELS_PATH=    # blank — models on internal ~/.ollama/models
+RESEARCH_PDF_PATH=     # blank — defaults to ~/Documents/Research/PDFs/
+GITHUB_USER=idarknightrex
+GITHUB_CANONICAL_REPO=marginalia-canonical
+MARGINALIA_PORT=5001
 ```
 
 ---
 
-## Key Architecture Decisions (do not relitigate)
-- SQLite is runtime state only — canonical flat markdown files are truth
+## Current Tab Structure
+```
+Prompt | References | Ingest | Projects | Writing | Notes | Intelligence
+```
+
+---
+
+## What Works in v1.0
+
+### Prompt
+- Multi-model: cloud parallel (Gemini, Claude, GPT-4o), local sequential
+- DOM-driven model order — adding a chip in HTML is the only step needed
+- Synthesis pass: 4 section cards (Consensus, Divergence, Unique Contributions, Absent Voices)
+- Section cards colour-coded — renderer falls back to plain text if model ignores format
+- Save to project from synthesis panel — wired, working
+- 30min silent autosave, 2hr session note prompt
+- Loading hint after 10s on local models: "Loading model from disk..."
+- MODEL_TIMEOUT: all local models 300s, dynamic ollama: chips 300s
+
+### References
+- Full CRUD — add, edit, delete, status cycle (surfaced → located → verified)
+- Filter by status, search, filter by project slug
+- DOI lookup, BibTeX/RIS/CSV/plaintext import, file drop
+- Edit modal: title, authors, year, type, DOI, tags, status, holding, location,
+  themes, connections, AI annotation, your annotation, argument connection
+- Holding location displayed on card
+- Multi-voice AI annotation (runs through active local models, synthesises)
+- Launch Prompt from reference — pre-populates prompt with source context
+
+### Ingest
+- File drop: .csv, .bib, .ris
+- Paste import: BibTeX, RIS, CSV, DOI list, plaintext → local AI parse
+- PDF folder scan — scans RESEARCH_PDF_PATH, extracts typed PDFs instantly,
+  flags scanned/handwritten for Gemma OCR, creates reference stubs
+- Capture (OCR) — drop PDF/image, typed PDFs extract via pdfplumber (~instant),
+  scanned/handwritten run Gemma 4 OCR (~15-45s)
+- After OCR: **Save as Note** (your thinking) or **Save as Reference** (their work)
+  — the 60/40 principle made into a UI decision
+
+### Projects
+- Create with label, slug, framing statement
+- Connected reference count and titles
+- Edit modal — slug rename supported
+- Framing feeds Intelligence synthesis prompts (scoped mode)
+
+### Writing
+- Types: blog, conference, chapter, grant, journal, other
+- Status: drafting, in-progress, submitted, published, archived
+- Project connection via slug
+
+### Notes (new in v0.9.8)
+- Deep reading and accumulation without destination
+- Fields: title, source reference, project, writing connection, body,
+  questions it raised, connections I'm noticing
+- No status workflow — accumulation without resolution
+- Filter by project
+- Connected to sessions via `notes:` field in session frontmatter
+- From Ingest: OCR → Save as Note pre-fills form and switches tab
+
+### Intelligence
+- Scope: project selector (all or specific slug)
+- Mode buttons: References | Sessions | Both | ▲ What am I missing?
+- Model selector (DeepSeek R1 default)
+- Cancel button (AbortController)
+- Output: colour-coded section cards
+
+**References mode sections:**
+Recurring Themes · Tensions · Absent Voices · Conversations · Research Question Fit
+— scoped mode injects project framing; unscoped = bookstore mode (no framing)
+
+**Sessions mode sections:**
+Recurring Questions · Evolution · Unresolved · Momentum · Absent Voices
+
+**What am I missing? (v0.9.3) sections:**
+Unasked Questions · Argument Weaknesses · Missing Perspectives ·
+Examiner Challenges · Next Moves
+— reads sessions + connected references + project framing
+
+### Save & Break
+- Pre-flight scan for large/blocked files, auto-.gitignore
+- Commits and pushes main repo (idarknightrex/marginalia)
+- Commits and pushes canonical repo (idarknightrex/marginalia-canonical)
+- 30min silent autosave also fires this sequence
+
+---
+
+## Architecture
+
+### Two-repo pattern
+- **Public repo** — code only, MIT licensed
+- **Private canonical repo** — references, sessions, notes, projects, writing
+- Save & Break pushes both automatically via `utils/git_preflight.py`
+- canonical/ is gitignored from main repo, has own .git
+
+### File structure
+```
+~/Developer/marginalia/
+├── app.py                        # Flask backend v1.0
+├── setup.sh                      # Safe install script (9 steps)
+├── bootstrap.command             # Double-click start (Mac)
+├── bootstrap.sh                  # Headless/Linux start
+├── com.marginalia.server.plist   # launchd auto-start
+├── setup.env                     # Keys — gitignored
+├── requirements.txt              # includes pdfplumber
+├── README.md                     # Full docs
+├── static/
+│   ├── app.js                    # All JS — commented
+│   └── app.css                   # All styles
+├── templates/
+│   └── index.html                # Markup only
+├── utils/
+│   ├── paths.py                  # Canonical path constants
+│   └── git_preflight.py          # Save & Break + canonical push
+└── canonical/                    # Gitignored — own repo
+    ├── references/               # ~75 sources
+    ├── sessions/                 # ~35 sessions
+    ├── notes/
+    ├── projects/                 # phd-core.md
+    └── writing/                  # intro-margin.md
+```
+
+### Key decisions (do not relitigate)
+- SQLite is runtime state only — canonical markdown files are truth
 - Flask is API key vault — frontend never sees keys
-- `utils/paths.py` is single source of truth for all filesystem paths
-- `setup.env` is the visible key config — no hidden .env required
-- Ollama models live on external Vault SSD, not internal drive
-- MIT + Ko-fi voluntary — no licensing gates, no unlock states
-- Save & Break = git add + commit + push backup, pre-flight scans for large files
-- PDF naming: `AuthorLastname_Year_ShortTitle.pdf`
-- Four-layer backup: internal drive → Vault rsync → iCloud/OneDrive → GitHub
+- `utils/paths.py` is single source of truth for filesystem paths
+- `setup.env` is the visible key config — no hidden .env needed
+- Models on internal NVMe (migrated from Vault June 12, 2026)
+- `keep_alive: 0` — unloads model after every response, allows sequential firing
+- DOM-driven model order in sendPrompt() — no hardcoded MODEL_ORDER array
+- Plain markdown canonical files — human readable, researcher owns them
+- Intentional friction: slugs typed by hand, status cycled manually, Save & Break deliberate
+- MIT + Ko-fi voluntary — no licensing gates
+
+### Build naming convention
+`marginalia-v[SEMVER]_[MMDD]-[HHMM].zip` — MMDD-HHMM is UTC build time
+Example: `marginalia-v1.0_0614-0001.zip`
+
+### Deploy script
+```bash
+cp ~/Developer/marginalia/setup.env ~/setup.env.bak
+cd ~/Downloads && unzip -o marginalia-v[VERSION].zip
+cp -r marginalia-v0925/. ~/Developer/marginalia/
+cp ~/setup.env.bak ~/Developer/marginalia/setup.env
+cd ~/Developer/marginalia
+git add -A
+git commit -m "v[VERSION] — [description]"
+git push origin main
+./bootstrap.command
+```
 
 ---
 
-## Build History
-- **v0.8-pre** — Multi-model prompt: Gemini, Claude Haiku, Azure GPT-4o. References pipeline. Save & Break.
-- **v0.9.2** — DeepSeek R1 + Gemma 4 chips added and wired to Ollama backend
-- **v0.9.2** — Synthesis engine (DeepSeek R1 local meta-pass). 16GB mutex. Claude cost counter.
-- **v0.9.2** — Full reference import (CSV/BibTeX/RIS/DOI/plaintext). Azure replaced with OpenAI direct + Perplexity. setup.env replaces .env. Docs updated.
-- **v0.9.2.1** — Local model chips multi-select restored. Removed erroneous radio-button exclusion logic from toggleModel().
-- **v0.9.2.4** — Dynamic local model discovery. Any model in `ollama list` auto-surfaces as a chip. No recoding needed to add new local models.
+## Known Issues / Next Build List
+
+### Bugs
+- **De-dupe check incomplete** — PDF scan has loose author+year filename match
+  but manual Add, DOI lookup, and paste import have NO de-dupe check.
+  Fix: check in `write_canonical_reference()` before writing, skip or warn on
+  collision. All import paths need this, not just scan. MEDIUM PRIORITY.
+
+### Features — next session
+- **Posture slider** — Supportive ↔ Interrogative, shifts synthesis prompt register
+  Scope × Posture: project or writing piece as scope object
+  Scoped framing seeds the prompt; unscoped = bookstore mode
+- **Session budget / nap mode** — Focused (2h/4h), Open (timer grows), Step Away button
+  Auto step-away on inactivity (20-30min idle)
+- **Boulder animation** — SVG in status bar, rolls up hill as session lengthens,
+  rolls back on step-away. Never crests. Warm dark gradient fills status bar
+  (#2a2018, left to right, transparent to earthy-dark over hours)
+- **Model preload on Start Session** — reads last 10 session files, warms top 2-3
+  local models by frequency. keep_alive=300 for session duration.
+- **Settings tab** — writes to setup.env from UI. API key fields with Test button,
+  Ollama models path, Research PDF path, port, default synthesis model.
+  Replaces manual file editing for non-technical users.
+- **canonical auto-push wired to setup.sh** — step 8 now handles token + remote
+  but needs testing on fresh install
+- **Power cycle test** — confirm launchd plist brings Marginalia up without SSH
+- **setup.sh GitHub token flow** — test on fresh install, confirm canonical push works
+
+### Architecture ideas (Seeds doc)
+- Promoted vs transient sessions — most sessions transient (audit trail),
+  promoted sessions become reference records with source_type: insight/field-note/capture
+- IRL capture provenance fields — where, who, context, role (ethics board)
+- Concept lens — software brain as a question brought to synthesis, not a container
+- Session files as fine-tuning data / RAG context (2.x)
 
 ---
 
-## Phase 2 Build List (next sessions)
-1. **Wire Homebrew + Python 3.12** — rebuild .venv, fix warnings
-2. **Add OpenAI + Perplexity keys** — test all 6 chips live
-3. **Idea map** — force-directed SVG graph, theme nodes, hover tooltips
-4. **Reading Assistant** — transparent opt-in dwell-time cross-reference
-5. **Settings panel** — configurable workflow preferences
-6. **Writing tracker** — log with session and reference linking
-7. **Projects view** — multi-project context switching
-8. **Ingest / OCR** — Phase 4, Gemma 4 as primary engine
-9. **launchd config** — persistent OLLAMA_MODELS env var on Mini
+## Roadmap
+
+### v1.0.1 (shipped June 14 2026)
+- setup.sh step 9 mkdir -p fix (reinstall branch)
+- Restart commands added to HANDOFF
+
+### v1.0.2 (current sprint)
+- Capture mode selector — typed / handwritten radio buttons (shipped)
+- De-dupe check in write_canonical_reference() (shipped)
+- Related sessions strip under synthesis panel (shipped)
+- Gemma OCR quality test on single handwritten page
+- Intelligence slug available in Prompt tab (investigate — likely wiring)
+
+### v1.x (next)
+- Posture slider + scope × posture Intelligence design
+- Session budget / nap mode / boulder animation
+- Model preload on Start Session
+- Settings tab
+- Power cycle confirmation test
+
+### v2.0
+- Tauri wrapper — native app, cross-platform (.dmg, .exe, .AppImage)
+- First-run installer (no terminal required)
+- Auto-updater
+
+### v2.x
+- Fine-tuning on session files
+- Local agent with canonical as knowledge base
+- Idea map (force-directed SVG — nodes: references, edges: thematic connections)
+- BibTeX export
+
+### v3.0
+- App Store / notarization
+- Distribution to other researchers
 
 ---
 
-## Context for PhD Thread (sibling thread)
-Raj is building this tool to support his PhD research question:
-*How do embodied community-building activities influence performance anxiety
-and intellectual risk-taking among first-year undergraduates?*
-Supervisor: Dr. Hamilton (U of Saskatchewan), shared undergraduate history at U of Lethbridge.
-ISSOTL 2026 Saskatoon, October 28-31 — first public appearance.
-Target paper: Teaching and Learning Inquiry (TLI), 2027.
+## PhD Context
+**Researcher:** Raj Boora, CS instructor at MacEwan University, Edmonton, Alberta
+**Program:** University of Saskatchewan Cross-Departmental PhD (SoTL focus), Fall 2026
+**Supervisor:** Dr. Hamilton (4M framework)
+**Research question:** How do embodied community-building activities influence
+performance anxiety and intellectual risk-taking among first-year undergraduates?
+**Design:** Mixed-methods quasi-experimental
+**First public appearance:** ISSOTL 2026 Saskatoon, October 28-31
+**Target publication:** Teaching and Learning Inquiry (TLI), 2027
 
 ---
 
-## The Line
+## Seeds Document
+`marginalia-seeds.md` — in repo root alongside this file.
+Holds design philosophy, positionality observations, fragments worth keeping.
+Key entries: the mischief problem, software brain as lens not container,
+the boulder never crests, extrusive not extractive, unrealized cognitive capital,
+the cognitive agent as collaborative partner, Pinpoint comparison.
+
+---
+
+## The Lines
 *Ideas don't have a calendar. Neither does gratitude.*
-
----
-
-## From PhD Thread (PreWork 6) — Architectural Notes for Marginalia
-
-### The three-lens provocation sequence
-Local model matrix as pre-deployment stress-testing layer — Phase 6 or 7 function. Before bringing an argument to human gatekeepers, run it through the local model sequence. Outputs won't be right but they'll surface where the argument is soft. "The XO using the enemy's maps to find the reefs."
-
-### Bedrock bias caveat
-Known architectural limitation: if the LLM summarizing a source is trained on the same Western linear textual monoculture as the sources being summarized, annotations will be epistemologically flatter than the sources deserve. Not a blocker — a caveat to build into the UI and documentation. The global model chip row (Qwen/Asian, Mistral/European, AfriqueQwen/African) is a partial structural response to this.
-
-### Positionality sentence (methods section)
-"Scaffolding your own scaffolding." The researcher who built a research workbench to stress-test the architecture before human review is doing methodological transparency in a form most SoTL candidates don't have access to. Name it explicitly in the methods section of the dissertation.
-
-### Implication for annotation fields
-annotation and argument_connection fields in canonical references are downstream of whoever summarized them. Single-model annotations are epistemologically narrow. Multi-model annotation — running the same source through Qwen, Mistral, and DeepSeek and comparing — is a richer capture. Worth building as an option in the reference panel (Phase 6).
-
----
-
-## v0.9 — Project Intelligence (scoped, ready to build)
-
-### "What am I missing?" button
-- On-demand predictive pass — DeepSeek R1 reads all session files in current project
-- Surfaces unasked questions, unexplored gaps, argument weaknesses
-- Trigger: button in UI, not automatic — respects the "slow down" ethos
-- Secondary trigger: optional time-based (every 2 hours if active)
-
-### Rolling 100-word project summary
-- Auto-updated every session completion and on every Save & Break
-- Covers sessions between two selectable dates
-- Lives at canonical/projects/[project-name]-summary.md
-- 2-hour background timer triggers silent regeneration
-- Designed to be readable as a standalone research diary entry
-
-### Crash resilience by design
-- Canonical files write atomically — crash mid-session loses only the unsaved window
-- The notepad in meat space covers that window (Ingest tab, Phase 4)
-- Incomplete sessions still contribute to rolling summary — fragments are data points
-- "Chaff as fuel" — nothing wasted, just weighted accordingly
-
-### Predictive framing
-- The pass isn't looking for what's there — it's looking for what's missing and what's weak
-- Same function as a supervisor reading a draft and asking "but what about X?"
-- Checks the instrument's own work for blight
-- Dissertation positionality note: the researcher built a tool that audits its own gaps
-
-### Implementation estimate
-- ~30-40 lines Python, one new Flask route /api/predict
-- Small UI panel, "What am I missing?" button prominent in prompt view
-- DeepSeek R1 as engine — same model doing synthesis, now doing longitudinal pattern recognition
-- Session files already exist in canonical/sessions/ — infrastructure ready
-
----
-
-## v0.9.2 — Library Intelligence (scoped, ready to build)
-
-### Framing — critical
-- NOT an agent, NOT an assistant, NOT acting on behalf of the researcher
-- The library IS the intelligence — the tool is a lens pointed at curated material
-- Researcher remains the epistemological centre — tool surfaces, researcher decides
-- In UI: capability of the References tab, no branding, no persona, no agent language
-- Dissertation positionality: using a multi-model lens to interrogate your own material
-
-### Per-reference multi-model annotation
-- Send abstract/annotation through 2-3 models, synthesise their readings
-- Qwen reads a Western pedagogy paper differently than DeepSeek — that divergence is data
-- Writes multi-voice annotation back to canonical reference file
-- Route: /api/references/[id]/annotate
-- UI: "Annotate" button in reference card, model chip selector, result appended to file
-
-### Cross-reference thematic synthesis — "What's in my library?"
-- DeepSeek reads all annotations, surfaces: recurring themes, tensions between sources,
-  gaps in collected literature, sources that should be in conversation but aren't
-- Route: /api/references/synthesise
-- UI: button on References tab — no agent language, just "What's in my library?"
-- Output: structured synthesis panel same as prompt synthesis
-
-### Idea map (Phase 2, now has a data layer)
-- Nodes: references
-- Edges: thematic connections surfaced by cross-reference synthesis pass
-- Force-directed SVG, hover shows connection reasoning
-- The network is the visual layer on top of the cross-reference data
-
-### What this makes Marginalia
-- Not a citation manager (Zotero stores what you collected)
-- Not a chat interface
-- A research instrument that knows your collection, understands relationships between
-  sources, surfaces what's missing, and can interrogate your argument against your
-  own literature
-- "What does my library say about embodied learning in non-Western contexts?" —
-  answered from your canonical files, not from the internet or training data
-
-### Connection to v0.9 Project Intelligence
-- Session intelligence and reference intelligence feed the same synthesis engine
-- Together they answer: what have I been thinking? what have I collected?
-  what's the relationship? what's missing?
-- The dissertation methods section should note: the instrument evolved from a
-  multi-model prompt interface into a research library instrument during the
-  course of the research. That evolution is itself a methodological finding.
-
-
----
-
-
-
----
-
-## Session log — 2026-06-10 (build session)
-
-### Completed this session
-- v0.9.2.1 — local chip multi-select restored
-- v0.9.2.2 — dynamic local model discovery (any ollama pull auto-surfaces as chip)
-- v0.9.2.3 — reference card complete: edit, delete, status cycle, annotate merged into edit modal, AI annotation + Your Annotation + Argument Connection fields, tags/themes/connections architecture, card timestamps + history log
-- v0.9.2.4 — six-tab navigation: Prompt · References · Ingest · Projects · Writing · Intelligence; Projects with label/slug/framing/connected refs; Writing with type/status/project; Intelligence tab with library synthesis; modal stopPropagation fix; UTC timestamps throughout; import log to canonical/sessions/imports.md; status + holding in edit modal; holding location on card
-
-### Known issues / build list for next session
-**Prompt tab**
-- Synthesis output: extract named sources and offer one-click Add to library
-- Flag Reference from prompt view should be wired
-
-**References tab**
-- Project substring match may produce false positives — tighten to exact slug match
-
-**Projects tab**
-- Writing elements need reference connection field
-
-**Intelligence tab**
-- Library synthesis fully in Intelligence (trigger + output) — References tab no longer shows it
-- Three synthesis modes: Library (all) / Project (scoped) / Writing (scoped)
-- Synthesis prompt seeded with project framings + writing elements + dominant tags
-- Output scrollable, max-height constrained ✓ (done this session)
-- Retry/regenerate button persists after run and on timeout
-
-**Architecture notes**
-- Synthesis output is a session artifact, not a reference — lives in canonical/sessions/
-- Named sources within synthesis output should be scrapeable → Add to library
-- "What's in my library?" is the serendipity layer — keep it broad, seed it with researcher context
-
----
-
----
-
-## Versioning Roadmap — locked June 2026
-
-### v0.9.x — Multi-model system complete (current)
-- v0.9.2 — Library intelligence, synthesis model selector, local auto-detect ✓
-- v0.9.2.1 — Local chip multi-select restored ✓
-- v0.9.2.4 — Dynamic local model discovery ✓
-- v0.9.3 — Project intelligence / "What am I missing?" + rolling 100-word session summary, 2hr auto-update
-- v0.9.4 — Crash resilience, atomic writes, chaff-as-fuel (incomplete sessions feed summary)
-
-### v1.0 — Complete instrument, headless Mini
-**Target: Mini goes headless in ~2 weeks**
-- Tailscale remote access — phone/MBA as interface, Mini as engine
-- Launchd plist — Marginalia starts on boot, runs headless
-- Photo / handwritten notes → Gemma 4 OCR → models → canonical (The Napkin)
-- Voice memo → transcription → models → canonical
-- PDF annotation extraction → models → canonical
-- Three-lens provocation on ingested material
-- BibTeX export — round-trip complete (import AND export)
-
-### v1.1 — Reference Intelligence Complete
-- Zotero sync (import and export)
-- Library database search (U of S, CrossRef direct)
-- Full settings panel (synthesis model selector moves here from inline)
-- Project management UI
-
-### v1.2 — ISSOTL Ready
-**Target: October 28, 2026 — Saskatoon**
-- Polish, stability, demo mode
-- Documentation complete for public release
-- Ko-fi page updated with v1.2 release notes
-
-### v2.x — Intelligence Layer
-- Idea map (force-directed SVG)
-- Reading assistant (transparent opt-in dwell-time)
-- Writing tracker
-- Multi-project context switching
-- Three-lens provocation as standing feature
-
----
-
-## Immediate next steps (this week)
-1. Deploy v0.9.2.4 on Mini
-2. Install Tailscale on Mini and MBA
-3. Set up launchd plist for auto-start on boot
-4. Test headless access from MBA and phone
-5. Build v0.9.3 Project Intelligence
-
-## Tailscale setup (quick reference)
-- Install: https://tailscale.com/download
-- Mini: `tailscale up` — note the Tailscale IP
-- MBA/phone: install Tailscale app, sign in same account
-- Access Marginalia at: `http://[mini-tailscale-ip]:5001`
-- No port forwarding, no VPN config, works anywhere
-
-## launchd plist (to build)
-- ~/Library/LaunchAgents/com.marginalia.server.plist
-- Runs bootstrap.command on login
-- Sets OLLAMA_MODELS env var persistently
-- Restarts on crash
-
-## v2.x Wishlist (superseded by roadmap above — kept for reference)
- — Settings Panel and Beyond
-
-### v2.0 — Settings Panel
-- Full settings UI (currently Phase 2 placeholder)
-- Configurable: default synthesis model, cloud model versions, timeout values
-- Configurable: workflow preferences (break reminder, dwell threshold)
-- Configurable: local model paths, Ollama host
-- Synthesis model selector moves here from inline dropdown (v0.9.2 Option B → Option A)
-- Model perspective labels editable (user can rename/reframe)
-
-### v2.1 — Writing Tracker
-- Log writing sessions with word count, session duration, reference links
-- Connect writing sessions to research sessions
-- "What was I thinking when I wrote this?" — link canonical sessions to writing dates
-
-### v2.2 — Projects View
-- Multi-project context switching
-- Each project has own canonical/ folder, session history, reference library
-- Rolling 100-word summary per project (from v0.9 spec)
-- Project-scoped "What am I missing?" pass
-
-### v2.3 — Idea Map
-- Force-directed SVG graph — nodes are references, edges are thematic connections
-- Connections surfaced by library intelligence synthesis pass (v0.9.2)
-- Hover tooltips show connection reasoning
-- Click node to launch prompt from that reference
-- Visual layer on top of cross-reference data already being generated
-
-### v2.4 — Reading Assistant
-- Transparent opt-in dwell-time cross-reference engine
-- While reading a source, surfaces related references from your library
-- NOT covert — explicit opt-in, no hidden logic
-- Timing data from v0.8.6.4+ feeds into dwell-time detection
-
-### v2.5 — Three-Lens Provocation Sequence
-- Pre-deployment argument stress-testing (from PhD PreWork 6 thread)
-- Before bringing argument to human gatekeepers, run through local model matrix
-- Surfaces where argument is soft — "the XO using the enemy's maps to find the reefs"
-- Structured provocation prompts per lens (epistemic, methodological, contextual)
-
-### v2.6 — Ingest / OCR
-- Photo, PDF, audio, typed notes capture
-- Gemma 4 as primary OCR engine
-- PDF naming convention enforced: AuthorLastname_Year_ShortTitle.pdf
-- Voice memo transcription for field notes
-
-### v2.7 — launchd persistent env var
-- OLLAMA_MODELS set system-wide on Mini via launchctl
-- No manual export needed before ollama commands
-- Bootstrap.command works cleanly without shell session dependency
-
-### Perennial items
-- Python 3.12 upgrade on Mini (Homebrew install pending)
-- MacBook Air M5 deployment
-- Anthropic API key top-up reminder in UI when credits low
-- Mistral 14B available on stripped Mini (confirmed viable once clean)
+*The boulder never crests.*
+*Note = your thinking · Reference = someone else's work.*
+*When in doubt, open the gate.*

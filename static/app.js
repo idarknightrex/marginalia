@@ -410,6 +410,8 @@ async function sendPrompt() {
           text.style.fontStyle = 'normal';
           _lastSynthesis = evt.text;
           renderSynthesisSections(evt.text, text);
+          // Load related sessions strip
+          showRelatedSessions();
         } else if (evt.event === 'done') {
           document.getElementById('cancel-btn').classList.remove('visible');
           document.getElementById('send-btn').disabled = false;
@@ -1535,6 +1537,34 @@ setInterval(() => {
 }, 60000);
 
 
+// ── Related sessions strip ────────────────────────────────────────────────────
+async function showRelatedSessions() {
+  const strip    = document.getElementById('related-sessions-strip');
+  const linksEl  = document.getElementById('related-sessions-links');
+  if (!strip || !linksEl) return;
+
+  // Get active project slug if set
+  const projectSel = document.getElementById('synth-save-project');
+  const project    = projectSel?.value?.trim() || '';
+  const url        = '/api/sessions/list' + (project ? '?project=' + encodeURIComponent(project) : '');
+
+  try {
+    const res  = await fetch(url);
+    const data = await res.json();
+    const sessions = (data.sessions || []).slice(0, 3);
+    if (!sessions.length) { strip.style.display = 'none'; return; }
+
+    linksEl.innerHTML = sessions.map((s, i) =>
+      (i > 0 ? ' &nbsp;·&nbsp; ' : '') +
+      '<span style="cursor:pointer;text-decoration:underline" title="' +
+      (s.filename || '') + '">' + (s.title || s.filename) + '</span>'
+    ).join('');
+    strip.style.display = 'block';
+  } catch(e) {
+    strip.style.display = 'none';
+  }
+}
+
 // ── Prompt synthesis save to project ─────────────────────────────────────
 async function saveSynthesisToProject() {
   const project  = document.getElementById('synth-save-project')?.value?.trim();
@@ -1604,6 +1634,18 @@ async function scanPDFFolder() {
 
 
 // ── Capture OCR ───────────────────────────────────────────────────────────
+// ── Capture mode selector hint ────────────────────────────────────────────────
+function updateCaptureHint() {
+  const mode    = document.querySelector('input[name="capture-mode"]:checked')?.value || 'typed';
+  const subtitle = document.querySelector('#view-ingest .import-section .import-section-title + div');
+  if (!subtitle) return;
+  if (mode === 'handwritten') {
+    subtitle.innerHTML = 'Drop a photo or scanned PDF.<br>Gemma 4 OCR will read the handwriting (~15–45s per page). Accuracy on cursive varies — review the output before saving.';
+  } else {
+    subtitle.innerHTML = 'Drop a typed/digital PDF.<br>Text extracts in seconds via pdfplumber.';
+  }
+}
+
 function handleCaptureDragOver(e) { e.preventDefault(); document.getElementById('capture-drop-zone').classList.add('drag-over'); }
 function handleCaptureDragLeave() { document.getElementById('capture-drop-zone').classList.remove('drag-over'); }
 function handleCaptureDrop(e)     { e.preventDefault(); document.getElementById('capture-drop-zone').classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f) runCapture(f); }
@@ -1621,14 +1663,18 @@ async function runCapture(file) {
   const existingActions = document.getElementById('capture-actions');
   if (existingActions) existingActions.remove();
 
-  const isPDF = file.name.toLowerCase().endsWith('.pdf');
-  label.textContent = isPDF
-    ? 'Extracting\u2026 typed PDF: seconds \u00b7 scanned: Gemma OCR ~15\u201345s'
-    : 'Running Gemma 4 OCR\u2026 (~15\u201345s)';
+  const mode   = document.querySelector('input[name="capture-mode"]:checked')?.value || 'typed';
+  const isPDF  = file.name.toLowerCase().endsWith('.pdf');
+  if (mode === 'handwritten') {
+    label.textContent = 'Running Gemma 4 OCR… (~15–45s per page)';
+  } else {
+    label.textContent = isPDF ? 'Extracting…' : 'Running Gemma 4 OCR… (~15–45s)';
+  }
 
   const formData = new FormData();
   formData.append('file', file);
   formData.append('note', note);
+  formData.append('mode', mode);
 
   try {
     const res  = await fetch('/api/ingest/ocr', { method: 'POST', body: formData });

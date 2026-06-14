@@ -178,6 +178,10 @@
         <button class="ref-action" id="synth-save-btn" onclick="saveSynthesisToProject()">Save</button>
         <span id="synth-save-status" style="font-family:monospace;font-size:10px;color:var(--verified);display:none">Saved ✓</span>
       </div>
+      <div id="related-sessions-strip" style="display:none;margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
+        <span style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">↗ related sessions &nbsp;</span>
+        <span id="related-sessions-links" style="font-family:monospace;font-size:10px;color:var(--accent)"></span>
+      </div>
     </div>
   </div>
 
@@ -281,6 +285,18 @@
       <div style="font-family:monospace;font-size:11px;color:var(--muted);margin-bottom:10px">
         Drop a photo of handwritten notes, a scanned page, or a PDF.<br>
         Typed PDFs extract in seconds. Handwritten or scanned files run Gemma 4 OCR (~15–45s).
+      </div>
+      <div style="margin-bottom:10px;display:flex;gap:16px;font-family:monospace;font-size:11px;color:var(--text)">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="capture-mode" id="capture-mode-typed" value="typed" checked
+            onchange="updateCaptureHint()">
+          Typed / digital PDF
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="radio" name="capture-mode" id="capture-mode-handwritten" value="handwritten"
+            onchange="updateCaptureHint()">
+          Handwritten / scanned <span style="color:var(--muted)">(Gemma OCR ~15–45s)</span>
+        </label>
       </div>
       <div class="import-drop-zone" id="capture-drop-zone"
         onclick="document.getElementById('capture-file-input').click()"
