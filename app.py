@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.0.5
+Marginalia — app.py  v1.0.6
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -468,7 +468,7 @@ def lookup_doi(doi: str) -> dict:
 
 # ─── API routes ───────────────────────────────────────────────────────────────
 
-APP_VERSION = "1.0.5"
+APP_VERSION = "1.0.6"
 
 @app.route("/")
 def index():
@@ -1848,7 +1848,13 @@ def ocr_capture():
             try:
                 from pdf2image import convert_from_bytes
                 import io as _io
-                pages = convert_from_bytes(file_data, dpi=200)
+                # poppler may not be on Flask's PATH (launchd strips Homebrew)
+                # pass the explicit path so pdf2image can find pdftoppm
+                import shutil, os
+                poppler_path = shutil.which("pdftoppm") or "/opt/homebrew/bin"
+                if poppler_path and poppler_path.endswith("pdftoppm"):
+                    poppler_path = os.path.dirname(poppler_path)
+                pages = convert_from_bytes(file_data, dpi=200, poppler_path=poppler_path)
                 page_texts = []
                 for i, page_img in enumerate(pages):
                     buf = _io.BytesIO()
@@ -1878,7 +1884,8 @@ def ocr_capture():
         })
 
     except Exception as e:
-        return jsonify({"error": f"Gemma OCR failed: {e}"}), 500
+        import traceback
+        return jsonify({"error": f"Gemma OCR failed: {e}", "detail": traceback.format_exc()}), 500
 
 
 def _write_capture(text: str, source_filename: str, note: str, method: str) -> str:
@@ -2060,6 +2067,6 @@ def serve_assets(filename):
 if __name__ == "__main__":
     port = int(os.environ.get("MARGINALIA_PORT", 5000))
     threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{port}")).start()
-    print(f"\n  Marginalia v1.0.5 running at http://localhost:{port}\n")
+    print(f"\n  Marginalia v1.0.6 running at http://localhost:{port}\n")
     print(f"  Keys loaded from: {'setup.env' if setup_env.exists() else '.env (legacy)'}\n")
     app.run(host="0.0.0.0", port=port, debug=False)

@@ -1648,8 +1648,33 @@ function updateCaptureHint() {
 
 function handleCaptureDragOver(e) { e.preventDefault(); document.getElementById('capture-drop-zone').classList.add('drag-over'); }
 function handleCaptureDragLeave() { document.getElementById('capture-drop-zone').classList.remove('drag-over'); }
-function handleCaptureDrop(e)     { e.preventDefault(); document.getElementById('capture-drop-zone').classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f) runCapture(f); }
-function handleCaptureSelect(e)   { const f = e.target.files[0]; if (f) runCapture(f); }
+function handleCaptureDrop(e) {
+  e.preventDefault();
+  document.getElementById('capture-drop-zone').classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) stageCapture(f);
+}
+function handleCaptureSelect(e) {
+  const f = e.target.files[0];
+  if (f) stageCapture(f);
+}
+
+let _stagedCaptureFile = null;
+
+function stageCapture(file) {
+  _stagedCaptureFile = file;
+  const label  = document.getElementById('capture-drop-label');
+  const goBtn  = document.getElementById('capture-go-btn');
+  label.textContent = '✓ ' + file.name + ' — set mode above, then click Run Capture';
+  if (goBtn) goBtn.style.display = 'inline-block';
+}
+
+function runStagedCapture() {
+  if (!_stagedCaptureFile) return;
+  const goBtn = document.getElementById('capture-go-btn');
+  if (goBtn) goBtn.style.display = 'none';
+  runCapture(_stagedCaptureFile);
+}
 
 async function runCapture(file) {
   const label    = document.getElementById('capture-drop-label');

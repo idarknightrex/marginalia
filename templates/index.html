@@ -309,9 +309,13 @@
         <div class="import-drop-label" id="capture-drop-label">Click to choose or drag and drop</div>
         <div class="import-drop-types">.pdf &nbsp;&#183;&nbsp; .jpg &nbsp;&#183;&nbsp; .png &nbsp;&#183;&nbsp; .webp</div>
       </div>
-      <div style="margin-top:8px">
-        <input id="capture-note" class="search-input" style="font-family:monospace;font-size:11px"
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+        <input id="capture-note" class="search-input" style="font-family:monospace;font-size:11px;flex:1"
           placeholder="Optional context — where is this from? what situation?">
+        <button id="capture-go-btn" class="btn-primary" onclick="runStagedCapture()"
+          style="display:none;font-family:monospace;font-size:11px;padding:6px 14px;white-space:nowrap">
+          &#9654; Run Capture
+        </button>
       </div>
       <div class="import-result" id="capture-result"></div>
       <div id="capture-text-preview" style="display:none;margin-top:10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:10px;font-family:monospace;font-size:11px;color:var(--text);white-space:pre-wrap;max-height:200px;overflow-y:auto"></div>
