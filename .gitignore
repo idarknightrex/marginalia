@@ -30,3 +30,5 @@ node_modules/
 # ── API keys — visible config file, never push ───────────────────────────────
 setup.env
 .env
+*.pyc
+__pycache__/
