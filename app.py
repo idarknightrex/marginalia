@@ -1880,6 +1880,7 @@ def ocr_capture():
             "method":  method_label,
             "message": f"Gemma OCR complete — {page_count} page(s)",
             "text":    ocr_text[:1000],
+            "full_text": ocr_text,
             "capture": capture,
         })
 

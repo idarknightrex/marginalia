@@ -1666,13 +1666,13 @@ function stageCapture(file) {
   const label  = document.getElementById('capture-drop-label');
   const goBtn  = document.getElementById('capture-go-btn');
   label.textContent = '✓ ' + file.name + ' — set mode above, then click Run Capture';
-  if (goBtn) goBtn.style.display = 'inline-block';
+  if (goBtn) goBtn.style.visibility = 'visible';
 }
 
 function runStagedCapture() {
   if (!_stagedCaptureFile) return;
   const goBtn = document.getElementById('capture-go-btn');
-  if (goBtn) goBtn.style.display = 'none';
+  if (goBtn) goBtn.style.visibility = 'hidden';
   runCapture(_stagedCaptureFile);
 }
 
@@ -1722,13 +1722,13 @@ async function runCapture(file) {
       saveNoteBtn.className = 'btn-primary';
       saveNoteBtn.style.fontSize = '11px';
       saveNoteBtn.textContent = '\u9670 Save as Note';
-      saveNoteBtn.onclick = () => captureToNote(data.text, file.name, note);
+      saveNoteBtn.onclick = () => captureToNote(data.full_text || data.text, file.name, note);
 
       const saveRefBtn = document.createElement('button');
       saveRefBtn.className = 'btn-secondary';
       saveRefBtn.style.fontSize = '11px';
       saveRefBtn.textContent = '\u2117 Save as Reference';
-      saveRefBtn.onclick = () => captureToReference(data.text, file.name);
+      saveRefBtn.onclick = () => captureToReference(data.full_text || data.text, file.name);
 
       const hint = document.createElement('span');
       hint.style.cssText = 'font-family:monospace;font-size:10px;color:var(--muted)';
