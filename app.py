@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v0.9.8
+Marginalia — app.py  v1.0
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -40,6 +40,10 @@ KEYS = {
 OLLAMA_BASE = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 
 # Research PDF folder — configurable in setup.env, defaults to ~/Documents/Research/PDFs/
+# Why configurable: researchers may store PDFs on external drives (Vault SSD),
+# network shares, or non-standard locations. Hardcoding ~/Documents/Research/PDFs/
+# was removed in v0.9.8 to avoid assuming Mac filesystem conventions for
+# a tool intended for distribution to other researchers.
 _research_pdf_path = os.getenv("RESEARCH_PDF_PATH", "")
 RESEARCH_PDF_DIR = Path(_research_pdf_path).expanduser() if _research_pdf_path else Path.home() / "Documents" / "Research" / "PDFs"
 
@@ -77,6 +81,20 @@ def save_settings(data):
 
 # ─── Canonical file helpers ───────────────────────────────────────────────────
 def write_canonical_reference(data: dict) -> Path:
+    """
+    Write a reference as a plain markdown file with YAML frontmatter.
+
+    Why markdown, not a database:
+    - Human-readable and editable with any text editor
+    - Researcher owns the files — not locked to Marginalia
+    - Works with Obsidian, VS Code, git diff, grep
+    - Survives software rot: markdown will be readable in 20 years
+    - The instrument is a guest in the researcher's files, not the landlord
+
+    File naming: LastName_Year_slug.md
+    The slug is derived from the first 3 words of the title.
+    This makes files sortable, scannable, and meaningful at a glance.
+    """
     ref_id = data.get("id") or str(uuid.uuid4())
     data["id"] = ref_id
     first_author = data.get("authors", "Unknown").split(";")[0].split(",")[0].strip()
@@ -147,6 +165,19 @@ updated_at: {datetime.utcnow().isoformat()}
 
 
 def write_canonical_session(prompt: str, responses: dict, synthesis: str = "", project: str = "", notes: str = "") -> Path:
+    """
+    Write a session as a plain markdown file.
+
+    Sessions are the researcher's thinking record — not a log, not telemetry.
+    They are meant to be read, annotated, and connected to other canonical files.
+    The markdown format means a researcher can open any session file and read it
+    as a document, not decode it as a database record.
+
+    The `project` and `notes` fields in frontmatter enable the Intelligence tab
+    to filter sessions by project scope and surface connections to deep read notes.
+    The `prompt_label` is the first 80 characters of the prompt — used as a
+    display label in the Intelligence tab without loading the full session body.
+    """
     session_id    = str(uuid.uuid4())
     timestamp     = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
     filename      = f"session_{timestamp}.md"
@@ -234,6 +265,11 @@ def call_ollama(model_str: str, prompt: str, unload_after: bool = True) -> str:
         "model":      model_str,
         "prompt":     prompt,
         "stream":     False,
+        # keep_alive=0 — unloads model from RAM immediately after response.
+        # This is intentional: allows sequential local model firing without
+        # memory pressure on the Mini. Cold start cost (~15-20s from Vault,
+        # ~8-17s from internal NVMe) is accepted in exchange for not holding
+        # multiple 5-10GB models in RAM simultaneously.
         "keep_alive": 0 if unload_after else "5m"
     }).encode()
     req = _ur.Request(f"{OLLAMA_BASE}/api/generate", data=payload, headers={"Content-Type": "application/json"})
@@ -255,6 +291,12 @@ def run_synthesis(prompt: str, responses: dict, synthesis_model: str = "deepseek
     response_block = "\n\n".join(
         f"[{model.upper()}]\n{text}" for model, text in responses.items() if text
     )
+    # The synthesis prompt uses ## HEADER delimiters explicitly because:
+    # - Local models (DeepSeek, Qwen) sometimes ignore numbered list instructions
+    #   but reliably follow markdown header formatting
+    # - The frontend renderSynthesisSections() splits on /\n##\s+/ to produce
+    #   colour-coded section cards — the delimiter IS the rendering instruction
+    # - If a model ignores the format, the frontend falls back to plain text gracefully
     synth_prompt = f"""You are a research synthesis engine. A researcher asked the following question and received responses from multiple AI models. Synthesize these into a single analytical summary.
 
 RESEARCHER'S QUESTION:
@@ -1931,6 +1973,6 @@ def serve_assets(filename):
 if __name__ == "__main__":
     port = int(os.environ.get("MARGINALIA_PORT", 5000))
     threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{port}")).start()
-    print(f"\n  Marginalia v0.9.8 running at http://localhost:{port}\n")
+    print(f"\n  Marginalia v1.0 running at http://localhost:{port}\n")
     print(f"  Keys loaded from: {'setup.env' if setup_env.exists() else '.env (legacy)'}\n")
     app.run(host="0.0.0.0", port=port, debug=False)

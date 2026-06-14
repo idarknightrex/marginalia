@@ -420,6 +420,97 @@ for dir in canonical canonical/references canonical/sessions; do
   fi
 done
 
+# ── Step 8: Canonical repo ───────────────────────────────────────────────────
+step "8 of 9 — Research data backup (canonical)"
+dim "Your references, sessions, notes, and writing live in canonical/"
+dim "This sets up a private GitHub repo so Save & Break backs them up automatically."
+
+CANONICAL_DIR="$(pwd)/canonical"
+CANONICAL_GIT="$CANONICAL_DIR/.git"
+
+# Read GitHub config from setup.env
+GITHUB_USER_VAL=$(grep "^GITHUB_USER=" "$SETUP_ENV" 2>/dev/null | cut -d'=' -f2- | tr -d '[:space:]"' || true)
+GITHUB_CANONICAL_VAL=$(grep "^GITHUB_CANONICAL_REPO=" "$SETUP_ENV" 2>/dev/null | cut -d'=' -f2- | tr -d '[:space:]"' || true)
+
+if [[ -d "$CANONICAL_GIT" ]]; then
+  ok "Canonical repo already initialised."
+  REMOTE_URL=$(git -C "$CANONICAL_DIR" remote get-url origin 2>/dev/null || true)
+  if [[ -n "$REMOTE_URL" ]]; then
+    ok "Remote: $REMOTE_URL"
+  else
+    warn "No remote set — canonical won't push on Save & Break."
+  fi
+elif [[ -n "$GITHUB_USER_VAL" && -n "$GITHUB_CANONICAL_VAL" ]]; then
+  info "Initialising canonical repo..."
+  cd "$CANONICAL_DIR"
+  git init -q
+  git add -A
+  git commit -q -m "canonical init — $(date +%Y-%m-%d)"
+  echo ""
+  info "To push to GitHub you need a Personal Access Token."
+  dim "Go to: github.com → Settings → Developer settings → Personal access tokens → Tokens (classic)"
+  dim "Generate new token → check 'repo' scope → copy it"
+  dim "Then create a private repo at: github.com/new named '$GITHUB_CANONICAL_VAL'"
+  echo ""
+  if ask "Set up the GitHub remote now?"; then
+    echo -e "${YELLOW}  ?${RESET}  Paste your Personal Access Token (input hidden): "
+    read -rs GITHUB_TOKEN
+    echo ""
+    REMOTE="https://${GITHUB_USER_VAL}:${GITHUB_TOKEN}@github.com/${GITHUB_USER_VAL}/${GITHUB_CANONICAL_VAL}.git"
+    git remote add origin "$REMOTE" 2>/dev/null || git remote set-url origin "$REMOTE"
+    info "Pushing to GitHub..."
+    if git push -u origin main 2>/dev/null; then
+      ok "Canonical repo pushed to github.com/${GITHUB_USER_VAL}/${GITHUB_CANONICAL_VAL}"
+      # Store clean URL (without token) for display
+      git remote set-url origin "https://github.com/${GITHUB_USER_VAL}/${GITHUB_CANONICAL_VAL}.git"
+    else
+      warn "Push failed — check the repo exists on GitHub and the token has repo scope."
+      dim "You can set this up manually later: cd canonical && git remote add origin [url] && git push -u origin main"
+    fi
+  else
+    warn "Skipping canonical remote — set it up manually before your first Save & Break."
+  fi
+  cd "$(dirname "$CANONICAL_DIR")"
+else
+  warn "GITHUB_USER not set in setup.env — skipping canonical remote setup."
+  dim "Add GITHUB_USER and GITHUB_CANONICAL_REPO to setup.env and run ./setup.sh again."
+fi
+
+
+# ── Step 9: launchd auto-start (optional) ────────────────────────────────────
+step "9 of 9 — Auto-start on boot (optional)"
+dim "Installs a launchd service so Marginalia starts automatically when the Mac boots."
+dim "Useful for headless operation — no need to SSH in and run bootstrap manually."
+dim "You can skip this and start Marginalia manually with ./bootstrap.command"
+echo ""
+
+PLIST_SRC="$(pwd)/com.marginalia.server.plist"
+PLIST_DST="$HOME/Library/LaunchAgents/com.marginalia.server.plist"
+
+if [[ -f "$PLIST_DST" ]]; then
+  ok "launchd service already installed."
+  if ask "Reinstall / update it?"; then
+    launchctl unload "$PLIST_DST" 2>/dev/null || true
+    cp "$PLIST_SRC" "$PLIST_DST"
+    launchctl load "$PLIST_DST"
+    ok "launchd service updated and loaded."
+  fi
+elif [[ -f "$PLIST_SRC" ]]; then
+  if ask "Install auto-start service?"; then
+    mkdir -p "$HOME/Library/LaunchAgents"
+    cp "$PLIST_SRC" "$PLIST_DST"
+    launchctl load "$PLIST_DST"
+    ok "Marginalia will now start automatically on boot."
+    dim "To remove:  launchctl unload $PLIST_DST && rm $PLIST_DST"
+    dim "Logs:       tail -f /tmp/marginalia.log"
+  else
+    info "Skipped — start manually with ./bootstrap.command"
+  fi
+else
+  warn "com.marginalia.server.plist not found — skipping auto-start setup."
+fi
+
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 if $READY; then
@@ -437,7 +528,7 @@ if $READY; then
   fi
   dim "To add models later:  ollama pull [model-name]"
   dim "To update Marginalia: git pull && ./setup.sh"
-  dim "Logs while running:   tail -f /tmp/marginalia.log  (if using launchd)"
+  dim "Logs while running:   tail -f /tmp/marginalia.log"
   echo ""
 else
   echo -e "  ${RED}${BOLD}Setup incomplete — see errors above.${RESET}"

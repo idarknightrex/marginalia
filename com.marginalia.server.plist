@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.marginalia.server</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/rajboora/Developer/marginalia/bootstrap.sh</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>MARGINALIA_PORT</key>
+        <string>5001</string>
+        <key>HOME</key>
+        <string>/Users/rajboora</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <!-- Start automatically on login -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Restart if it crashes -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Wait 10 seconds on boot to let Ollama start first -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <!-- Logs — read with: tail -f /tmp/marginalia.log -->
+    <key>StandardOutPath</key>
+    <string>/tmp/marginalia.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/marginalia.error.log</string>
+</dict>
+</plist>

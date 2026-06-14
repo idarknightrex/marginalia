@@ -180,6 +180,12 @@ document.getElementById('prompt-input').addEventListener('input', function() {
     '~' + Math.round(this.value.trim().split(/\s+/).length * 1.3) + ' tokens';
 });
 
+// Countdown bar durations per model (milliseconds).
+// Local models get 300s (5 min) because they cold-load from disk on every
+// call (keep_alive=0). Cloud models get 60s — network timeouts are handled
+// server-side. Dynamic ollama: models fall back to 300s.
+// If a model consistently times out, check Ollama is running and the model
+// is pulled: ollama list
 const MODEL_TIMEOUT = {
   gemini: 60000, anthropic: 60000, openai: 60000,
   deepseek: 300000, gemma: 300000, llama: 300000, qwen: 300000, mistral: 300000, cohere: 300000
@@ -309,7 +315,14 @@ async function sendPrompt() {
   const grid = document.getElementById('response-grid');
   grid.innerHTML = '';
   document.getElementById('synthesis-panel').style.display = 'none';
-  // Build model list from DOM chip order — cloud first, local after, dynamic ollama: chips last
+  // Build model list from DOM chip order — cloud first, local after, dynamic ollama: chips last.
+  //
+  // Why DOM-driven instead of a hardcoded array:
+  //   A hardcoded MODEL_ORDER array was the source of a class of bugs where
+  //   adding a new chip in HTML required also updating the JS array — and
+  //   forgetting meant the new model was silently dropped from prompts.
+  //   Reading order from the DOM means adding a chip in HTML is the only
+  //   step required. The rendering order IS the firing order.
   // This means adding a new chip in HTML is all that's needed — no JS list to maintain
   const CLOUD_CHIP_KEYS = new Set(['gemini', 'anthropic', 'openai']);
   const allChips   = [...document.querySelectorAll('.model-chip[data-model]')];
@@ -1224,6 +1237,9 @@ async function createWriting() {
 
 // ── Intelligence ──────────────────────────────────────────────────────────
 let _intelMode     = 'library';
+// _lastSynthesis holds the raw text of the most recent synthesis output.
+// Used by saveSynthesis() and saveSynthesisToProject() to save to canonical
+// without re-reading the DOM (which now contains rendered cards, not text).
 let _lastSynthesis = '';
 let _intelAbort    = null;
 
@@ -1252,6 +1268,13 @@ function cancelIntelSynthesis() {
   if (runBtn)    runBtn.disabled = false;
 }
 
+// Renders synthesis output as colour-coded section cards.
+// Expects ## HEADER format from the model — splits on /\n##\s+/.
+// Each section title maps to a colour in sectionColors.
+// If the model ignores the format (returns plain text or numbered lists),
+// falls back to plain text rendering — no error, just less visual structure.
+// The colour assignments are not arbitrary: red=tension/conflict,
+// blue=patterns/recurring, purple=absence/missing, green=connection/conversation.
 function renderSynthesisSections(raw, container) {
   container.innerHTML = '';
   const sectionColors = {
