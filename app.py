@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.0.6
+Marginalia — app.py  v1.0.9
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -468,7 +468,7 @@ def lookup_doi(doi: str) -> dict:
 
 # ─── API routes ───────────────────────────────────────────────────────────────
 
-APP_VERSION = "1.0.6"
+APP_VERSION = "1.0.9"
 
 @app.route("/")
 def index():
@@ -2068,6 +2068,6 @@ def serve_assets(filename):
 if __name__ == "__main__":
     port = int(os.environ.get("MARGINALIA_PORT", 5000))
     threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{port}")).start()
-    print(f"\n  Marginalia v1.0.6 running at http://localhost:{port}\n")
+    print(f"\n  Marginalia v1.0.9 running at http://localhost:{port}\n")
     print(f"  Keys loaded from: {'setup.env' if setup_env.exists() else '.env (legacy)'}\n")
     app.run(host="0.0.0.0", port=port, debug=False)

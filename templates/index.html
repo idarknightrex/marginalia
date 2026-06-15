@@ -362,7 +362,7 @@
       </div>
       <div style="display:flex;gap:8px">
         <input id="new-writing-slug" class="search-input" placeholder="slug for connections (e.g. grime-matters)" style="flex:1">
-        <input id="new-writing-project" class="search-input" placeholder="project connection (optional)" style="flex:1">
+        <input id="new-writing-project" class="search-input" placeholder="project connection (optional)" style="flex:1" list="project-slugs-list" autocomplete="off">
       </div>
     </div>
     <div id="writing-list"><div style="text-align:center;padding:40px;color:var(--muted);font-family:monospace;font-size:12px">No writing elements yet</div></div>
@@ -380,7 +380,7 @@
         <input id="new-note-source" class="search-input" placeholder="Source reference (optional)" style="flex:1">
       </div>
       <div style="display:flex;gap:8px;margin-bottom:8px">
-        <input id="new-note-project" class="search-input" placeholder="Project connection (optional)" style="flex:1">
+        <input id="new-note-project" class="search-input" placeholder="Project connection (optional)" style="flex:1" list="project-slugs-list" autocomplete="off">
         <input id="new-note-writing" class="search-input" placeholder="Writing connection (optional)" style="flex:1">
       </div>
       <textarea id="new-note-body" class="search-input" rows="4"
@@ -662,6 +662,7 @@
   <span class="status-project">v{{ app_version }} &middot; LLM</span>
 </div>
 
+<datalist id="project-slugs-list"></datalist>
 <script src="/static/app.js?v={{ app_version }}"></script>
 </body>
 </html>

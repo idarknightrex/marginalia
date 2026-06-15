@@ -32,6 +32,7 @@ function getModelMeta(model) {
 // ── Navigation ────────────────────────────────────────────────────────────
 function showView(name, btn) {
   if (name === 'projects')     loadProjects();
+  populateProjectSlugs();
   if (name === 'writing')      loadWriting();
   if (name === 'notes')        loadNotes();
   if (name === 'intelligence') loadIntelligenceProjects();
@@ -1024,6 +1025,19 @@ function launchPromptFromRef(filename) {
 
 
 // ── Projects ──────────────────────────────────────────────────────────────
+// ── Project slug autocomplete ─────────────────────────────────────────────────
+async function populateProjectSlugs() {
+  try {
+    const res  = await fetch('/api/projects');
+    const data = await res.json();
+    const dl   = document.getElementById('project-slugs-list');
+    if (!dl) return;
+    dl.innerHTML = (data.projects || [])
+      .map(p => `<option value="${p.slug}">${p.label}</option>`)
+      .join('');
+  } catch(e) {}
+}
+
 async function loadProjects() {
   const res  = await fetch('/api/projects');
   const data = await res.json();
@@ -1748,24 +1762,35 @@ async function runCapture(file) {
 
 function captureToNote(text, filename, contextNote) {
   // Pre-fill note editor and switch to Notes tab
-  const titleInput = document.getElementById('new-note-title');
-  const bodyInput  = document.getElementById('new-note-body');
-  const sourceInput = document.getElementById('new-note-source');
+  const titleInput   = document.getElementById('new-note-title');
+  const bodyInput    = document.getElementById('new-note-body');
+  const sourceInput  = document.getElementById('new-note-source');
+  const projectInput = document.getElementById('new-note-project');
   if (titleInput)  titleInput.value  = filename.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
   if (sourceInput) sourceInput.value = filename;
-  if (bodyInput)   bodyInput.value   = text;
-  // Also pre-fill context note if provided
-  if (contextNote && document.getElementById('new-note-body')) {
-    document.getElementById('new-note-body').value = contextNote
-      ? contextNote + '\n\n---\n\n' + text
-      : text;
+  if (bodyInput)   bodyInput.value   = contextNote
+    ? contextNote + '\n\n---\n\n' + text
+    : text;
+  // Pre-fill project from active filter if set
+  const activeProject = document.getElementById('note-project-filter')?.value?.trim();
+  if (projectInput && activeProject && activeProject !== 'all') {
+    projectInput.value = activeProject;
   }
-  // Switch to Notes tab
+  // Switch to Notes tab and show OCR reminder
   const notesBtn = document.querySelector('[onclick*="notes"]');
   showView('notes', notesBtn);
-  // Scroll to new note form
   setTimeout(() => {
     if (titleInput) titleInput.focus();
+    // Banner: remind researcher OCR needs review
+    const existing = document.getElementById('ocr-review-banner');
+    if (!existing) {
+      const banner = document.createElement('div');
+      banner.id = 'ocr-review-banner';
+      banner.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:8px 12px;margin-bottom:10px;font-family:monospace;font-size:11px;color:var(--muted)';
+      banner.textContent = '⚠ OCR capture — all pages are in the body below. Review for accuracy before saving.';
+      const form = document.getElementById('new-note-title')?.closest('.surface, div');
+      if (titleInput?.parentNode) titleInput.parentNode.insertBefore(banner, titleInput);
+    }
   }, 100);
 }
 
