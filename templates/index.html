@@ -150,6 +150,9 @@
     </div>
 
     <textarea id="prompt-input" placeholder="Enter your research question or prompt..."></textarea>
+    <div style="font-family:monospace;font-size:10px;color:var(--muted);margin:3px 0 4px;padding-left:2px">
+      Tip: use <em style="color:var(--text);font-style:normal">+++</em> to stack context layers — everything before the last +++ informs, the final block is the prompt.
+    </div>
     <div class="prompt-footer">
       <span class="token-estimate" id="token-estimate">~0 tokens</span>
       <button class="cancel-btn" id="cancel-btn" onclick="cancelPrompt()">&#9632; Cancel</button>
@@ -159,17 +162,27 @@
     <div class="response-grid" id="response-grid"></div>
 
     <div class="synthesis-panel" id="synthesis-panel" style="display:none">
-      <div class="synthesis-model-row">
-        <div class="synthesis-label">Synthesis &#8212; Consensus &middot; Divergence &middot; Unique Contributions &middot; Gaps</div>
+      <div class="synthesis-model-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="synthesis-label" style="flex:1;min-width:120px">Synthesis</div>
+        <select class="synthesis-model-select" id="synthesis-mode-select" title="Synthesis format"
+          style="font-family:monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:3px">
+          <option value="survey">Survey</option>
+          <option value="pressure">Pressure Test</option>
+        </select>
         <select class="synthesis-model-select" id="synthesis-model-select" title="Model used for synthesis pass">
           <option value="deepseek">DeepSeek R1</option>
           <option value="qwen">Qwen 2.5</option>
           <option value="mistral">Mistral</option>
           <option value="gemma">Gemma 4</option>
           <option value="llama">Llama 3.1</option>
+          <option value="cohere">Cohere</option>
         </select>
       </div>
       <div id="synthesis-text"></div>
+      <div id="synth-cycle-nudge" style="display:none;margin-top:10px;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:3px;font-family:monospace;font-size:10px;color:var(--muted)">
+        ↺ Before saving — consider cycling this through a follow-up prompt. What's missing? What would your examiner challenge? Try <em style="color:var(--text)">Pressure Test</em> mode for a sharper pass.
+        <span onclick="document.getElementById('synth-cycle-nudge').style.display='none'" style="float:right;cursor:pointer;color:var(--accent)">×</span>
+      </div>
       <div style="margin-top:10px;display:flex;gap:6px;align-items:center">
         <button class="ref-action">Flag Reference</button>
         <select id="synth-save-project" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:monospace;font-size:10px">
@@ -660,6 +673,9 @@
   <span id="session-time">Session: 0m</span>
   <span class="status-cost" id="cost-display">Claude: $0.0000</span>
   <span class="status-project">v{{ app_version }} &middot; LLM</span>
+  <span style="font-family:monospace;font-size:9px;color:var(--muted);margin-left:12px">
+    A: <span onclick="adjustFontSize(-1)" style="cursor:pointer;padding:0 3px">−</span><span onclick="adjustFontSize(1)" style="cursor:pointer;padding:0 3px">+</span>
+  </span>
 </div>
 
 <datalist id="project-slugs-list"></datalist>

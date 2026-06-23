@@ -33,6 +33,7 @@ function getModelMeta(model) {
 function showView(name, btn) {
   if (name === 'projects')     loadProjects();
   populateProjectSlugs();
+  initFontSize();
   if (name === 'writing')      loadWriting();
   if (name === 'notes')        loadNotes();
   if (name === 'intelligence') loadIntelligenceProjects();
@@ -338,7 +339,13 @@ async function sendPrompt() {
     const res = await fetch('/api/prompt', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ prompt, models, synthesis_model: document.getElementById('synthesis-model-select')?.value || 'deepseek' })
+      body: JSON.stringify({
+        prompt:           getActivePrompt(),
+        full_prompt:      prompt,
+        models,
+        synthesis_model:  document.getElementById('synthesis-model-select')?.value || 'deepseek',
+        synth_mode:       document.getElementById('synthesis-mode-select')?.value || 'survey'
+      })
     });
     const reader  = res.body.getReader();
     activeReader  = reader;
@@ -411,9 +418,12 @@ async function sendPrompt() {
           text.style.fontStyle = 'normal';
           _lastSynthesis = evt.text;
           renderSynthesisSections(evt.text, text);
-          // Load related sessions strip
           showRelatedSessions();
+          // Show cycling nudge banner
+          const nudge = document.getElementById('synth-cycle-nudge');
+          if (nudge) nudge.style.display = 'block';
         } else if (evt.event === 'done') {
+        setTimeout(highlightAuthorsInResponses, 200);
           document.getElementById('cancel-btn').classList.remove('visible');
           document.getElementById('send-btn').disabled = false;
           activeReader = null;
@@ -1577,6 +1587,64 @@ async function showRelatedSessions() {
   } catch(e) {
     strip.style.display = 'none';
   }
+}
+
+
+// ── Separator / prompt stacking ───────────────────────────────────────────────
+function getActivePrompt() {
+  const raw  = document.getElementById('prompt-input')?.value || '';
+  const sep  = '+++';
+  const parts = raw.split(sep).map(p => p.trim()).filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : raw;
+}
+
+
+// ── Font size adjustment ──────────────────────────────────────────────────────
+function adjustFontSize(delta) {
+  const current = parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const next    = Math.min(Math.max(current + delta, 11), 20);
+  document.documentElement.style.fontSize = next + 'px';
+  localStorage.setItem('marginalia-font-size', next);
+}
+function initFontSize() {
+  const saved = localStorage.getItem('marginalia-font-size');
+  if (saved) document.documentElement.style.fontSize = saved + 'px';
+}
+
+
+// ── Author/reference highlighting in model responses ─────────────────────────
+async function highlightAuthorsInResponses() {
+  try {
+    const res  = await fetch('/api/references?limit=200');
+    const data = await res.json();
+    const refs = data.references || [];
+    // Build surname list from references
+    const surnames = new Set();
+    refs.forEach(r => {
+      const authors = (r.authors || '').split(/[,;&]/);
+      authors.forEach(a => {
+        const parts = a.trim().split(/\s+/);
+        if (parts.length > 0) {
+          const surname = parts[parts.length - 1].replace(/[^a-zA-Z\-]/g, '');
+          if (surname.length > 3) surnames.add(surname);
+        }
+      });
+    });
+    // Highlight in all response cards
+    document.querySelectorAll('.response-body').forEach(el => {
+      if (el.dataset.highlighted) return;
+      el.dataset.highlighted = '1';
+      let html = el.innerHTML;
+      surnames.forEach(s => {
+        // Known author — amber highlight
+        const re = new RegExp(`\b(${s})\b`, 'g');
+        html = html.replace(re, `<mark style="background:rgba(200,146,42,0.25);color:var(--accent);border-radius:2px;padding:0 2px">$1</mark>`);
+      });
+      // Unknown authors — scan for "Firstname Lastname" patterns not in refs
+      // Simple heuristic: capitalized word pairs not already marked
+      el.innerHTML = html;
+    });
+  } catch(e) {}
 }
 
 // ── Prompt synthesis save to project ─────────────────────────────────────

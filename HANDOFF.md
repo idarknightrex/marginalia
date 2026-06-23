@@ -205,6 +205,13 @@ Examiner Challenges · Next Moves
 - Intentional friction: slugs typed by hand, status cycled manually, Save & Break deliberate
 - MIT + Ko-fi voluntary — no licensing gates
 
+### On what Marginalia currently is and is not
+**No RAG, no embedding, no vector store.** When Marginalia passes text to a model — in Capture, in multi-voice annotation, in Intelligence synthesis — it passes the full document text as context in the prompt. This is long-context prompting, not retrieval-augmented generation. There is no chunking, no semantic search, no retrieval of relevant passages from a larger corpus. It works for bounded documents and single captures; it degrades as documents get longer and context windows fill.
+
+**The researcher is the retrieval layer.** When a model times out or returns thin output, the researcher reads it, judges it insufficient, and re-prompts with more context — the relevant reference they remember, the framing from a past session, the theoretical connection the model missed. That is RAG with a human retrieval mechanism, operating exactly as the 60/40 principle intends. The canonical record is the corpus; the researcher's judgment does the retrieval. This is not a workaround — it is the current design, intentional and appropriate for v1.x.
+
+**v2.x RAG** would automate part of that retrieval: embed the canonical record, semantic search at prompt time, inject relevant chunks rather than relying on the researcher to supply them. That removes some active engagement with the researcher's own canon in exchange for speed and coverage. The trade-off should be named honestly before it is built — see seeds doc, June 18-19 2026.
+
 ### Build naming convention
 `marginalia-v[SEMVER]_[MMDD]-[HHMM].zip` — MMDD-HHMM is UTC build time
 Example: `marginalia-v1.0_0614-0001.zip`
@@ -266,12 +273,29 @@ git push origin main
 - setup.sh step 9 mkdir -p fix (reinstall branch)
 - Restart commands added to HANDOFF
 
-### v1.0.2 (current sprint)
-- Capture mode selector — typed / handwritten radio buttons (shipped)
-- De-dupe check in write_canonical_reference() (shipped)
-- Related sessions strip under synthesis panel (shipped)
-- Gemma OCR quality test on single handwritten page
-- Intelligence slug available in Prompt tab (investigate — likely wiring)
+### v1.0.2 — v1.0.9 (shipped June 14–21 2026)
+- Capture mode selector, Go button, multi-page OCR via pdf2image + Gemma
+- Full OCR text to note (not truncated preview)
+- De-dupe in write_canonical_reference()
+- Related sessions strip under synthesis panel
+- Project slug autocomplete on Notes/Writing forms
+- OCR review banner on Save as Note
+- No-cache headers on index route
+- Corner version wired to APP_VERSION
+- Explicit file-copy deploy script (deploy.sh)
+- Canonical push token wired
+
+### v1.2.0 (current — June 21 2026)
+- Pressure Test synthesis mode (Survived · Destabilized · Still Open)
+- Survey/Pressure Test mode selector next to synthesis model selector
+- Cohere added to synthesis model options
+- Synthesis cycling nudge banner (dismissable)
+- Font size +/− controls in status bar
+- Separator (+++) hint below prompt textarea
+- Full prompt including separator layers saved to canonical session file
+- Author/reference highlighting in model responses (amber = known refs)
+- utcnow() deprecation fixed throughout (datetime.now(datetime.UTC))
+- Pressure Test and Survey prompt templates in run_synthesis()
 
 ### v1.x (next)
 - Posture slider + scope × posture Intelligence design
@@ -286,12 +310,56 @@ git push origin main
 - Auto-updater
 
 ### v2.x
+- Session continuity primer — synthesis + current session chain + project framing,
+  prepended to local model prompts so they're not cold opens every round.
+  Stateless models, stateful instrument — see seeds doc, June 15 2026.
+- Sequential model conditioning ("shower thought mode") — model 1 responds,
+  model 2 sees model 1's output + original prompt, model 3 sees both + prompt,
+  final output carries accumulated chain conditioning. Generative/associative
+  use case, not analytical — error propagation risk means this mode needs a
+  clear UI warning. Trade-off: depth vs. the parallel architecture's immunity
+  to cascading errors. See seeds doc, June 21 2026.
+- RAG over canonical — embed references/notes/sessions, semantic search at prompt
+  time, inject retrieved chunks instead of relying on model training-data memory.
+  Distinct from the primer above: primer = "what have we discussed today",
+  RAG = "what do I already know about this, going back months". Higher value,
+  harder build (chunking, embedding model, retrieval quality). See seeds, June 18 2026
+  — addresses the "falling into a well" failure mode where small local models
+  reason confidently from training data alone with no signal they've hit a boundary.
 - Fine-tuning on session files
 - Local agent with canonical as knowledge base
 - Idea map (force-directed SVG — nodes: references, edges: thematic connections)
+  — both this and the session primer above are downstream of canonical depth;
+  neither makes sense until v1.x has filled out Notes/Sessions/References enough
+  to have real structure worth mapping or summarizing
+- Dashboard flyout — PhD Thread Dashboard (Open Flags / Dangling Threads / Next
+  Moves) currently hand-regenerated in a sibling Claude thread every ~15
+  interactions, reference copy saved at docs/dashboard-reference-v6.html.
+  Already named itself as wanting to live at localhost:5000/dashboard — that
+  never got built. Open design question: hand-curated forever vs. partially
+  derived from canonical (flagged refs/notes → Open Flags, unresolved
+  Intelligence findings → Dangling Threads, Next Moves likely stays manual).
+  See seeds doc, June 18 2026 — don't let this drift again.
+- /current endpoint — once dashboard generates from canonical, serve it at
+  a read-only public Flask route (e.g. http://[tailscale-ip]:5001/current).
+  No auth, no login, just a corkboard — here is what I am working on,
+  visible to anyone who knows the address.
+  HARD PREREQUISITE: dashboard flyout must auto-generate from canonical
+  first. The current dashboard artifact exists only because a parallel
+  Claude thread has been maintaining it by hand — other researchers
+  installing Marginalia have no such sibling thread and no hand-curated
+  current to publish. Shipping /current without canonical generation
+  ships a broken feature for everyone except the person who built it.
+  See seeds doc, June 21 2026.
 - BibTeX export
 
 ### v3.0
+- Federated /current — Marginalia instances subscribing to each other's
+  /current endpoints and displaying peers' dashboards inside their own UI.
+  A "Following" panel or tab, a settings field for peer URLs, a simple
+  fetch-and-render. No central platform, no algorithm, no feed. Peer to
+  peer, researcher to researcher — the old Unix finger protocol instinct
+  applied to PhD research. See seeds doc, June 21 2026.
 - App Store / notarization
 - Distribution to other researchers
 

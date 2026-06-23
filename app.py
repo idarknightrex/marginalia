@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.0.9
+Marginalia — app.py  v1.2.0
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -140,8 +140,8 @@ verification_status: {data.get("verification_status", "surfaced")}
 physical_holding: {data.get("physical_holding", "none")}
 holding_location: {data.get("holding_location", "")}
 tags: {tags}
-created_at: {datetime.utcnow().isoformat()}
-updated_at: {datetime.utcnow().isoformat()}
+created_at: {datetime.now(datetime.UTC).isoformat()}
+updated_at: {datetime.now(datetime.UTC).isoformat()}
 ---
 
 ## Themes
@@ -190,7 +190,7 @@ def write_canonical_session(prompt: str, responses: dict, synthesis: str = "", p
     display label in the Intelligence tab without loading the full session body.
     """
     session_id    = str(uuid.uuid4())
-    timestamp     = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
+    timestamp     = datetime.now(datetime.UTC).strftime("%Y-%m-%d_%H-%M")
     filename      = f"session_{timestamp}.md"
     prompt_label  = prompt.strip().replace("\n", " ")[:80]
     response_blocks = "\n\n".join(
@@ -199,7 +199,7 @@ def write_canonical_session(prompt: str, responses: dict, synthesis: str = "", p
     synth_block = synthesis if synthesis else "<!-- Add synthesis notes here -->"
     canonical = f"""---
 id: {session_id}
-created_at: {datetime.utcnow().isoformat()}
+created_at: {datetime.now(datetime.UTC).isoformat()}
 models: {list(responses.keys())}
 project: {project}
 notes: {notes}
@@ -288,7 +288,7 @@ def call_ollama(model_str: str, prompt: str, unload_after: bool = True) -> str:
         return json.loads(r.read()).get("response", "")
 
 
-def run_synthesis(prompt: str, responses: dict, synthesis_model: str = "deepseek") -> str:
+def run_synthesis(prompt: str, responses: dict, synthesis_model: str = "deepseek", synth_mode: str = "survey") -> str:
     settings  = load_settings()
     local_cfg = settings.get("models", {}).get("local", {})
     model_map = {
@@ -297,6 +297,7 @@ def run_synthesis(prompt: str, responses: dict, synthesis_model: str = "deepseek
         "mistral":  local_cfg.get("europe",     "mistral:7b"),
         "gemma":    local_cfg.get("multimodal", "gemma4:latest"),
         "llama":    local_cfg.get("general",    "llama3.1:8b"),
+        "cohere":   local_cfg.get("canada",     "command-r7b:latest"),
     }
     model_str = model_map.get(synthesis_model, local_cfg.get("reasoning", "deepseek-r1:8b"))
     response_block = "\n\n".join(
@@ -308,7 +309,29 @@ def run_synthesis(prompt: str, responses: dict, synthesis_model: str = "deepseek
     # - The frontend renderSynthesisSections() splits on /\n##\s+/ to produce
     #   colour-coded section cards — the delimiter IS the rendering instruction
     # - If a model ignores the format, the frontend falls back to plain text gracefully
-    synth_prompt = f"""You are a research synthesis engine. A researcher asked the following question and received responses from multiple AI models. Synthesize these into a single analytical summary.
+    if synth_mode == "pressure":
+        synth_prompt = f"""You are a research pressure-tester. A researcher brought a half-formed idea and sent it through multiple AI models. Your job is not to summarize what the models said — it is to assess what happened to the idea.
+
+RESEARCHER'S PROMPT:
+{prompt}
+
+MODEL RESPONSES:
+{response_block}
+
+Produce exactly three sections using these exact headers (the ## prefix is required):
+
+## SURVIVED
+What held up under scrutiny across multiple responses? What did the models reinforce or leave standing?
+
+## DESTABILIZED
+What got contradicted, complicated, or weakened? Name which model challenged what.
+
+## STILL OPEN
+What remains genuinely unresolved — not answered, not refuted, just unfinished? What did none of the models reach?
+
+Be direct. The researcher wants to know the shape of the idea after pressure, not a summary of what was said."""
+    else:
+        synth_prompt = f"""You are a research synthesis engine. A researcher asked the following question and received responses from multiple AI models. Synthesize these into a single analytical summary.
 
 RESEARCHER'S QUESTION:
 {prompt}
@@ -468,7 +491,7 @@ def lookup_doi(doi: str) -> dict:
 
 # ─── API routes ───────────────────────────────────────────────────────────────
 
-APP_VERSION = "1.0.9"
+APP_VERSION = "1.2.0"
 
 @app.route("/")
 def index():
@@ -562,7 +585,7 @@ REFERENCE LIST:
 
     if imported:
         log_path = SESSIONS_DIR / "imports.md"
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+        timestamp = datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M UTC")
         log_entry = f"\n### {timestamp} — {fmt} import\n"
         log_entry += f"- Imported: {len(imported)}\n"
         if skipped:  log_entry += f"- Skipped (no title): {len(skipped)}\n"
@@ -717,6 +740,7 @@ def handle_prompt():
     prompt          = data.get("prompt", "")
     models          = data.get("models", [])
     synthesis_model = data.get("synthesis_model", "deepseek")
+    synth_mode      = data.get("synth_mode", "survey")
 
     dynamic_local = [m for m in models if m.startswith("ollama:")]
     cloud_ordered = [m for m in MODEL_ORDER if m in models and m in CLOUD_MODELS]
@@ -759,11 +783,13 @@ def handle_prompt():
         synthesis = ""
         if len(results) > 1:
             yield json.dumps({"event": "synthesis_start"}) + "\n"
-            synthesis = run_synthesis(prompt, results, synthesis_model=synthesis_model)
+            synthesis = run_synthesis(prompt, results, synthesis_model=synthesis_model, synth_mode=synth_mode)
             yield json.dumps({"event": "synthesis", "text": synthesis}) + "\n"
 
         if results:
-            write_canonical_session(prompt, results, synthesis)
+            # Save full prompt including separator layers for canonical record
+            full_prompt = data.get("full_prompt", prompt)
+            write_canonical_session(full_prompt, results, synthesis)
 
         cost = estimate_anthropic_cost(anthropic_tokens["input"], anthropic_tokens["output"])
         yield json.dumps({
@@ -852,14 +878,14 @@ def update_reference(ref_filename):
     if "tags" in data:
         meta["tags"] = data["tags"]
 
-    meta["updated_at"] = datetime.utcnow().isoformat()
+    meta["updated_at"] = datetime.now(datetime.UTC).isoformat()
 
     tracked = ["title","authors","year","source_type","url_doi","tags","physical_holding","holding_location","verification_status"]
     changed = [f for f in tracked if f in data and str(data[f]).strip() != str(meta.get(f,"")).strip()]
     body_changed = [s for s in ["annotation","themes_body","connections","argument_connection","user_notes"] if s in data and data[s]]
     all_changed = changed + body_changed
     if all_changed:
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+        timestamp = datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M UTC")
         edit_line = f"- [{timestamp}] edited: {', '.join(all_changed)}"
         log_marker = "## Edit History"
         if log_marker in body:
@@ -915,7 +941,7 @@ def update_reference_status(ref_filename):
     old_status = meta.get("verification_status", "surfaced")
     meta["verification_status"] = new_status
 
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    timestamp = datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M")
     body = parts[2]
     log_marker = "## Status History"
     log_line   = f"- {old_status} → **{new_status}** [{timestamp}]"
@@ -992,7 +1018,7 @@ def update_project(project_slug):
         new_filepath = PROJECTS_DIR / (new_slug + ".md")
     else:
         new_filepath = filepath
-    meta["updated_at"] = datetime.utcnow().isoformat()
+    meta["updated_at"] = datetime.now(datetime.UTC).isoformat()
     body = parts[2]
     if "framing" in data and data["framing"]:
         if "## Framing" in body:
@@ -1024,8 +1050,8 @@ def create_project():
 label: {label or slug}
 slug: {slug}
 status: active
-created_at: {datetime.utcnow().isoformat()}
-updated_at: {datetime.utcnow().isoformat()}
+created_at: {datetime.now(datetime.UTC).isoformat()}
+updated_at: {datetime.now(datetime.UTC).isoformat()}
 ---
 
 ## Framing
@@ -1099,7 +1125,7 @@ def update_writing(writing_slug):
         new_filepath = WRITING_DIR / (new_slug + ".md")
     else:
         new_filepath = filepath
-    meta["updated_at"] = datetime.utcnow().isoformat()
+    meta["updated_at"] = datetime.now(datetime.UTC).isoformat()
     fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v)
     new_filepath.write_text(f"---\n{fm_lines}\n---\n{parts[2]}", encoding="utf-8")
     if new_filepath != filepath:
@@ -1123,8 +1149,8 @@ slug: {slug}
 type: {data.get("type", "other")}
 project: {data.get("project", "")}
 status: drafting
-created_at: {datetime.utcnow().isoformat()}
-updated_at: {datetime.utcnow().isoformat()}
+created_at: {datetime.now(datetime.UTC).isoformat()}
+updated_at: {datetime.now(datetime.UTC).isoformat()}
 ---
 
 ## Argument
@@ -1147,7 +1173,7 @@ def save_project_synthesis(project_name):
     synthesis = (request.json or {}).get("synthesis", "")
     if not synthesis:
         return jsonify({"error": "No synthesis provided"}), 400
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    timestamp = datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M UTC")
     entry = f"\n### Library synthesis — {timestamp}\n\n{synthesis}\n"
     text  = filepath.read_text(encoding="utf-8")
     parts = text.split("---", 2)
@@ -1159,7 +1185,7 @@ def save_project_synthesis(project_name):
             body = body.rstrip() + "\n\n## Syntheses" + entry
         meta_block = parts[1]
         import re
-        meta_block = re.sub(r'updated_at:.*', f'updated_at: {datetime.utcnow().isoformat()}', meta_block)
+        meta_block = re.sub(r'updated_at:.*', f'updated_at: {datetime.now(datetime.UTC).isoformat()}', meta_block)
         filepath.write_text(f"---{meta_block}---\n{body}", encoding="utf-8")
     return jsonify({"status": "saved"})
 
@@ -1652,7 +1678,7 @@ Provide a scholarly annotation suitable for a PhD research bibliography."""
         synthesis = list(results.values())[0]
 
     voices = "\n\n".join(f"**{m.upper()}:** {r}" for m, r in results.items())
-    new_annotation = f"<!-- Multi-voice annotation generated {datetime.utcnow().strftime('%Y-%m-%d')} -->\n\n{voices}\n\n**SYNTHESIS:** {synthesis}"
+    new_annotation = f"<!-- Multi-voice annotation generated {datetime.now(datetime.UTC).strftime('%Y-%m-%d')} -->\n\n{voices}\n\n**SYNTHESIS:** {synthesis}"
 
     if "## Annotation" in existing_body:
         before = existing_body.split("## Annotation")[0]
@@ -1892,11 +1918,11 @@ def ocr_capture():
 def _write_capture(text: str, source_filename: str, note: str, method: str) -> str:
     """Write a capture canonical file and return its filename."""
     capture_id = str(uuid.uuid4())
-    timestamp  = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
+    timestamp  = datetime.now(datetime.UTC).strftime("%Y-%m-%d_%H-%M")
     filename   = f"capture_{timestamp}.md"
     canonical  = f"""---
 id: {capture_id}
-created_at: {datetime.utcnow().isoformat()}
+created_at: {datetime.now(datetime.UTC).isoformat()}
 source_type: capture
 capture_method: {method}
 source_file: {source_filename}
@@ -1956,7 +1982,7 @@ def create_note():
     note_id  = str(uuid.uuid4())
     slug     = "-".join(title.lower().split()[:5])
     slug     = "".join(c for c in slug if c.isalnum() or c == "-")
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
+    timestamp = datetime.now(datetime.UTC).strftime("%Y-%m-%d_%H-%M")
     filename  = f"note_{timestamp}_{slug[:30]}.md"
     body      = data.get("body", "") or "<!-- What are you sitting with? -->"
     canonical = f"""---
@@ -1966,8 +1992,8 @@ source: {data.get("source", "")}
 project: {data.get("project", "")}
 writing: {data.get("writing", "")}
 status: active
-created_at: {datetime.utcnow().isoformat()}
-updated_at: {datetime.utcnow().isoformat()}
+created_at: {datetime.now(datetime.UTC).isoformat()}
+updated_at: {datetime.now(datetime.UTC).isoformat()}
 ---
 
 ## What I'm sitting with
@@ -2004,7 +2030,7 @@ def update_note(note_filename):
     for field in ["title", "source", "project", "writing", "status"]:
         if field in data:
             meta[field] = data[field]
-    meta["updated_at"] = datetime.utcnow().isoformat()
+    meta["updated_at"] = datetime.now(datetime.UTC).isoformat()
     body = parts[2]
     def replace_note_section(body, heading, new_content):
         if not new_content:
@@ -2047,7 +2073,7 @@ def get_broadcast():
             b = data.get("broadcast", {})
             if not b.get("active"): return jsonify({})
             expires = b.get("expires")
-            if expires and datetime.fromisoformat(expires) < datetime.utcnow(): return jsonify({})
+            if expires and datetime.fromisoformat(expires) < datetime.now(datetime.UTC): return jsonify({})
             return jsonify(b)
     except Exception:
         return jsonify({})
@@ -2056,7 +2082,7 @@ def get_broadcast():
 @app.route("/api/save-break", methods=["POST"])
 def save_and_break():
     from utils.git_preflight import safe_commit
-    message = request.json.get("message", f"Session — {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}")
+    message = request.json.get("message", f"Session — {datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M')}")
     return jsonify(safe_commit(APP_ROOT, message))
 
 
@@ -2068,6 +2094,6 @@ def serve_assets(filename):
 if __name__ == "__main__":
     port = int(os.environ.get("MARGINALIA_PORT", 5000))
     threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{port}")).start()
-    print(f"\n  Marginalia v1.0.9 running at http://localhost:{port}\n")
+    print(f"\n  Marginalia v1.2.0 running at http://localhost:{port}\n")
     print(f"  Keys loaded from: {'setup.env' if setup_env.exists() else '.env (legacy)'}\n")
     app.run(host="0.0.0.0", port=port, debug=False)
