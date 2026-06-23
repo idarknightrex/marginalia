@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.2.0
+Marginalia — app.py  v1.3.0
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -57,6 +57,9 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
     d.mkdir(parents=True, exist_ok=True)
 
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
+
+# ─── Version ──────────────────────────────────────────────────────────────────
+APP_VERSION = "1.3.0"
 
 # ─── App ──────────────────────────────────────────────────────────────────────
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -175,7 +178,7 @@ updated_at: {datetime.now(datetime.UTC).isoformat()}
     return filepath
 
 
-def write_canonical_session(prompt: str, responses: dict, synthesis: str = "", project: str = "", notes: str = "") -> Path:
+def write_canonical_session(prompt: str, responses: dict, synthesis: str = "", project: str = "", notes: str = "", writing: str = "") -> Path:
     """
     Write a session as a plain markdown file.
 
@@ -202,6 +205,7 @@ id: {session_id}
 created_at: {datetime.now(datetime.UTC).isoformat()}
 models: {list(responses.keys())}
 project: {project}
+writing: {writing}
 notes: {notes}
 prompt_label: {prompt_label}
 ---
@@ -491,7 +495,7 @@ def lookup_doi(doi: str) -> dict:
 
 # ─── API routes ───────────────────────────────────────────────────────────────
 
-APP_VERSION = "1.2.0"
+
 
 @app.route("/")
 def index():
@@ -789,7 +793,9 @@ def handle_prompt():
         if results:
             # Save full prompt including separator layers for canonical record
             full_prompt = data.get("full_prompt", prompt)
-            write_canonical_session(full_prompt, results, synthesis)
+            project_tag = data.get("project", "")
+            writing_tag = data.get("writing", "")
+            write_canonical_session(full_prompt, results, synthesis, project=project_tag, writing=writing_tag)
 
         cost = estimate_anthropic_cost(anthropic_tokens["input"], anthropic_tokens["output"])
         yield json.dumps({
@@ -1351,6 +1357,45 @@ def sessions_list():
                 continue
     return jsonify({"sessions": sessions})
 
+
+@app.route("/api/sessions/<session_filename>", methods=["PATCH"])
+def patch_session(session_filename):
+    """
+    Retroactive tagging — update project and/or writing fields on a saved session.
+    Only these two fields are patchable: the canonical session body is never touched.
+    This exists because sessions often get saved before the researcher has named
+    what they were working on — the Intelligence tab session list surfaces this gap.
+    """
+    if "/" in session_filename or "\\" in session_filename or ".." in session_filename:
+        return jsonify({"error": "Invalid filename"}), 400
+    filepath = (SESSIONS_DIR / session_filename).resolve()
+    if not filepath.exists():
+        return jsonify({"error": "Session not found"}), 404
+
+    data = request.json or {}
+    text = filepath.read_text(encoding="utf-8")
+    if not text.startswith("---"):
+        return jsonify({"error": "Invalid session format"}), 400
+
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return jsonify({"error": "Invalid session format"}), 400
+
+    meta = {}
+    for line in parts[1].strip().splitlines():
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            meta[k.strip()] = v.strip()
+
+    if "project" in data:
+        meta["project"] = data["project"].strip()
+    if "writing" in data:
+        meta["writing"] = data["writing"].strip()
+
+    fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items())
+    filepath.write_text(f"---\n{fm_lines}\n---\n{parts[2]}", encoding="utf-8")
+    return jsonify({"status": "updated", "filename": session_filename})
+
 @app.route("/api/sessions/synthesis", methods=["POST"])
 def sessions_synthesis():
     data    = request.json or {}
@@ -1615,6 +1660,9 @@ SESSIONS:
         return jsonify({"synthesis": synthesis, "session_count": matched, "project": project})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/references/<ref_filename>/annotate", methods=["POST"])
 def annotate_reference(ref_filename):
     data   = request.json or {}
     models = data.get("models", ["deepseek"])
@@ -2094,6 +2142,6 @@ def serve_assets(filename):
 if __name__ == "__main__":
     port = int(os.environ.get("MARGINALIA_PORT", 5000))
     threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{port}")).start()
-    print(f"\n  Marginalia v1.2.0 running at http://localhost:{port}\n")
+    print(f"\n  Marginalia v1.3.0 running at http://localhost:{port}\n")
     print(f"  Keys loaded from: {'setup.env' if setup_env.exists() else '.env (legacy)'}\n")
     app.run(host="0.0.0.0", port=port, debug=False)

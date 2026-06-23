@@ -344,7 +344,9 @@ async function sendPrompt() {
         full_prompt:      prompt,
         models,
         synthesis_model:  document.getElementById('synthesis-model-select')?.value || 'deepseek',
-        synth_mode:       document.getElementById('synthesis-mode-select')?.value || 'survey'
+        synth_mode:       document.getElementById('synthesis-mode-select')?.value || 'survey',
+        project:          document.getElementById('session-project-select')?.value || '',
+        writing:          document.getElementById('session-writing-select')?.value || '',
       })
     });
     const reader  = res.body.getReader();
@@ -1059,6 +1061,7 @@ async function loadProjects() {
   populateRefProjectFilter(data);
   populateSynthProjectDropdown(data);
   populateNoteProjectFilter(data);
+  populateSessionScopeSelectors(data);
   list.innerHTML = '';
   data.forEach(p => {
     const slug  = p.slug || p.name || (p._filename || '').replace('.md','');
@@ -1469,6 +1472,102 @@ async function loadIntelligenceProjects() {
     opt.textContent = (p.label || slug) + ' \u2014 ' + slug;
     sel.appendChild(opt);
   });
+  loadIntelSessionList();
+}
+
+// ── Intelligence session list ─────────────────────────────────────────────────
+// Shows recent sessions with their project/writing tags so the researcher can
+// see what Intelligence will draw from — and correct tags retroactively.
+let _intelSessionProjects = [];
+let _intelSessionWriting  = [];
+
+async function loadIntelSessionList() {
+  const list    = document.getElementById('intel-session-list');
+  const countEl = document.getElementById('intel-session-count');
+  if (!list) return;
+
+  // Load projects and writing for inline selects
+  try {
+    const [pr, wr] = await Promise.all([fetch('/api/projects'), fetch('/api/writing')]);
+    const pd = await pr.json();
+    const wd = await wr.json();
+    _intelSessionProjects = pd.map(p => ({ slug: p.slug || (p._filename||'').replace('.md',''), label: p.label || p.slug }));
+    _intelSessionWriting  = wd.map(w => ({ slug: w.slug || (w._filename||'').replace('.md',''), label: (w.title || w.slug || '').slice(0,40) }));
+  } catch(e) {}
+
+  try {
+    const res  = await fetch('/api/sessions/list');
+    const data = await res.json();
+    const sessions = data.sessions || [];
+    if (countEl) countEl.textContent = '— ' + sessions.length + ' recent';
+
+    if (!sessions.length) {
+      list.innerHTML = '<div style="font-family:monospace;font-size:11px;color:var(--muted);font-style:italic;padding:8px 0">No sessions yet</div>';
+      return;
+    }
+
+    list.innerHTML = '';
+    sessions.forEach(s => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)';
+
+      // Label + date
+      const labelCol = document.createElement('div');
+      const dateSpan = document.createElement('div');
+      dateSpan.style.cssText = 'font-family:monospace;font-size:9px;color:var(--muted);margin-bottom:2px';
+      dateSpan.textContent = (s.created || '').slice(0,16).replace('T',' ') + ' UTC';
+      const titleSpan = document.createElement('div');
+      titleSpan.style.cssText = 'font-family:Georgia,serif;font-size:12px;color:var(--text);line-height:1.4';
+      titleSpan.textContent = (s.title || s.filename || '').slice(0,80);
+      labelCol.appendChild(dateSpan);
+      labelCol.appendChild(titleSpan);
+
+      // Project select
+      const pSel = document.createElement('select');
+      pSel.style.cssText = 'font-family:monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 4px;max-width:130px';
+      pSel.innerHTML = '<option value="">no project</option>';
+      _intelSessionProjects.forEach(p => {
+        const o = document.createElement('option');
+        o.value = p.slug; o.textContent = p.label;
+        if (p.slug === (s.project||'').trim()) o.selected = true;
+        pSel.appendChild(o);
+      });
+
+      // Writing select
+      const wSel = document.createElement('select');
+      wSel.style.cssText = 'font-family:monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 4px;max-width:130px';
+      wSel.innerHTML = '<option value="">no writing</option>';
+      _intelSessionWriting.forEach(w => {
+        const o = document.createElement('option');
+        o.value = w.slug; o.textContent = w.label;
+        if (w.slug === (s.writing||'').trim()) o.selected = true;
+        wSel.appendChild(o);
+      });
+
+      // Patch on change
+      const filename = s.filename;
+      async function patchSession() {
+        try {
+          await fetch('/api/sessions/' + encodeURIComponent(filename), {
+            method: 'PATCH', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ project: pSel.value, writing: wSel.value })
+          });
+          // Brief visual confirmation
+          row.style.background = 'var(--verified)18';
+          setTimeout(() => { row.style.background = ''; }, 1200);
+        } catch(e) {}
+      }
+      pSel.onchange = patchSession;
+      wSel.onchange = patchSession;
+
+      row.appendChild(labelCol);
+      row.appendChild(pSel);
+      row.appendChild(wSel);
+      list.appendChild(row);
+    });
+  } catch(e) {
+    list.innerHTML = '<div style="font-family:monospace;font-size:11px;color:#c94242">Error loading sessions: ' + e.message + '</div>';
+  }
 }
 
 async function saveSynthesis() {
@@ -2098,6 +2197,43 @@ function populateNoteProjectFilter(projects) {
   if (current) sel.value = current;
 }
 
+function populateSessionScopeSelectors(projects) {
+  // Populate the "Working on" project + writing selectors above the prompt.
+  // Called whenever projects load — preserves current selection.
+  const pSel = document.getElementById('session-project-select');
+  const wSel = document.getElementById('session-writing-select');
+  if (!pSel) return;
+  const curP = pSel.value, curW = wSel ? wSel.value : '';
+  pSel.innerHTML = '<option value="">No project</option>';
+  projects.forEach(p => {
+    const slug = p.slug || (p._filename || '').replace('.md','');
+    const opt  = document.createElement('option');
+    opt.value       = slug;
+    opt.textContent = p.label || slug;
+    pSel.appendChild(opt);
+  });
+  if (curP) pSel.value = curP;
+  // Writing elements loaded separately
+  loadWritingForScope(wSel, curW);
+}
+
+async function loadWritingForScope(sel, preserve) {
+  if (!sel) return;
+  try {
+    const res  = await fetch('/api/writing');
+    const data = await res.json();
+    sel.innerHTML = '<option value="">No writing element</option>';
+    data.forEach(w => {
+      const slug = w.slug || (w._filename || '').replace('.md','');
+      const opt  = document.createElement('option');
+      opt.value       = slug;
+      opt.textContent = (w.title || slug).slice(0, 40);
+      sel.appendChild(opt);
+    });
+    if (preserve) sel.value = preserve;
+  } catch(e) {}
+}
+
 
 // ── Init ──────────────────────────────────────────────────────────────────
 checkBroadcast();
@@ -2105,3 +2241,11 @@ updateLocalWarning();
 checkKeyStatus();
 checkSetupStatus();
 checkLocalModels();
+// Pre-populate session scope selectors on load — no need to visit Projects first
+(async () => {
+  try {
+    const res  = await fetch('/api/projects');
+    const data = await res.json();
+    if (data.length) populateSessionScopeSelectors(data);
+  } catch(e) {}
+})();

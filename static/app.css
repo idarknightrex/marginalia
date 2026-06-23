@@ -126,6 +126,12 @@ main { max-width: 900px; margin: 0 auto; padding: 20px; }
 .chip-local-warning { display: none; font-family: monospace; font-size: 10px; color: #c9a832; margin-bottom: 10px; padding: 4px 8px; background: #c9a83212; border: 1px solid #c9a83244; border-radius: 3px; }
 .chip-local-warning.visible { display: block; }
 
+/* ── Session scope row (above prompt) ── */
+.session-scope-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 6px 10px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 4px; }
+.session-scope-label { font-family: monospace; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; flex-shrink: 0; }
+.session-scope-select { font-family: monospace; font-size: 11px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; color: var(--text); padding: 3px 6px; flex: 1; min-width: 0; cursor: pointer; outline: none; }
+.session-scope-select:focus { border-color: var(--accent); }
+
 /* ── Prompt ── */
 #prompt-input { width: 100%; min-height: 90px; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: Georgia, serif; font-size: 14px; resize: vertical; outline: none; line-height: 1.6; }
 .prompt-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }

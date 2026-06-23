@@ -149,6 +149,17 @@
       &#9888; Local models fire sequentially — select as many as you need.
     </div>
 
+    <!-- Session scope — set before firing, writes to canonical on save -->
+    <div class="session-scope-row" id="session-scope-row">
+      <div class="session-scope-label">Working on</div>
+      <select id="session-project-select" class="session-scope-select" title="Project scope for this session">
+        <option value="">No project</option>
+      </select>
+      <select id="session-writing-select" class="session-scope-select" title="Writing element for this session">
+        <option value="">No writing element</option>
+      </select>
+    </div>
+
     <textarea id="prompt-input" placeholder="Enter your research question or prompt..."></textarea>
     <div style="font-family:monospace;font-size:10px;color:var(--muted);margin:3px 0 4px;padding-left:2px">
       Tip: use <em style="color:var(--text);font-style:normal">+++</em> to stack context layers — everything before the last +++ informs, the final block is the prompt.
@@ -470,6 +481,19 @@
         </div>
         <div class="library-synthesis-text" id="library-synthesis-text" style="max-height:400px;overflow-y:auto;padding-right:6px"></div>
         <div style="font-size:10px;font-family:monospace;color:var(--muted);margin-top:8px" id="intel-scope-note"></div>
+      </div>
+    </div>
+
+    <!-- Session list — retroactive tagging -->
+    <div id="intel-session-list-panel" style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;background:var(--surface);margin-top:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">
+          Sessions <span id="intel-session-count" style="color:var(--accent)"></span>
+        </div>
+        <button class="btn-secondary" style="font-size:10px;padding:3px 8px" onclick="loadIntelSessionList()">&#8635; Refresh</button>
+      </div>
+      <div id="intel-session-list" style="font-size:12px;color:var(--muted)">
+        <div style="font-family:monospace;font-size:11px;color:var(--muted);font-style:italic">Switch to Intelligence tab to load sessions</div>
       </div>
     </div>
 
