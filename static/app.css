@@ -201,3 +201,8 @@ main { max-width: 900px; margin: 0 auto; padding: 20px; }
 
 /* ── Session note modal ── */
 .session-note-overlay { display: none; position: fixed; inset: 0; background: #00000066; z-index: 1000; align-items: center; justify-content: center; }
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
+}

@@ -297,7 +297,7 @@ def run_synthesis(prompt: str, responses: dict, synthesis_model: str = "deepseek
         "mistral":  local_cfg.get("europe",     "mistral:7b"),
         "gemma":    local_cfg.get("multimodal", "gemma4:latest"),
         "llama":    local_cfg.get("general",    "llama3.1:8b"),
-        "cohere":   local_cfg.get("canada",     "command-r7b:latest"),
+        "cohere":   local_cfg.get("canadian",   "command-r7b:latest"),
     }
     model_str = model_map.get(synthesis_model, local_cfg.get("reasoning", "deepseek-r1:8b"))
     response_block = "\n\n".join(

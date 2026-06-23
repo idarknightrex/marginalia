@@ -1369,8 +1369,17 @@ async function runIntelSynthesis() {
   textEl.innerHTML = '';
   textEl.style.color = 'var(--muted)';
   textEl.style.fontStyle = 'italic';
-  textEl.textContent = 'Reading your research\u2026 DeepSeek R1 is mapping your collection.';
-  if (label)     label.textContent       = '\u25C6 Synthesis';
+  const selectedModel = document.getElementById('intel-model-select')?.options[document.getElementById('intel-model-select')?.selectedIndex]?.text || 'DeepSeek R1';
+  textEl.textContent = `Reading your research\u2026 ${selectedModel} is mapping your collection.`;
+  if (label) label.innerHTML = '\u25C6 Synthesis <span id="intel-pulse" style="font-family:monospace;font-size:10px;color:var(--muted);margin-left:8px"><span id="intel-elapsed" style="color:var(--accent)">0s</span> \u00B7 mapping <span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);margin-left:3px;vertical-align:middle;animation:blink 1s infinite"></span></span>';
+  // Start elapsed timer
+  let _intelSeconds = 0;
+  const _intelTimer = setInterval(() => {
+    _intelSeconds++;
+    const el = document.getElementById('intel-elapsed');
+    if (el) el.textContent = _intelSeconds + 's';
+  }, 1000);
+  window._intelTimer = _intelTimer;
   if (note)      note.textContent        = '';
   if (saveBtn)   saveBtn.style.display   = 'none';
   if (cancelBtn) cancelBtn.style.display = 'inline-block';
@@ -1442,6 +1451,9 @@ async function runIntelSynthesis() {
   const scopeLabel = project ? 'project: ' + project : 'all projects';
   if (note) note.textContent = parts.join(' \u00b7 ') + ' \u00b7 ' + scopeLabel;
   if (saveBtn && project) saveBtn.style.display = 'inline-block';
+  if (window._intelTimer) { clearInterval(window._intelTimer); window._intelTimer = null; }
+  // Populate network map panel
+  populateNetworkMap(textEl.textContent || '');
 }
 
 async function loadIntelligenceProjects() {
@@ -1645,6 +1657,51 @@ async function highlightAuthorsInResponses() {
       el.innerHTML = html;
     });
   } catch(e) {}
+}
+
+
+// ── Network map — live session connections ────────────────────────────────────
+async function populateNetworkMap(synthesisText) {
+  const panel  = document.getElementById('network-map-panel');
+  const body   = document.getElementById('network-map-body');
+  const status = document.getElementById('network-map-status');
+  if (!panel || !body) return;
+
+  try {
+    const res  = await fetch('/api/references?limit=200');
+    const data = await res.json();
+    const refs = data.references || [];
+
+    // Find which authors/titles appear in the synthesis text
+    const found = [];
+    refs.forEach(r => {
+      const authors = (r.authors || '').split(/[,;&]/);
+      authors.forEach(a => {
+        const surname = a.trim().split(/\s+/).pop()?.replace(/[^a-zA-Z\-]/g, '');
+        if (surname && surname.length > 3 && synthesisText.includes(surname)) {
+          if (!found.find(f => f.title === r.title)) {
+            found.push({ surname, title: r.title, year: r.year, authors: r.authors });
+          }
+        }
+      });
+    });
+
+    if (found.length === 0) {
+      if (status) status.textContent = '— no canonical references surfaced';
+      body.innerHTML = '<span style="color:var(--muted);font-size:11px">No references from your canonical record appeared in this synthesis. Consider adding the sources the model cited.</span>';
+      return;
+    }
+
+    if (status) status.textContent = `— ${found.length} reference${found.length > 1 ? 's' : ''} surfaced`;
+    body.innerHTML = found.map(f =>
+      `<div style="padding:3px 0;border-bottom:1px solid var(--border)">
+        <span style="color:var(--accent);font-family:monospace;font-size:10px">${f.surname} ${f.year || ''}</span>
+        <span style="color:var(--text);font-size:11px;margin-left:6px">${f.title || ''}</span>
+      </div>`
+    ).join('');
+  } catch(e) {
+    if (status) status.textContent = '— unavailable';
+  }
 }
 
 // ── Prompt synthesis save to project ─────────────────────────────────────

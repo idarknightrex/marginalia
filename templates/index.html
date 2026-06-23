@@ -462,16 +462,25 @@
 
       <!-- Output -->
       <div class="library-synthesis-panel" id="library-synthesis-panel" style="margin-top:14px">
-        <div class="library-synthesis-label" id="library-synthesis-label">&#9670; Synthesis</div>
+        <div class="library-synthesis-label" id="library-synthesis-label">&#9670; Synthesis
+          <span id="intel-pulse" style="display:none;font-family:monospace;font-size:10px;color:var(--muted);margin-left:8px">
+            <span id="intel-elapsed" style="color:var(--accent)">0s</span> · mapping
+            <span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);margin-left:3px;vertical-align:middle;animation:blink 1s infinite"></span>
+          </span>
+        </div>
         <div class="library-synthesis-text" id="library-synthesis-text" style="max-height:400px;overflow-y:auto;padding-right:6px"></div>
         <div style="font-size:10px;font-family:monospace;color:var(--muted);margin-top:8px" id="intel-scope-note"></div>
       </div>
     </div>
 
-    <!-- Network map — v1.0 -->
-    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;background:var(--surface);opacity:.6">
-      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Network map <span style="color:var(--accent)">— v1.0</span></div>
-      <div style="font-size:12px;color:var(--muted)">Force-directed graph — references, projects, and writing elements as nodes, connections as edges</div>
+    <!-- Network map — live session panel -->
+    <div id="network-map-panel" style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;background:var(--surface);margin-top:12px">
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">
+        Connections this session <span id="network-map-status" style="color:var(--accent)">— run a synthesis to populate</span>
+      </div>
+      <div id="network-map-body" style="font-size:12px;color:var(--muted);line-height:1.7">
+        Authors and references that surfaced will appear here after synthesis.
+      </div>
     </div>
   </div>
 
