@@ -4,9 +4,6 @@
 //                     Import · Projects · Writing · Intelligence · Session
 // ─────────────────────────────────────────────────────────────────────────
 
-// ── Session identity — must be first, referenced throughout ───────────────
-const TAB_ID = crypto.randomUUID();
-
 // ── State ─────────────────────────────────────────────────────────────────
 // Cloud models start inactive — checkKeyStatus() activates only those with
 // valid keys. Local models (Ollama) start active — no key required.
@@ -354,24 +351,12 @@ async function sendPrompt() {
         prompt:           getActivePrompt(),
         full_prompt:      prompt,
         models,
-        tab_id:           TAB_ID,
         synthesis_model:  document.getElementById('synthesis-model-select')?.value || 'deepseek',
         synth_mode:       document.getElementById('synthesis-mode-select')?.value || 'survey',
         project:          document.getElementById('session-project-select')?.value || '',
         writing:          document.getElementById('session-writing-select')?.value || '',
       })
     });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      if (res.status === 423) {
-        alert('Session is active on another device. Take over from the read-only overlay to send prompts.');
-      } else {
-        alert('Error ' + res.status + ': ' + (errData.message || errData.error || 'Unknown error'));
-      }
-      document.getElementById('send-btn').disabled = false;
-      document.getElementById('cancel-btn').classList.remove('visible');
-      return;
-    }
     const reader  = res.body.getReader();
     activeReader  = reader;
     const decoder = new TextDecoder();
@@ -2268,88 +2253,6 @@ async function loadWritingForScope(sel, preserve) {
 }
 
 
-// ── Session lock ──────────────────────────────────────────────────────────────
-// One active research session at a time — across tabs and devices.
-// Physical analogy: two notebooks open, but you only write in one.
-
-let _isReadOnly = false;
-
-async function claimSession() {
-  try {
-    const res  = await fetch('/api/session/claim', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ tab_id: TAB_ID })
-    });
-    const data = await res.json();
-    if (data.status === 'readonly') {
-      setReadOnly(true, data.holder);
-    } else {
-      setReadOnly(false);
-      startHeartbeat();
-    }
-  } catch(e) {}
-}
-
-function startHeartbeat() {
-  setInterval(async () => {
-    try {
-      const res  = await fetch('/api/session/heartbeat', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ tab_id: TAB_ID })
-      });
-      const data = await res.json();
-      if (data.status === 'lost') {
-        // Another device took over — go read-only
-        setReadOnly(true, 'another device');
-      }
-    } catch(e) {}
-  }, 20000);
-}
-
-async function takeoverSession() {
-  try {
-    await fetch('/api/session/takeover', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ tab_id: TAB_ID })
-    });
-    setReadOnly(false);
-    startHeartbeat();
-    document.getElementById('readonly-overlay').style.display = 'none';
-  } catch(e) {}
-}
-
-function setReadOnly(readonly, holderHint) {
-  _isReadOnly = readonly;
-  const overlay = document.getElementById('readonly-overlay');
-  if (!overlay) return;
-  if (readonly) {
-    document.getElementById('readonly-holder').textContent =
-      holderHint ? 'Session active on device …' + holderHint : 'Session active on another device';
-    overlay.style.display = 'flex';
-    // Disable write controls
-    const writeEls = document.querySelectorAll(
-      '#send-btn, #save-break-btn, .import-drop-zone, #doi-lookup-btn, #add-ref-btn'
-    );
-    writeEls.forEach(el => { el.disabled = true; el.style.opacity = '0.4'; });
-    document.getElementById('prompt-input').disabled = true;
-    document.getElementById('prompt-input').placeholder =
-      'Read-only — session active on another device. Take over to write.';
-  } else {
-    overlay.style.display = 'none';
-    const writeEls = document.querySelectorAll(
-      '#send-btn, #save-break-btn, .import-drop-zone, #doi-lookup-btn, #add-ref-btn'
-    );
-    writeEls.forEach(el => { el.disabled = false; el.style.opacity = ''; });
-    document.getElementById('prompt-input').disabled = false;
-    document.getElementById('prompt-input').placeholder = 'Enter your research question or prompt...';
-  }
-}
-
-// Release lock cleanly when tab closes
-window.addEventListener('beforeunload', () => {
-  navigator.sendBeacon('/api/session/release', JSON.stringify({ tab_id: TAB_ID }));
-});
-
 // ── Broadcast detail helper ────────────────────────────────────────────────────
 // The broadcast banner now shows what changed, not just that something changed.
 // BROADCAST_URL (in paths.py) should serve JSON:
@@ -2362,7 +2265,6 @@ updateLocalWarning();
 checkKeyStatus();
 checkSetupStatus();
 checkLocalModels();
-claimSession();
 // Pre-populate session scope selectors on load — no need to visit Projects first
 (async () => {
   try {
