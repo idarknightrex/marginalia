@@ -4,9 +4,14 @@
 //                     Import · Projects · Writing · Intelligence · Session
 // ─────────────────────────────────────────────────────────────────────────
 
+// ── Session identity — must be first, referenced throughout ───────────────
+const TAB_ID = crypto.randomUUID();
+
 // ── State ─────────────────────────────────────────────────────────────────
+// Cloud models start inactive — checkKeyStatus() activates only those with
+// valid keys. Local models (Ollama) start active — no key required.
 let allRefs = [], activeFilter = 'all', sessionMinutes = 0;
-let activeModels = new Set(['gemini', 'anthropic', 'openai', 'deepseek']);
+let activeModels = new Set(['deepseek', 'gemma', 'llama', 'mistral', 'qwen', 'cohere']);
 let doiPreviewData = null;
 let pasteFormat = 'bibtex';
 
@@ -100,7 +105,9 @@ async function checkKeyStatus() {
     const keys = await res.json();
     document.querySelectorAll('.model-chip').forEach(chip => {
       const model = chip.dataset.model;
+      const isCloud = ['gemini','anthropic','openai'].includes(model);
       if (keys[model] === false) {
+        // No key — mark disabled, ensure inactive
         chip.classList.add('no-key');
         chip.classList.remove('active');
         chip.classList.add('inactive');
@@ -114,6 +121,13 @@ async function checkKeyStatus() {
         chip.onclick = () => {
           alert(model + ' requires an API key. Add it to setup.env and restart Marginalia.');
         };
+      } else if (isCloud && keys[model] === true) {
+        // Key present — activate this cloud chip
+        chip.classList.remove('no-key', 'inactive');
+        chip.classList.add('active');
+        activeModels.add(model);
+        const badge = chip.querySelector('.no-key-badge');
+        if (badge) badge.remove();
       }
     });
   } catch(e) {}
@@ -2250,7 +2264,6 @@ async function loadWritingForScope(sel, preserve) {
 // One active research session at a time — across tabs and devices.
 // Physical analogy: two notebooks open, but you only write in one.
 
-const TAB_ID = crypto.randomUUID();
 let _isReadOnly = false;
 
 async function claimSession() {

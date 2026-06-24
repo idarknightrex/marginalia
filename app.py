@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.4.1
+Marginalia — app.py  v1.4.2
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -60,7 +60,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.4.2"
 
 # ─── Session lock ─────────────────────────────────────────────────────────────
 # One active research session at a time — across tabs and devices.
@@ -2251,6 +2251,6 @@ def serve_assets(filename):
 if __name__ == "__main__":
     port = int(os.environ.get("MARGINALIA_PORT", 5000))
     threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{port}")).start()
-    print(f"\n  Marginalia v1.4.1 running at http://localhost:{port}\n")
+    print(f"\n  Marginalia v1.4.2 running at http://localhost:{port}\n")
     print(f"  Keys loaded from: {'setup.env' if setup_env.exists() else '.env (legacy)'}\n")
     app.run(host="0.0.0.0", port=port, debug=False)
