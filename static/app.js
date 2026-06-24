@@ -2076,22 +2076,42 @@ async function runCapture(file) {
 }
 
 function captureToNote(text, filename, contextNote) {
-  // Pre-fill note editor and switch to Notes tab
+  // Pre-fill note editor and switch to Notes tab.
+  // Also auto-saves a draft immediately so OCR text is never lost
+  // if the researcher navigates away before hitting Save.
   const titleInput   = document.getElementById('new-note-title');
   const bodyInput    = document.getElementById('new-note-body');
   const sourceInput  = document.getElementById('new-note-source');
   const projectInput = document.getElementById('new-note-project');
-  if (titleInput)  titleInput.value  = filename.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+  const title = filename.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+  const body  = contextNote ? contextNote + '\n\n---\n\n' + text : text;
+  if (titleInput)  titleInput.value  = title;
   if (sourceInput) sourceInput.value = filename;
-  if (bodyInput)   bodyInput.value   = contextNote
-    ? contextNote + '\n\n---\n\n' + text
-    : text;
-  // Pre-fill project from active filter if set
+  if (bodyInput)   bodyInput.value   = body;
   const activeProject = document.getElementById('note-project-filter')?.value?.trim();
   if (projectInput && activeProject && activeProject !== 'all') {
     projectInput.value = activeProject;
   }
-  // Switch to Notes tab and show OCR reminder
+
+  // Auto-save draft to canonical immediately — text survives navigation
+  fetch('/api/notes', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      title:   '[DRAFT] ' + title,
+      body:    body,
+      source:  filename,
+      project: (projectInput && activeProject !== 'all') ? activeProject : '',
+      questions_raised: '',
+      connections: '',
+      writing: ''
+    })
+  }).then(() => {
+    // Refresh note list so draft appears immediately
+    if (typeof loadNotes === 'function') loadNotes();
+  }).catch(() => {});
+
+  // Switch to Notes tab
   const notesBtn = document.querySelector('[onclick*="notes"]');
   showView('notes', notesBtn);
   setTimeout(() => {
@@ -2101,9 +2121,8 @@ function captureToNote(text, filename, contextNote) {
     if (!existing) {
       const banner = document.createElement('div');
       banner.id = 'ocr-review-banner';
-      banner.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:8px 12px;margin-bottom:10px;font-family:monospace;font-size:11px;color:var(--muted)';
-      banner.textContent = '⚠ OCR capture — all pages are in the body below. Review for accuracy before saving.';
-      const form = document.getElementById('new-note-title')?.closest('.surface, div');
+      banner.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:4px;padding:8px 12px;margin-bottom:10px;font-family:monospace;font-size:11px;color:var(--muted)';
+      banner.innerHTML = '&#9685; OCR draft saved — review the text above for accuracy, edit if needed, then save again to confirm. The draft marked [DRAFT] is already in your notes.';
       if (titleInput?.parentNode) titleInput.parentNode.insertBefore(banner, titleInput);
     }
   }, 100);

@@ -309,7 +309,11 @@
       <div class="import-section-title">&#9685; Capture — Photo or Scanned PDF</div>
       <div style="font-family:monospace;font-size:11px;color:var(--muted);margin-bottom:10px">
         Drop a photo of handwritten notes, a scanned page, or a PDF.<br>
-        Typed PDFs extract in seconds. Handwritten PDFs are processed page by page via Gemma 4 OCR (~15–45s per page).
+        Typed PDFs extract in seconds. Handwritten PDFs are processed page by page via Gemma 4 OCR (~15–45s per page).<br><br>
+        <span style="color:var(--text)">After capture:</span>
+        <span style="color:var(--accent)">Save as Note</span> if it's your own thinking —
+        <span style="color:var(--accent)">Save as Reference</span> if it's someone else's work.
+        The OCR text will pre-fill the relevant form. <em style="color:var(--muted)">Review before saving — OCR is imperfect.</em>
       </div>
       <div style="margin-bottom:10px;display:flex;gap:16px;font-family:monospace;font-size:11px;color:var(--text)">
         <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
@@ -397,6 +401,12 @@
   <!-- ── Notes view ── -->
   <div id="view-notes" class="view">
     <div class="page-header"><h1>Notes</h1><small>Deep reading &amp; accumulation — no destination required</small></div>
+
+    <!-- Notes explainer — what this space is for -->
+    <div style="border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:4px;padding:12px 16px;margin-bottom:14px;background:var(--surface);font-family:Georgia,serif;font-size:13px;color:var(--muted);line-height:1.7">
+      Notes is where your thinking lives. Drop observations, half-formed connections, questions a reading raised, things you're not ready to argue yet. No status workflow, no destination. A note from eight months ago might be the thing that cracks a chapter argument.
+      <span style="font-family:monospace;font-size:10px;color:var(--muted);display:block;margin-top:6px">Nothing here gets deleted. Notes from Ingest → Capture land here after OCR review.</span>
+    </div>
 
     <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface)">
       <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">New note</div>
