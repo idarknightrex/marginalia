@@ -142,8 +142,6 @@
         </div>
         <!-- dynamic local chips injected here by checkLocalModels() -->
       </div>
-      <button class="hide-inactive-btn" onclick="setLocalOnly()" style="margin-right:4px">Local only</button>
-      <button class="hide-inactive-btn" onclick="toggleHideInactive(this)">Hide inactive</button>
     </div>
 
     <div class="chip-local-warning" id="local-warning">
@@ -168,6 +166,8 @@
     <div class="prompt-footer">
       <span class="token-estimate" id="token-estimate">~0 tokens</span>
       <button class="cancel-btn" id="cancel-btn" onclick="cancelPrompt()">&#9632; Cancel</button>
+      <button class="hide-inactive-btn" onclick="setLocalOnly()">Local only</button>
+      <button class="hide-inactive-btn" id="hide-inactive-btn" onclick="toggleHideInactive(this)">Hide inactive</button>
       <button class="btn-primary" id="send-btn" onclick="sendPrompt()">Send to Active Models &#8594;</button>
     </div>
 
@@ -491,7 +491,13 @@
         <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">
           Sessions <span id="intel-session-count" style="color:var(--accent)"></span>
         </div>
-        <button class="btn-secondary" style="font-size:10px;padding:3px 8px" onclick="loadIntelSessionList()">&#8635; Refresh</button>
+        <div style="display:flex;align-items:center;gap:8px">
+          <label style="font-family:monospace;font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px">
+            <input type="checkbox" id="intel-show-hidden" onchange="loadIntelSessionList()" style="cursor:pointer">
+            Show hidden
+          </label>
+          <button class="btn-secondary" style="font-size:10px;padding:3px 8px" onclick="loadIntelSessionList()">&#8635; Refresh</button>
+        </div>
       </div>
       <div id="intel-session-list" style="font-size:12px;color:var(--muted)">
         <div style="font-family:monospace;font-size:11px;color:var(--muted);font-style:italic">Switch to Intelligence tab to load sessions</div>

@@ -1519,7 +1519,9 @@ async function loadIntelSessionList() {
   const countEl = document.getElementById('intel-session-count');
   if (!list) return;
 
-  // Load projects and writing for inline selects
+  // Show hidden toggle state
+  const showHidden = document.getElementById('intel-show-hidden')?.checked || false;
+
   try {
     const [pr, wr] = await Promise.all([fetch('/api/projects'), fetch('/api/writing')]);
     const pd = await pr.json();
@@ -1529,10 +1531,11 @@ async function loadIntelSessionList() {
   } catch(e) {}
 
   try {
-    const res  = await fetch('/api/sessions/list');
+    const url  = '/api/sessions/list' + (showHidden ? '?show_hidden=true' : '');
+    const res  = await fetch(url);
     const data = await res.json();
     const sessions = data.sessions || [];
-    if (countEl) countEl.textContent = '— ' + sessions.length + ' recent';
+    if (countEl) countEl.textContent = '— ' + sessions.length + (showHidden ? ' (incl. hidden)' : ' active');
 
     if (!sessions.length) {
       list.innerHTML = '<div style="font-family:monospace;font-size:11px;color:var(--muted);font-style:italic;padding:8px 0">No sessions yet</div>';
@@ -1541,8 +1544,9 @@ async function loadIntelSessionList() {
 
     list.innerHTML = '';
     sessions.forEach(s => {
+      const isHidden = s.hidden === true || s.hidden === 'true';
       const row = document.createElement('div');
-      row.style.cssText = 'display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)';
+      row.style.cssText = 'display:grid;grid-template-columns:1fr auto auto auto auto;gap:6px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)' + (isHidden ? ';opacity:0.5' : '');
 
       // Label + date
       const labelCol = document.createElement('div');
@@ -1557,7 +1561,7 @@ async function loadIntelSessionList() {
 
       // Project select
       const pSel = document.createElement('select');
-      pSel.style.cssText = 'font-family:monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 4px;max-width:130px';
+      pSel.style.cssText = 'font-family:monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 4px;max-width:110px';
       pSel.innerHTML = '<option value="">no project</option>';
       _intelSessionProjects.forEach(p => {
         const o = document.createElement('option');
@@ -1568,7 +1572,7 @@ async function loadIntelSessionList() {
 
       // Writing select
       const wSel = document.createElement('select');
-      wSel.style.cssText = 'font-family:monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 4px;max-width:130px';
+      wSel.style.cssText = 'font-family:monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 4px;max-width:110px';
       wSel.innerHTML = '<option value="">no writing</option>';
       _intelSessionWriting.forEach(w => {
         const o = document.createElement('option');
@@ -1577,15 +1581,46 @@ async function loadIntelSessionList() {
         wSel.appendChild(o);
       });
 
-      // Patch on change
+      // View button
+      const viewBtn = document.createElement('button');
+      viewBtn.textContent = '▾ View';
+      viewBtn.style.cssText = 'font-family:monospace;font-size:9px;padding:2px 6px;background:transparent;border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer;white-space:nowrap';
+
+      // Hide/unhide button
+      const hideBtn = document.createElement('button');
+      hideBtn.textContent = isHidden ? 'Unhide' : 'Hide';
+      hideBtn.style.cssText = 'font-family:monospace;font-size:9px;padding:2px 6px;background:transparent;border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer;white-space:nowrap';
+
+      // Inline raw view panel
+      const viewPanel = document.createElement('div');
+      viewPanel.style.cssText = 'display:none;grid-column:1/-1;background:var(--surface);border:1px solid var(--border);border-radius:3px;padding:10px 12px;font-family:monospace;font-size:10px;color:var(--muted);white-space:pre-wrap;max-height:300px;overflow-y:auto;line-height:1.6;margin-top:4px';
+
       const filename = s.filename;
+
+      viewBtn.onclick = async () => {
+        if (viewPanel.style.display !== 'none') {
+          viewPanel.style.display = 'none';
+          viewBtn.textContent = '▾ View';
+          return;
+        }
+        viewBtn.textContent = '▴ Close';
+        viewPanel.textContent = 'Loading…';
+        viewPanel.style.display = 'block';
+        try {
+          const r = await fetch('/api/sessions/' + encodeURIComponent(filename) + '/raw');
+          const d = await r.json();
+          viewPanel.textContent = d.content || 'Could not load session';
+        } catch(e) {
+          viewPanel.textContent = 'Error loading session';
+        }
+      };
+
       async function patchSession() {
         try {
           await fetch('/api/sessions/' + encodeURIComponent(filename), {
             method: 'PATCH', headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ project: pSel.value, writing: wSel.value })
           });
-          // Brief visual confirmation
           row.style.background = 'var(--verified)18';
           setTimeout(() => { row.style.background = ''; }, 1200);
         } catch(e) {}
@@ -1593,10 +1628,23 @@ async function loadIntelSessionList() {
       pSel.onchange = patchSession;
       wSel.onchange = patchSession;
 
+      hideBtn.onclick = async () => {
+        try {
+          await fetch('/api/sessions/' + encodeURIComponent(filename), {
+            method: 'PATCH', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ hidden: !isHidden })
+          });
+          loadIntelSessionList(); // Refresh the list
+        } catch(e) {}
+      };
+
       row.appendChild(labelCol);
       row.appendChild(pSel);
       row.appendChild(wSel);
+      row.appendChild(viewBtn);
+      row.appendChild(hideBtn);
       list.appendChild(row);
+      if (viewPanel) list.appendChild(viewPanel);
     });
   } catch(e) {
     list.innerHTML = '<div style="font-family:monospace;font-size:11px;color:#c94242">Error loading sessions: ' + e.message + '</div>';

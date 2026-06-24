@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.4.7.0624-1723
+Marginalia — app.py  v1.4.8.0624-1732
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -59,7 +59,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.4.7.0624-1723"
+APP_VERSION = "1.4.8.0624-1732"
 
 
 
@@ -1346,10 +1346,14 @@ LIBRARY:
 @app.route("/api/sessions/list", methods=["GET"])
 def sessions_list():
     """
-    Return session metadata for the related-sessions strip.
-    Optional ?project=slug filter. Returns up to 20 most recent.
+    Return session metadata for Intelligence session list and related-sessions strip.
+    Optional ?project=slug filter, ?show_hidden=true to include hidden sessions.
+    Hidden sessions (hidden: true in frontmatter) are excluded by default.
+    Sessions are never deleted — hide is the only removal gesture.
+    Returns up to 20 most recent.
     """
     project_filter = request.args.get("project", "").strip()
+    show_hidden    = request.args.get("show_hidden", "false").lower() == "true"
     sessions = []
     if SESSIONS_DIR.exists():
         for f in sorted(SESSIONS_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
@@ -1357,7 +1361,6 @@ def sessions_list():
                 continue
             try:
                 text = f.read_text(encoding="utf-8")
-                # Extract frontmatter fields
                 fm = {}
                 if text.startswith("---"):
                     end = text.find("---", 3)
@@ -1366,8 +1369,10 @@ def sessions_list():
                             if ":" in line:
                                 k, v = line.split(":", 1)
                                 fm[k.strip()] = v.strip()
-                # Skip captures
                 if fm.get("source_type") == "capture":
+                    continue
+                is_hidden = fm.get("hidden", "false").lower() == "true"
+                if is_hidden and not show_hidden:
                     continue
                 proj = fm.get("project", "")
                 if project_filter and proj != project_filter:
@@ -1376,7 +1381,9 @@ def sessions_list():
                     "filename": f.name,
                     "title":    fm.get("title") or fm.get("prompt", "")[:60] or f.stem,
                     "project":  proj,
+                    "writing":  fm.get("writing", ""),
                     "created":  fm.get("created_at", ""),
+                    "hidden":   is_hidden,
                 })
                 if len(sessions) >= 20:
                     break
@@ -1388,10 +1395,10 @@ def sessions_list():
 @app.route("/api/sessions/<session_filename>", methods=["PATCH"])
 def patch_session(session_filename):
     """
-    Retroactive tagging — update project and/or writing fields on a saved session.
-    Only these two fields are patchable: the canonical session body is never touched.
-    This exists because sessions often get saved before the researcher has named
-    what they were working on — the Intelligence tab session list surfaces this gap.
+    Retroactive tagging — update project, writing, and hidden fields on a saved session.
+    The canonical session body is never touched.
+    hidden: true removes the session from default Intelligence scope without deleting it.
+    Sessions are never deleted — hide is the only removal gesture.
     """
     if "/" in session_filename or "\\" in session_filename or ".." in session_filename:
         return jsonify({"error": "Invalid filename"}), 400
@@ -1418,10 +1425,27 @@ def patch_session(session_filename):
         meta["project"] = data["project"].strip()
     if "writing" in data:
         meta["writing"] = data["writing"].strip()
+    if "hidden" in data:
+        meta["hidden"] = "true" if data["hidden"] else "false"
 
     fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items())
     filepath.write_text(f"---\n{fm_lines}\n---\n{parts[2]}", encoding="utf-8")
     return jsonify({"status": "updated", "filename": session_filename})
+
+
+@app.route("/api/sessions/<session_filename>/raw", methods=["GET"])
+def get_session_raw(session_filename):
+    """
+    Returns the raw markdown content of a session file for read-only viewing.
+    Used by the Intelligence session list expand panel.
+    The canonical file is never modified by this route.
+    """
+    if "/" in session_filename or "\\" in session_filename or ".." in session_filename:
+        return jsonify({"error": "Invalid filename"}), 400
+    filepath = (SESSIONS_DIR / session_filename).resolve()
+    if not filepath.exists():
+        return jsonify({"error": "Session not found"}), 404
+    return jsonify({"content": filepath.read_text(encoding="utf-8"), "filename": session_filename})
 
 @app.route("/api/sessions/synthesis", methods=["POST"])
 def sessions_synthesis():
@@ -2169,6 +2193,6 @@ def serve_assets(filename):
 if __name__ == "__main__":
     port = int(os.environ.get("MARGINALIA_PORT", 5000))
     threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{port}")).start()
-    print(f"\n  Marginalia v1.4.7.0624-1723 running at http://localhost:{port}\n")
+    print(f"\n  Marginalia v1.4.8.0624-1732 running at http://localhost:{port}\n")
     print(f"  Keys loaded from: {'setup.env' if setup_env.exists() else '.env (legacy)'}\n")
     app.run(host="0.0.0.0", port=port, debug=False)
