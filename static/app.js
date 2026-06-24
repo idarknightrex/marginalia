@@ -189,7 +189,23 @@ async function checkLocalModels() {
 }
 
 
-// ── Prompt ────────────────────────────────────────────────────────────────
+function setLocalOnly() {
+  // Deactivate all cloud chips, activate all installed local chips
+  const CLOUD = new Set(['gemini','anthropic','openai']);
+  document.querySelectorAll('.model-chip[data-model]').forEach(chip => {
+    const model = chip.dataset.model;
+    if (CLOUD.has(model)) {
+      chip.classList.remove('active');
+      chip.classList.add('inactive');
+      activeModels.delete(model);
+    } else if (!chip.classList.contains('no-key') && chip.closest('.chip-wrapper')?.style.display !== 'none') {
+      chip.classList.add('active');
+      chip.classList.remove('inactive');
+      activeModels.add(model);
+    }
+  });
+  updateLocalWarning();
+}
 document.addEventListener('DOMContentLoaded', function() {
   const promptInput = document.getElementById('prompt-input');
   if (promptInput) {

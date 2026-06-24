@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.4.5.0624-1331
+Marginalia — app.py  v1.4.6.0624-1559
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -12,7 +12,7 @@ import uuid
 import threading
 import webbrowser
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import Flask, request, jsonify, render_template, send_from_directory, Response, stream_with_context
 from dotenv import load_dotenv
@@ -59,7 +59,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.4.5.0624-1331"
+APP_VERSION = "1.4.6.0624-1559"
 
 
 
@@ -144,8 +144,8 @@ verification_status: {data.get("verification_status", "surfaced")}
 physical_holding: {data.get("physical_holding", "none")}
 holding_location: {data.get("holding_location", "")}
 tags: {tags}
-created_at: {datetime.now(datetime.UTC).isoformat()}
-updated_at: {datetime.now(datetime.UTC).isoformat()}
+created_at: {datetime.now(timezone.utc).isoformat()}
+updated_at: {datetime.now(timezone.utc).isoformat()}
 ---
 
 ## Themes
@@ -194,7 +194,7 @@ def write_canonical_session(prompt: str, responses: dict, synthesis: str = "", p
     display label in the Intelligence tab without loading the full session body.
     """
     session_id    = str(uuid.uuid4())
-    timestamp     = datetime.now(datetime.UTC).strftime("%Y-%m-%d_%H-%M")
+    timestamp     = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M")
     filename      = f"session_{timestamp}.md"
     prompt_label  = prompt.strip().replace("\n", " ")[:80]
     response_blocks = "\n\n".join(
@@ -203,7 +203,7 @@ def write_canonical_session(prompt: str, responses: dict, synthesis: str = "", p
     synth_block = synthesis if synthesis else "<!-- Add synthesis notes here -->"
     canonical = f"""---
 id: {session_id}
-created_at: {datetime.now(datetime.UTC).isoformat()}
+created_at: {datetime.now(timezone.utc).isoformat()}
 models: {list(responses.keys())}
 project: {project}
 writing: {writing}
@@ -590,7 +590,7 @@ REFERENCE LIST:
 
     if imported:
         log_path = SESSIONS_DIR / "imports.md"
-        timestamp = datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M UTC")
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         log_entry = f"\n### {timestamp} — {fmt} import\n"
         log_entry += f"- Imported: {len(imported)}\n"
         if skipped:  log_entry += f"- Skipped (no title): {len(skipped)}\n"
@@ -761,7 +761,12 @@ def handle_prompt():
             with concurrent.futures.ThreadPoolExecutor() as ex:
                 futures = {ex.submit(call_model, m, prompt): m for m in cloud_ordered}
                 for future in concurrent.futures.as_completed(futures):
-                    model, result, error, in_tok, out_tok = future.result()
+                    try:
+                        model, result, error, in_tok, out_tok = future.result()
+                    except Exception as e:
+                        model = futures[future]
+                        yield json.dumps({"event": "error", "model": model, "error": str(e)}) + "\n"
+                        continue
                     if in_tok:
                         with _tokens_lock:
                             anthropic_tokens["input"]  += in_tok
@@ -770,8 +775,12 @@ def handle_prompt():
                         results[model] = result
                         yield json.dumps({"event": "result", "model": model, "text": result}) + "\n"
                     else:
-                        errors[model] = error or "No response"
-                        yield json.dumps({"event": "error", "model": model, "error": errors[model]}) + "\n"
+                        # Surface rate limit errors clearly
+                        err_msg = error or "No response"
+                        if "429" in str(err_msg) or "quota" in str(err_msg).lower() or "rate" in str(err_msg).lower():
+                            err_msg = "Rate limited — free tier quota exceeded. Add a paid key or retry later."
+                        errors[model] = err_msg
+                        yield json.dumps({"event": "error", "model": model, "error": err_msg}) + "\n"
 
         for model in local_ordered:
             yield json.dumps({"event": "start", "model": model}) + "\n"
@@ -885,14 +894,14 @@ def update_reference(ref_filename):
     if "tags" in data:
         meta["tags"] = data["tags"]
 
-    meta["updated_at"] = datetime.now(datetime.UTC).isoformat()
+    meta["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     tracked = ["title","authors","year","source_type","url_doi","tags","physical_holding","holding_location","verification_status"]
     changed = [f for f in tracked if f in data and str(data[f]).strip() != str(meta.get(f,"")).strip()]
     body_changed = [s for s in ["annotation","themes_body","connections","argument_connection","user_notes"] if s in data and data[s]]
     all_changed = changed + body_changed
     if all_changed:
-        timestamp = datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M UTC")
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         edit_line = f"- [{timestamp}] edited: {', '.join(all_changed)}"
         log_marker = "## Edit History"
         if log_marker in body:
@@ -948,7 +957,7 @@ def update_reference_status(ref_filename):
     old_status = meta.get("verification_status", "surfaced")
     meta["verification_status"] = new_status
 
-    timestamp = datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
     body = parts[2]
     log_marker = "## Status History"
     log_line   = f"- {old_status} → **{new_status}** [{timestamp}]"
@@ -1025,7 +1034,7 @@ def update_project(project_slug):
         new_filepath = PROJECTS_DIR / (new_slug + ".md")
     else:
         new_filepath = filepath
-    meta["updated_at"] = datetime.now(datetime.UTC).isoformat()
+    meta["updated_at"] = datetime.now(timezone.utc).isoformat()
     body = parts[2]
     if "framing" in data and data["framing"]:
         if "## Framing" in body:
@@ -1057,8 +1066,8 @@ def create_project():
 label: {label or slug}
 slug: {slug}
 status: active
-created_at: {datetime.now(datetime.UTC).isoformat()}
-updated_at: {datetime.now(datetime.UTC).isoformat()}
+created_at: {datetime.now(timezone.utc).isoformat()}
+updated_at: {datetime.now(timezone.utc).isoformat()}
 ---
 
 ## Framing
@@ -1132,7 +1141,7 @@ def update_writing(writing_slug):
         new_filepath = WRITING_DIR / (new_slug + ".md")
     else:
         new_filepath = filepath
-    meta["updated_at"] = datetime.now(datetime.UTC).isoformat()
+    meta["updated_at"] = datetime.now(timezone.utc).isoformat()
     fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v)
     new_filepath.write_text(f"---\n{fm_lines}\n---\n{parts[2]}", encoding="utf-8")
     if new_filepath != filepath:
@@ -1156,8 +1165,8 @@ slug: {slug}
 type: {data.get("type", "other")}
 project: {data.get("project", "")}
 status: drafting
-created_at: {datetime.now(datetime.UTC).isoformat()}
-updated_at: {datetime.now(datetime.UTC).isoformat()}
+created_at: {datetime.now(timezone.utc).isoformat()}
+updated_at: {datetime.now(timezone.utc).isoformat()}
 ---
 
 ## Argument
@@ -1180,7 +1189,7 @@ def save_project_synthesis(project_name):
     synthesis = (request.json or {}).get("synthesis", "")
     if not synthesis:
         return jsonify({"error": "No synthesis provided"}), 400
-    timestamp = datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M UTC")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     entry = f"\n### Library synthesis — {timestamp}\n\n{synthesis}\n"
     text  = filepath.read_text(encoding="utf-8")
     parts = text.split("---", 2)
@@ -1192,7 +1201,7 @@ def save_project_synthesis(project_name):
             body = body.rstrip() + "\n\n## Syntheses" + entry
         meta_block = parts[1]
         import re
-        meta_block = re.sub(r'updated_at:.*', f'updated_at: {datetime.now(datetime.UTC).isoformat()}', meta_block)
+        meta_block = re.sub(r'updated_at:.*', f'updated_at: {datetime.now(timezone.utc).isoformat()}', meta_block)
         filepath.write_text(f"---{meta_block}---\n{body}", encoding="utf-8")
     return jsonify({"status": "saved"})
 
@@ -1727,7 +1736,7 @@ Provide a scholarly annotation suitable for a PhD research bibliography."""
         synthesis = list(results.values())[0]
 
     voices = "\n\n".join(f"**{m.upper()}:** {r}" for m, r in results.items())
-    new_annotation = f"<!-- Multi-voice annotation generated {datetime.now(datetime.UTC).strftime('%Y-%m-%d')} -->\n\n{voices}\n\n**SYNTHESIS:** {synthesis}"
+    new_annotation = f"<!-- Multi-voice annotation generated {datetime.now(timezone.utc).strftime('%Y-%m-%d')} -->\n\n{voices}\n\n**SYNTHESIS:** {synthesis}"
 
     if "## Annotation" in existing_body:
         before = existing_body.split("## Annotation")[0]
@@ -1967,11 +1976,11 @@ def ocr_capture():
 def _write_capture(text: str, source_filename: str, note: str, method: str) -> str:
     """Write a capture canonical file and return its filename."""
     capture_id = str(uuid.uuid4())
-    timestamp  = datetime.now(datetime.UTC).strftime("%Y-%m-%d_%H-%M")
+    timestamp  = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M")
     filename   = f"capture_{timestamp}.md"
     canonical  = f"""---
 id: {capture_id}
-created_at: {datetime.now(datetime.UTC).isoformat()}
+created_at: {datetime.now(timezone.utc).isoformat()}
 source_type: capture
 capture_method: {method}
 source_file: {source_filename}
@@ -2031,7 +2040,7 @@ def create_note():
     note_id  = str(uuid.uuid4())
     slug     = "-".join(title.lower().split()[:5])
     slug     = "".join(c for c in slug if c.isalnum() or c == "-")
-    timestamp = datetime.now(datetime.UTC).strftime("%Y-%m-%d_%H-%M")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M")
     filename  = f"note_{timestamp}_{slug[:30]}.md"
     body      = data.get("body", "") or "<!-- What are you sitting with? -->"
     canonical = f"""---
@@ -2041,8 +2050,8 @@ source: {data.get("source", "")}
 project: {data.get("project", "")}
 writing: {data.get("writing", "")}
 status: active
-created_at: {datetime.now(datetime.UTC).isoformat()}
-updated_at: {datetime.now(datetime.UTC).isoformat()}
+created_at: {datetime.now(timezone.utc).isoformat()}
+updated_at: {datetime.now(timezone.utc).isoformat()}
 ---
 
 ## What I'm sitting with
@@ -2079,7 +2088,7 @@ def update_note(note_filename):
     for field in ["title", "source", "project", "writing", "status"]:
         if field in data:
             meta[field] = data[field]
-    meta["updated_at"] = datetime.now(datetime.UTC).isoformat()
+    meta["updated_at"] = datetime.now(timezone.utc).isoformat()
     body = parts[2]
     def replace_note_section(body, heading, new_content):
         if not new_content:
@@ -2122,7 +2131,7 @@ def get_broadcast():
             b = data.get("broadcast", {})
             if not b.get("active"): return jsonify({})
             expires = b.get("expires")
-            if expires and datetime.fromisoformat(expires) < datetime.now(datetime.UTC): return jsonify({})
+            if expires and datetime.fromisoformat(expires) < datetime.now(timezone.utc): return jsonify({})
             return jsonify(b)
     except Exception:
         return jsonify({})
@@ -2131,7 +2140,7 @@ def get_broadcast():
 @app.route("/api/save-break", methods=["POST"])
 def save_and_break():
     from utils.git_preflight import safe_commit
-    message = request.json.get("message", f"Session — {datetime.now(datetime.UTC).strftime('%Y-%m-%d %H:%M')}")
+    message = request.json.get("message", f"Session — {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}")
     return jsonify(safe_commit(APP_ROOT, message))
 
 
@@ -2143,6 +2152,6 @@ def serve_assets(filename):
 if __name__ == "__main__":
     port = int(os.environ.get("MARGINALIA_PORT", 5000))
     threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{port}")).start()
-    print(f"\n  Marginalia v1.4.5.0624-1331 running at http://localhost:{port}\n")
+    print(f"\n  Marginalia v1.4.6.0624-1559 running at http://localhost:{port}\n")
     print(f"  Keys loaded from: {'setup.env' if setup_env.exists() else '.env (legacy)'}\n")
     app.run(host="0.0.0.0", port=port, debug=False)

@@ -9,7 +9,17 @@ Contributions of any kind are listed here — code, bug reports, testing, ideas,
 ## Core
 
 **Raj Boora** — original author, design, research epistemology, hockey metaphors
-*MacEwan University, Edmonton, Alberta — PhD candidate, University of Saskatchewan*
+*CS instructor, MacEwan University, Edmonton, Alberta*
+*PhD candidate (Fall 2026), University of Saskatchewan*
+*github.com/idarknightrex · boora.ca*
+
+---
+
+## AI Contributor
+
+**Claude / Anthropic** — contributed via extended pair programming sessions across the full build history from v0.5 through v1.4.x. Architecture decisions, code generation, seeds document, CONTRIBUTING.md, the Charles/Klinger anonymous giving framing, survivability mapping, versioning convention.
+
+Note: AI contributor — no GitHub account, no authorship claim. All sessions logged in `canonical/sessions/` as part of the canonical research record. The code is fully commented throughout; those comments document the reasoning behind decisions made collaboratively across sessions, and serve as the readable audit trail for anyone joining the project later.
 
 ---
 
