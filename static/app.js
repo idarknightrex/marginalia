@@ -2290,11 +2290,14 @@ updateLocalWarning();
 checkKeyStatus();
 checkSetupStatus();
 checkLocalModels();
-// Pre-populate session scope selectors on load — no need to visit Projects first
+// Pre-populate session scope selectors and synth save dropdown on load
 (async () => {
   try {
     const res  = await fetch('/api/projects');
     const data = await res.json();
-    if (data.length) populateSessionScopeSelectors(data);
+    if (data.length) {
+      populateSessionScopeSelectors(data);
+      populateSynthProjectDropdown(data);
+    }
   } catch(e) {}
 })();
