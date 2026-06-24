@@ -11,7 +11,7 @@ const TAB_ID = crypto.randomUUID();
 // Cloud models start inactive — checkKeyStatus() activates only those with
 // valid keys. Local models (Ollama) start active — no key required.
 let allRefs = [], activeFilter = 'all', sessionMinutes = 0;
-let activeModels = new Set(['deepseek', 'gemma', 'llama', 'mistral', 'qwen', 'cohere']);
+let activeModels = new Set(['deepseek']);  // HTML default; checkKeyStatus adds cloud chips with valid keys
 let doiPreviewData = null;
 let pasteFormat = 'bibtex';
 
@@ -147,7 +147,9 @@ async function checkLocalModels() {
         if (wrapper) wrapper.style.display = 'none';
         activeModels.delete(model);
       } else if (info.installed === true) {
-        chip.classList.remove('no-key');
+        chip.classList.remove('no-key', 'inactive');
+        chip.classList.add('active');
+        activeModels.add(model);
         const badge = chip.querySelector('.no-key-badge');
         if (badge) badge.remove();
         const wrapper = chip.closest('.chip-wrapper');
@@ -331,21 +333,16 @@ async function sendPrompt() {
   const grid = document.getElementById('response-grid');
   grid.innerHTML = '';
   document.getElementById('synthesis-panel').style.display = 'none';
-  // Build model list from DOM chip order — cloud first, local after, dynamic ollama: chips last.
-  //
-  // Why DOM-driven instead of a hardcoded array:
-  //   A hardcoded MODEL_ORDER array was the source of a class of bugs where
-  //   adding a new chip in HTML required also updating the JS array — and
-  //   forgetting meant the new model was silently dropped from prompts.
-  //   Reading order from the DOM means adding a chip in HTML is the only
-  //   step required. The rendering order IS the firing order.
-  // This means adding a new chip in HTML is all that's needed — no JS list to maintain
   const CLOUD_CHIP_KEYS = new Set(['gemini', 'anthropic', 'openai']);
   const allChips   = [...document.querySelectorAll('.model-chip[data-model]')];
   const chipOrder  = allChips.map(c => c.dataset.model);
   const cloudFirst = chipOrder.filter(m => CLOUD_CHIP_KEYS.has(m) && activeModels.has(m));
   const localRest  = chipOrder.filter(m => !CLOUD_CHIP_KEYS.has(m) && activeModels.has(m));
   const models     = [...cloudFirst, ...localRest];
+  if (!models.length) {
+    grid.innerHTML = '<div style="color:#c9a832;font-family:monospace;font-size:12px;padding:12px">No active models — select at least one chip above before sending.</div>';
+    return;
+  }
   models.forEach(model => grid.appendChild(makeCard(model)));
   document.getElementById('cancel-btn').classList.add('visible');
   document.getElementById('send-btn').disabled = true;
@@ -364,6 +361,17 @@ async function sendPrompt() {
         writing:          document.getElementById('session-writing-select')?.value || '',
       })
     });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      if (res.status === 423) {
+        alert('Session is active on another device. Take over from the read-only overlay to send prompts.');
+      } else {
+        alert('Error ' + res.status + ': ' + (errData.message || errData.error || 'Unknown error'));
+      }
+      document.getElementById('send-btn').disabled = false;
+      document.getElementById('cancel-btn').classList.remove('visible');
+      return;
+    }
     const reader  = res.body.getReader();
     activeReader  = reader;
     const decoder = new TextDecoder();
