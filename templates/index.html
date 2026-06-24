@@ -260,7 +260,11 @@
   <div id="view-ingest" class="view">
     <div class="page-header"><h1>Ingest</h1><small>Import references &amp; capture your reflection</small></div>
 
-    <div class="import-section">
+    <!-- Zone 1: References — someone else's work -->
+    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface)">
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+        &#8853; References — importing someone else's work
+      </div>
       <div class="import-section-title">&#8595; Drop a File</div>
       <div class="import-drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
         <input type="file" id="file-input" accept=".csv,.bib,.ris" onchange="handleFileSelect(event)">
@@ -287,13 +291,22 @@
       <div class="import-result" id="paste-import-result"></div>
     </div>
 
+    </div><!-- /References zone -->
+
+    <!-- Zone 2: Capture — your own material -->
+    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface)">
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+        &#9685; Capture — your documents and notes
+        <span style="font-weight:normal;text-transform:none;letter-spacing:0;font-size:10px;color:var(--muted);margin-left:8px">OCR text lands in Notes (your thinking) or References (someone else's work)</span>
+      </div>
+
     <!-- PDF folder scan -->
     <div class="import-section">
       <div class="import-section-title">&#128196; Scan PDF Folder</div>
       <div style="font-family:monospace;font-size:11px;color:var(--muted);margin-bottom:10px">
         Scans your configured Research PDF folder for new PDFs.<br>
         Typed PDFs extract instantly. Scanned or handwritten PDFs are flagged for Gemma OCR.<br>
-        Set <code style="background:var(--bg);padding:1px 5px;border-radius:2px">RESEARCH_PDF_PATH</code> in setup.env to change the folder.
+        Set <code style="background:var(--bg);padding:1px 5px;border-radius:2px">RESEARCH_PDF_PATH</code> in setup.env to change the folder. Finds PDFs — does not move or modify them.
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
         <input id="pdf-folder-path" class="search-input" style="flex:1;font-family:monospace;font-size:11px"
@@ -349,7 +362,8 @@
       <div class="import-result" id="capture-result"></div>
       <div id="capture-text-preview" style="display:none;margin-top:10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:10px;font-family:monospace;font-size:11px;color:var(--text);white-space:pre-wrap;max-height:200px;overflow-y:auto"></div>
     </div>
-  </div>
+
+    </div><!-- /Capture zone -->
 
 
   <!-- ── Projects view ── -->

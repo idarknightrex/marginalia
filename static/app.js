@@ -1077,8 +1077,13 @@ async function populateProjectSlugs() {
     const data = await res.json();
     const dl   = document.getElementById('project-slugs-list');
     if (!dl) return;
-    dl.innerHTML = (data.projects || [])
-      .map(p => `<option value="${p.slug}">${p.label}</option>`)
+    const projects = Array.isArray(data) ? data : (data.projects || []);
+    dl.innerHTML = projects
+      .map(p => {
+        const slug = p.slug || (p._filename||'').replace('.md','');
+        const label = p.label || slug;
+        return `<option value="${slug}">${label}</option>`;
+      })
       .join('');
   } catch(e) {}
 }
@@ -2181,7 +2186,7 @@ function renderNotes() {
     card.appendChild(topRow);
     // Chips
     const chips = [
-      note.source  ? { label: '\u2117 ' + note.source,  color: '#4285f4' } : null,
+      note.source  ? { label: '\u2117 ' + decodeURIComponent(note.source),  color: '#4285f4' } : null,
       note.project ? { label: '\u25c6 ' + note.project, color: 'var(--accent)' } : null,
       note.writing ? { label: '\u270e ' + note.writing, color: '#0891b2' } : null,
     ].filter(Boolean);
