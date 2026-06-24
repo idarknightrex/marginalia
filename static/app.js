@@ -190,9 +190,14 @@ async function checkLocalModels() {
 
 
 // ── Prompt ────────────────────────────────────────────────────────────────
-document.getElementById('prompt-input').addEventListener('input', function() {
-  document.getElementById('token-estimate').textContent =
-    '~' + Math.round(this.value.trim().split(/\s+/).length * 1.3) + ' tokens';
+document.addEventListener('DOMContentLoaded', function() {
+  const promptInput = document.getElementById('prompt-input');
+  if (promptInput) {
+    promptInput.addEventListener('input', function() {
+      document.getElementById('token-estimate').textContent =
+        '~' + Math.round(this.value.trim().split(/\s+/).length * 1.3) + ' tokens';
+    });
+  }
 });
 
 // Countdown bar durations per model (milliseconds).
@@ -454,8 +459,12 @@ async function sendPrompt() {
       }
     }
   } catch(e) {
-    if (e.name !== 'AbortError')
-      grid.innerHTML = '<div style="color:#c94242;font-family:monospace;font-size:12px">Error: ' + e.message + '</div>';
+    if (e.name !== 'AbortError') {
+      const msg = e.message === 'Load failed' || e.message === 'Failed to fetch'
+        ? 'Connection lost — check that Marginalia is still running (tail /tmp/marginalia.log on Solaris)'
+        : e.message;
+      grid.innerHTML = '<div style="color:#c94242;font-family:monospace;font-size:12px">Error: ' + msg + '</div>';
+    }
     document.getElementById('cancel-btn').classList.remove('visible');
     document.getElementById('send-btn').disabled = false;
     activeReader = null;
