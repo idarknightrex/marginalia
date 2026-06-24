@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.4.6.0624-1559
+Marginalia — app.py  v1.4.7.0624-1702
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -59,7 +59,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.4.6.0624-1559"
+APP_VERSION = "1.4.7.0624-1702"
 
 
 
@@ -305,17 +305,30 @@ def run_synthesis(prompt: str, responses: dict, synthesis_model: str = "deepseek
         "cohere":   local_cfg.get("canadian",   "command-r7b:latest"),
     }
     model_str = model_map.get(synthesis_model, local_cfg.get("reasoning", "deepseek-r1:8b"))
+
+    # Strip <think>...</think> reasoning chains before synthesis
+    # DeepSeek R1 exposes chain-of-thought in <think> tags — useful for the
+    # researcher's own response cards but noise in synthesis input.
+    import re as _re
+    def strip_think(text: str) -> str:
+        return _re.sub(r'<think>.*?</think>', '', text, flags=_re.DOTALL).strip()
+
+    # Build response block with actual model names — explicit so synthesis
+    # model cannot invent labels. The model names in brackets ARE the names
+    # the synthesis must use when attributing claims.
+    model_names = list(responses.keys())
     response_block = "\n\n".join(
-        f"[{model.upper()}]\n{text}" for model, text in responses.items() if text
+        f"[{model.upper()}]\n{strip_think(text)}"
+        for model, text in responses.items() if text
     )
-    # The synthesis prompt uses ## HEADER delimiters explicitly because:
-    # - Local models (DeepSeek, Qwen) sometimes ignore numbered list instructions
-    #   but reliably follow markdown header formatting
-    # - The frontend renderSynthesisSections() splits on /\n##\s+/ to produce
-    #   colour-coded section cards — the delimiter IS the rendering instruction
-    # - If a model ignores the format, the frontend falls back to plain text gracefully
+    names_list = ", ".join(m.upper() for m in model_names)
+
     if synth_mode == "pressure":
-        synth_prompt = f"""You are a research pressure-tester. A researcher brought a half-formed idea and sent it through multiple AI models. Your job is not to summarize what the models said — it is to assess what happened to the idea.
+        synth_prompt = f"""You are a research pressure-tester. A researcher brought a half-formed idea and sent it through multiple AI models. Your job is not to summarize — assess what happened to the idea.
+
+IMPORTANT: The models that responded are: {names_list}
+When attributing a claim, use ONLY these names. Do not invent labels like CONVERSUS, COUNTERPOINTS, or ABSTRACT.
+Output exactly three sections with these exact headers. No preamble. No restarts. No meta-commentary.
 
 RESEARCHER'S PROMPT:
 {prompt}
@@ -323,20 +336,23 @@ RESEARCHER'S PROMPT:
 MODEL RESPONSES:
 {response_block}
 
-Produce exactly three sections using these exact headers (the ## prefix is required):
-
 ## SURVIVED
 What held up under scrutiny across multiple responses? What did the models reinforce or leave standing?
 
 ## DESTABILIZED
-What got contradicted, complicated, or weakened? Name which model challenged what.
+What got contradicted, complicated, or weakened? Name which model (from {names_list}) challenged what.
 
 ## STILL OPEN
-What remains genuinely unresolved — not answered, not refuted, just unfinished? What did none of the models reach?
+What remains genuinely unresolved? What did none of the models reach?
 
-Be direct. The researcher wants to know the shape of the idea after pressure, not a summary of what was said."""
+Be direct. No preamble. Output the three ## sections only."""
+
     else:
-        synth_prompt = f"""You are a research synthesis engine. A researcher asked the following question and received responses from multiple AI models. Synthesize these into a single analytical summary.
+        synth_prompt = f"""You are a research synthesis engine. A researcher asked a question and received responses from multiple AI models. Synthesize into a single analytical summary.
+
+IMPORTANT: The models that responded are: {names_list}
+When attributing a claim, use ONLY these exact names. Do not invent labels like CONVERSUS, COUNTERPOINTS, ABSTRACT, PERFORMANCE, or CONVERSATION.
+Output exactly four sections with these exact headers. No preamble. No restarts. No meta-commentary. No "Okay, here is..." introduction.
 
 RESEARCHER'S QUESTION:
 {prompt}
@@ -344,25 +360,26 @@ RESEARCHER'S QUESTION:
 MODEL RESPONSES:
 {response_block}
 
-Produce exactly four sections using these exact headers (the ## prefix is required):
-
 ## CONSENSUS
 What do the models agree on?
 
 ## DIVERGENCE
-Where do they differ, and why? Name which model said what.
+Where do they differ? Name which model (from {names_list}) said what.
 
 ## UNIQUE CONTRIBUTIONS
-What does each model add that others missed? Name each model.
+What does each model add that others missed? Name each model from {names_list}.
 
 ## ABSENT VOICES
 What important angles did none of the models address?
 
-Be concise. The researcher will use this to decide what to investigate further."""
+Output the four ## sections only. No preamble. No restarts."""
+
     try:
-        return call_ollama(model_str, synth_prompt)
+        raw = call_ollama(model_str, synth_prompt)
+        # Strip any <think> tags that leak into synthesis output itself
+        return strip_think(raw)
     except Exception as e:
-        return f"Synthesis unavailable — DeepSeek R1 error: {e}"
+        return f"Synthesis unavailable — {synthesis_model} error: {e}"
 
 
 # ─── Import parsers ───────────────────────────────────────────────────────────
@@ -2152,6 +2169,6 @@ def serve_assets(filename):
 if __name__ == "__main__":
     port = int(os.environ.get("MARGINALIA_PORT", 5000))
     threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{port}")).start()
-    print(f"\n  Marginalia v1.4.6.0624-1559 running at http://localhost:{port}\n")
+    print(f"\n  Marginalia v1.4.7.0624-1702 running at http://localhost:{port}\n")
     print(f"  Keys loaded from: {'setup.env' if setup_env.exists() else '.env (legacy)'}\n")
     app.run(host="0.0.0.0", port=port, debug=False)
