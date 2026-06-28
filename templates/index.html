@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Marginalia</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
   <link rel="stylesheet" href="/static/app.css?v={{ app_version }}">
 </head>
 <body>
@@ -14,13 +16,13 @@
     <span class="logo-main">Marginalia</span>
     <span class="logo-bottom">slow down</span>
   </div>
-  <button class="nav-btn active" onclick="showView('prompt', this)">&#9672; Prompt</button>
-  <button class="nav-btn" onclick="showView('references', this)">&#9678; References</button>
-  <button class="nav-btn" onclick="showView('ingest', this)">&#8853; Ingest</button>
-  <button class="nav-btn" onclick="showView('projects', this)">&#9678; Projects</button>
-  <button class="nav-btn" onclick="showView('writing', this)">&#10000; Writing</button>
-  <button class="nav-btn" onclick="showView('notes', this)">&#9670; Notes</button>
-  <button class="nav-btn" onclick="showView('intelligence', this)">&#9672; Intelligence</button>
+  <button class="nav-btn active" onclick="showView('prompt', this)" data-tooltip="Fire prompts to multiple models simultaneously">&#9672; Prompt</button>
+  <button class="nav-btn" onclick="showView('references', this)" data-tooltip="Your source library — surfaced, located, verified">&#9678; References</button>
+  <button class="nav-btn" onclick="showView('ingest', this)" data-tooltip="Import references or capture your own documents via OCR">&#8853; Ingest</button>
+  <button class="nav-btn" onclick="showView('projects', this)" data-tooltip="Organise your work into scoped projects">&#9678; Projects</button>
+  <button class="nav-btn" onclick="showView('writing', this)" data-tooltip="Track writing pieces — drafting, in progress, submitted, published">&#10000; Writing</button>
+  <button class="nav-btn" onclick="showView('notes', this)" data-tooltip="Where your thinking lives — no status, no destination, nothing deleted">&#9670; Notes</button>
+  <button class="nav-btn" onclick="showView('intelligence', this)" data-tooltip="Synthesise across your references, sessions, and thinking">&#9672; Intelligence</button>
   <div class="nav-right">
     <button class="btn-secondary" id="save-break-btn" onclick="saveAndBreak()">&#8593; Save &amp; Take a Break</button>
   </div>
@@ -150,11 +152,11 @@
 
     <!-- Session scope — set before firing, writes to canonical on save -->
     <div class="session-scope-row" id="session-scope-row">
-      <div class="session-scope-label">Working on</div>
-      <select id="session-project-select" class="session-scope-select" title="Project scope for this session">
+      <div class="session-scope-label" data-tooltip="Set your working context before firing — this labels the session in your canonical record">Working on</div>
+      <select id="session-project-select" class="session-scope-select" title="Project scope for this session" data-tooltip="Which project is this session for? Saved to session frontmatter on every run">
         <option value="">No project</option>
       </select>
-      <select id="session-writing-select" class="session-scope-select" title="Writing element for this session">
+      <select id="session-writing-select" class="session-scope-select" title="Writing element for this session" data-tooltip="Which writing piece is this session feeding? Helps Intelligence scope later">
         <option value="">No writing element</option>
       </select>
     </div>
@@ -165,10 +167,11 @@
     </div>
     <div class="prompt-footer">
       <span class="token-estimate" id="token-estimate">~0 tokens</span>
-      <button class="cancel-btn" id="cancel-btn" onclick="cancelPrompt()">&#9632; Cancel</button>
-      <button class="hide-inactive-btn" onclick="setLocalOnly()">Local only</button>
-      <button class="hide-inactive-btn" id="hide-inactive-btn" onclick="toggleHideInactive(this)">Hide inactive</button>
-      <button class="btn-primary" id="send-btn" onclick="sendPrompt()">Send to Active Models &#8594;</button>
+      <button class="cancel-btn" id="cancel-btn" onclick="cancelPrompt()" data-tooltip="Cancel the current model run">&#9632; Cancel</button>
+      <button class="hide-inactive-btn" onclick="promptPressureTest()" data-tooltip="Examine this prompt before firing — what are you assuming? what are you not asking?" style="color:var(--accent);border-color:var(--accent)">&#9670; Test prompt</button>
+      <button class="hide-inactive-btn" onclick="setLocalOnly()" data-tooltip="Deactivate all cloud chips — activate installed local models only">Local only</button>
+      <button class="hide-inactive-btn" id="hide-inactive-btn" onclick="toggleHideInactive(this)" data-tooltip="Hide chips for models not currently selected">Hide inactive</button>
+      <button class="btn-primary" id="send-btn" onclick="sendPrompt()" data-tooltip="Send prompt to all active model chips">Send to Active Models &#8594;</button>
     </div>
 
     <div class="response-grid" id="response-grid"></div>
@@ -177,11 +180,15 @@
       <div class="synthesis-model-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <div class="synthesis-label" style="flex:1;min-width:120px">Synthesis</div>
         <select class="synthesis-model-select" id="synthesis-mode-select" title="Synthesis format"
+          data-tooltip="Survey: all models respond independently, find divergence · Pressure Test: what survived, what was destabilized, what's still open · Prompt Pressure Test: examine your question before firing — what are you assuming?"
           style="font-family:monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:3px">
           <option value="survey">Survey</option>
           <option value="pressure">Pressure Test</option>
+          <option value="prompt_pressure">Prompt Pressure Test</option>
         </select>
-        <select class="synthesis-model-select" id="synthesis-model-select" title="Model used for synthesis pass">
+        <select class="synthesis-model-select" id="synthesis-model-select"
+          data-tooltip="Model used for the synthesis pass — runs after all other models have responded"
+          title="Model used for synthesis pass">
           <option value="deepseek">DeepSeek R1</option>
           <option value="qwen">Qwen 2.5</option>
           <option value="mistral">Mistral</option>
@@ -196,12 +203,21 @@
         <span onclick="document.getElementById('synth-cycle-nudge').style.display='none'" style="float:right;cursor:pointer;color:var(--accent)">×</span>
       </div>
       <div style="margin-top:10px;display:flex;gap:6px;align-items:center">
-        <button class="ref-action">Flag Reference</button>
-        <select id="synth-save-project" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:monospace;font-size:10px">
+        <button class="ref-action" data-tooltip="Highlight references mentioned in the synthesis">Flag Reference</button>
+        <select id="synth-save-project" style="padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:monospace;font-size:10px" data-tooltip="Save this synthesis to a project in your canonical record">
           <option value="">Save to project…</option>
         </select>
         <button class="ref-action" id="synth-save-btn" onclick="saveSynthesisToProject()">Save</button>
         <span id="synth-save-status" style="font-family:monospace;font-size:10px;color:var(--verified);display:none">Saved ✓</span>
+      </div>
+      <!-- Synthesis inject checkbox — adds synthesis as context layer for next prompt -->
+      <div id="synth-inject-row" style="display:none;margin-top:10px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:4px">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-family:monospace;font-size:10px;color:var(--text)">
+          <input type="checkbox" id="synth-inject-checkbox" style="margin-top:2px;cursor:pointer">
+          <span>Add synthesis to next prompt as context layer
+            <span style="display:block;color:var(--muted);margin-top:3px" id="synth-inject-warning"></span>
+          </span>
+        </label>
       </div>
       <div id="related-sessions-strip" style="display:none;margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
         <span style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">↗ related sessions &nbsp;</span>
