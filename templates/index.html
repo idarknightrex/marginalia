@@ -289,23 +289,22 @@
         <div class="import-drop-types">.csv &nbsp;&#183;&nbsp; .bib (BibTeX) &nbsp;&#183;&nbsp; .ris</div>
       </div>
       <div class="import-result" id="file-import-result"></div>
-    </div>
 
-    <div class="import-section">
-      <div class="import-section-title">&#8618; Paste Text</div>
-      <div class="import-format-row">
-        <button class="format-btn active" data-fmt="bibtex" onclick="selectFormat(this)">BibTeX</button>
-        <button class="format-btn" data-fmt="ris" onclick="selectFormat(this)">RIS</button>
-        <button class="format-btn" data-fmt="csv" onclick="selectFormat(this)">CSV</button>
-        <button class="format-btn" data-fmt="doi" onclick="selectFormat(this)">DOI list</button>
-        <button class="format-btn" data-fmt="plaintext" onclick="selectFormat(this)">Plain text &#9670; local AI</button>
+      <div class="import-section">
+        <div class="import-section-title">&#8618; Paste Text</div>
+        <div class="import-format-row">
+          <button class="format-btn active" data-fmt="bibtex" onclick="selectFormat(this)">BibTeX</button>
+          <button class="format-btn" data-fmt="ris" onclick="selectFormat(this)">RIS</button>
+          <button class="format-btn" data-fmt="csv" onclick="selectFormat(this)">CSV</button>
+          <button class="format-btn" data-fmt="doi" onclick="selectFormat(this)">DOI list</button>
+          <button class="format-btn" data-fmt="plaintext" onclick="selectFormat(this)">Plain text &#9670; local AI</button>
+        </div>
+        <textarea class="import-text-area" id="paste-input" placeholder="Paste BibTeX, RIS, CSV, a list of DOIs, or a messy reference list..."></textarea>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px">
+          <button class="btn-primary" onclick="runPasteImport()">Import &#8594;</button>
+        </div>
+        <div class="import-result" id="paste-import-result"></div>
       </div>
-      <textarea class="import-text-area" id="paste-input" placeholder="Paste BibTeX, RIS, CSV, a list of DOIs, or a messy reference list..."></textarea>
-      <div style="display:flex;justify-content:flex-end;margin-top:8px">
-        <button class="btn-primary" onclick="runPasteImport()">Import &#8594;</button>
-      </div>
-      <div class="import-result" id="paste-import-result"></div>
-    </div>
 
     </div><!-- /References zone -->
 
@@ -380,6 +379,8 @@
     </div>
 
     </div><!-- /Capture zone -->
+
+  </div><!-- /view-ingest -->
 
 
   <!-- ── Projects view ── -->
