@@ -214,6 +214,8 @@ document.addEventListener('DOMContentLoaded', function() {
         '~' + Math.round(this.value.trim().split(/\s+/).length * 1.3) + ' tokens';
     });
   }
+  // Apply saved font size on load
+  initFontSize();
 });
 
 // Countdown bar durations per model (milliseconds).
