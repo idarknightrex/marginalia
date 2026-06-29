@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.5.0.0628-2250
+Marginalia — app.py  v1.6.1.0629-1630
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -59,7 +59,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.5.0.0628-2250"
+APP_VERSION = "1.6.1.0629-1630"
 
 
 
@@ -1820,6 +1820,130 @@ Provide a scholarly annotation suitable for a PhD research bibliography."""
     filepath.write_text(new_file, encoding="utf-8")
 
     return jsonify({"status": "annotated", "filename": ref_filename, "models_used": list(results.keys()), "synthesis": synthesis})
+
+
+# ── Academic Sources — Semantic Scholar, OpenAlex, Crossref ───────────────────
+# Thin abstraction layer over academic indices.
+# Source is always stamped on returned data. Failover is automatic.
+# On total failure: return empty/None, never fabricate.
+
+@app.route("/api/academic/health", methods=["GET"])
+def academic_health():
+    """
+    Lightweight health check for all three academic APIs.
+    Called on References tab open. Results drive the status indicator in the UI.
+    Runs sequentially — fast enough for on-demand use.
+    """
+    from utils.academic_sources import check_all_sources
+    return jsonify(check_all_sources())
+
+
+@app.route("/api/academic/fetch", methods=["POST"])
+def academic_fetch():
+    """
+    Fetch paper metadata (abstract, authors, DOI) from Semantic Scholar or OpenAlex.
+
+    Body:
+      query            str  — keyword/title search (use if no DOI)
+      doi              str  — DOI preferred; resolves more precisely
+      preferred_source str  — "semantic_scholar" (default) or "openalex"
+
+    Returns normalized paper record with source stamp.
+    The abstract becomes the TLDR machine layer in the canonical reference file.
+    Source stamp tells the researcher exactly where it came from.
+    """
+    from utils.academic_sources import fetch_paper, build_tldr_section
+    data   = request.json or {}
+    query  = data.get("query", "").strip()
+    doi    = data.get("doi", "").strip()
+    source = data.get("preferred_source", "semantic_scholar")
+
+    if not query and not doi:
+        return jsonify({"error": "Provide query or doi"}), 400
+
+    result = fetch_paper(query=query, doi=doi, preferred_source=source)
+    if not result:
+        return jsonify({"error": "No results from either index — both may be unreachable or the paper is not indexed"}), 404
+
+    # Build the formatted TLDR section ready to write into canonical
+    result["tldr_section"] = build_tldr_section(result.get("abstract", ""), result.get("tldr_source", ""))
+    return jsonify(result)
+
+
+@app.route("/api/academic/save-to-references", methods=["POST"])
+def academic_save_to_references():
+    """
+    Save a fetched paper record directly to canonical/references/.
+    Writes the abstract into the ## TLDR section with source stamp.
+    Human annotation layer (## Your Notes, ## Argument Connection) stays blank.
+
+    Body: the normalized paper record returned by /api/academic/fetch,
+    plus any researcher-added fields (tags, themes, project connection).
+    """
+    from utils.academic_sources import build_tldr_section
+    data = request.json or {}
+
+    if not data.get("title"):
+        return jsonify({"error": "Title required"}), 400
+
+    # Build TLDR section with source stamp
+    abstract     = data.get("abstract", "")
+    tldr_source  = data.get("tldr_source", "Academic index")
+    tldr_section = build_tldr_section(abstract, tldr_source)
+
+    # Map to canonical reference shape
+    ref_data = {
+        "title":               data.get("title", ""),
+        "authors":             data.get("authors", ""),
+        "year":                data.get("year", ""),
+        "url_doi":             data.get("url_doi", ""),
+        "source_type":         data.get("source_type", "journal-article"),
+        "verification_status": "surfaced",
+        "tags":                data.get("tags", ""),
+        "themes":              data.get("themes", ""),
+        "annotation":          tldr_section,   # machine layer: abstract from index
+        "user_notes":          "",             # human layer: waiting
+        "argument_connection": "",
+        "connections":         data.get("connections", ""),
+        # Internal provenance — visible in canonical frontmatter
+        "abstract_source":     data.get("tldr_source", ""),
+        "ss_paper_id":         data.get("ss_paper_id", ""),
+    }
+
+    filepath = write_canonical_reference(ref_data)
+    return jsonify({"status": "saved", "file": filepath.name, "tldr_source": tldr_source})
+
+
+@app.route("/api/academic/leads", methods=["POST"])
+def academic_leads():
+    """
+    Fetch citation leads for a reference via Crossref.
+    Returns the paper's reference list with open access flags.
+
+    These are signals, not instructions. The researcher decides what to chase.
+    Leads already in the canonical library are flagged already_in_library=True.
+
+    Body:
+      doi  str  — DOI of the source paper
+    """
+    from utils.academic_sources import fetch_crossref_leads
+    data = request.json or {}
+    doi  = data.get("doi", "").strip()
+
+    if not doi:
+        return jsonify({"error": "DOI required for leads"}), 400
+
+    # Collect existing DOIs from canonical library to flag already-held leads
+    all_refs     = read_all_references()
+    existing_dois = {r.get("url_doi", "").strip() for r in all_refs if r.get("url_doi")}
+    # Also add raw DOI forms (without https://doi.org/ prefix)
+    for r in all_refs:
+        raw = r.get("url_doi", "").replace("https://doi.org/", "").strip()
+        if raw:
+            existing_dois.add(raw)
+
+    result = fetch_crossref_leads(doi=doi, existing_dois=existing_dois)
+    return jsonify(result)
 
 
 @app.route("/api/ingest/scan-pdf-folder", methods=["POST"])

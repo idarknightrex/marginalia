@@ -43,7 +43,7 @@ function showView(name, btn) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
   if (btn) btn.classList.add('active');
-  if (name === 'references') loadReferences();
+  if (name === 'references') { loadReferences(); checkAcademicHealth(); }
 }
 
 
@@ -2440,3 +2440,375 @@ checkLocalModels();
     }
   } catch(e) {}
 })();
+
+
+// ── Academic Sources — Semantic Scholar, OpenAlex, Crossref ───────────────────
+// Health checks, paper search, save to references, citation leads.
+// Source is always stamped. Failover is automatic. Researcher decides what to chase.
+
+let academicSource    = 'semantic_scholar';
+let academicResult    = null;   // holds last fetch result for save
+
+function setAcademicSource(src, btn) {
+  academicSource = src;
+  document.querySelectorAll('#src-ss, #src-oa').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+// Health check — called on References tab open
+async function checkAcademicHealth() {
+  const indicators = {
+    'semantic_scholar': document.getElementById('health-ss'),
+    'openalex':         document.getElementById('health-oa'),
+    'crossref':         document.getElementById('health-cr'),
+  };
+  // Reset to neutral while checking
+  Object.values(indicators).forEach(el => { if (el) el.style.color = 'var(--muted)'; });
+
+  try {
+    const res  = await fetch('/api/academic/health');
+    const data = await res.json();
+
+    const map = {
+      'semantic_scholar': indicators['semantic_scholar'],
+      'openalex':         indicators['openalex'],
+      'crossref':         indicators['crossref'],
+    };
+    const sourceMap = {
+      'semantic_scholar': data.semantic_scholar,
+      'openalex':         data.openalex,
+      'crossref':         data.crossref,
+    };
+
+    for (const [key, el] of Object.entries(map)) {
+      if (!el) continue;
+      const status = sourceMap[key];
+      if (status && status.status === 'ok') {
+        el.style.color = '#7a9e7e';  // muted green -- warm not alarming
+        el.title = `${key.replace('_', ' ')}: available`;
+      } else {
+        el.style.color = '#b87a4a';  // amber -- unreachable
+        el.title = `${key.replace('_', ' ')}: unreachable`;
+      }
+    }
+  } catch(e) {
+    // Network error -- leave indicators neutral, do not alarm
+  }
+}
+
+// Search or DOI lookup
+async function academicSearch() {
+  const input = document.getElementById('academic-search-input');
+  const query = input ? input.value.trim() : '';
+  if (!query) return;
+
+  const preview = document.getElementById('academic-preview');
+  if (preview) preview.style.display = 'none';
+  closeLeadsPanel();
+
+  // Determine if input looks like a DOI
+  const isDOI = query.startsWith('10.') || query.includes('doi.org/');
+
+  try {
+    const res  = await fetch('/api/academic/fetch', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        query:            isDOI ? '' : query,
+        doi:              isDOI ? query : '',
+        preferred_source: academicSource,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      showAcademicError(err.error || 'No results found');
+      return;
+    }
+
+    academicResult = await res.json();
+    renderAcademicPreview(academicResult);
+  } catch(e) {
+    showAcademicError('Request failed -- check your connection');
+  }
+}
+
+function renderAcademicPreview(result) {
+  const preview = document.getElementById('academic-preview');
+  if (!preview) return;
+
+  const sourceEl   = document.getElementById('academic-preview-source');
+  const titleEl    = document.getElementById('academic-preview-title');
+  const metaEl     = document.getElementById('academic-preview-meta');
+  const abstractEl = document.getElementById('academic-preview-abstract-text');
+  const leadsBtn   = document.getElementById('academic-leads-btn');
+
+  if (sourceEl)   sourceEl.textContent   = result.tldr_source || result.source || '';
+  if (titleEl)    titleEl.textContent    = result.title || 'Untitled';
+  if (metaEl)     metaEl.textContent     = [result.authors, result.year, result.venue].filter(Boolean).join(' · ');
+  if (abstractEl) abstractEl.textContent = result.abstract || 'Abstract not available';
+
+  // Show leads button only if DOI is present
+  if (leadsBtn) {
+    leadsBtn.style.display = result.url_doi ? 'inline-block' : 'none';
+  }
+
+  preview.style.display = 'block';
+}
+
+function showAcademicError(msg) {
+  const preview = document.getElementById('academic-preview');
+  if (!preview) return;
+  document.getElementById('academic-preview-source').textContent = 'Error';
+  document.getElementById('academic-preview-title').textContent  = msg;
+  document.getElementById('academic-preview-meta').textContent   = '';
+  document.getElementById('academic-preview-abstract-text').textContent = '';
+  const leadsBtn = document.getElementById('academic-leads-btn');
+  if (leadsBtn) leadsBtn.style.display = 'none';
+  preview.style.display = 'block';
+  academicResult = null;
+}
+
+function closeAcademicPreview() {
+  const preview = document.getElementById('academic-preview');
+  if (preview) preview.style.display = 'none';
+  academicResult = null;
+  closeLeadsPanel();
+}
+
+async function academicSaveToReferences() {
+  if (!academicResult) return;
+  try {
+    const res  = await fetch('/api/academic/save-to-references', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(academicResult),
+    });
+    const data = await res.json();
+    if (data.status === 'saved') {
+      closeAcademicPreview();
+      loadReferences();
+      const input = document.getElementById('academic-search-input');
+      if (input) input.value = '';
+    }
+  } catch(e) {
+    // Silent -- loadReferences will show current state
+  }
+}
+
+// Citation leads via Crossref
+async function academicFetchLeads() {
+  if (!academicResult || !academicResult.url_doi) return;
+
+  const panel = document.getElementById('academic-leads-panel');
+  const list  = document.getElementById('leads-list');
+  const count = document.getElementById('leads-count');
+
+  if (list)  list.innerHTML  = '<div style="font-size:11px;color:var(--muted);font-family:monospace">Fetching from Crossref...</div>';
+  if (panel) panel.style.display = 'block';
+
+  try {
+    const res  = await fetch('/api/academic/leads', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ doi: academicResult.url_doi }),
+    });
+    const data = await res.json();
+
+    if (data.error || !data.leads) {
+      if (list) list.innerHTML = `<div style="font-size:11px;color:var(--muted)">No leads available: ${data.error || 'empty response'}</div>`;
+      return;
+    }
+
+    if (count) count.textContent = `(${data.total} references)`;
+    renderLeads(data.leads, list);
+  } catch(e) {
+    if (list) list.innerHTML = '<div style="font-size:11px;color:var(--muted)">Crossref unreachable</div>';
+  }
+}
+
+// Leads state
+let currentLeads = [];   // full leads array from last Crossref fetch
+
+function renderLeads(leads, container) {
+  currentLeads = leads || [];
+  if (!container) return;
+  if (!currentLeads.length) {
+    container.innerHTML = '<div style="font-size:11px;color:var(--muted)">No reference list available for this paper</div>';
+    updateLeadsSaveBtn();
+    return;
+  }
+
+  const html = currentLeads.map((lead, idx) => {
+    const title  = lead.title || lead.unstructured || 'Untitled reference';
+    const meta   = [lead.author, lead.year, lead.journal].filter(Boolean).join(' · ');
+    const inLib  = lead.already_in_library;
+    const isOA   = lead.is_likely_oa;
+    const hasDOI = !!lead.doi;
+
+    const libBadge = inLib
+      ? '<span style="font-size:9px;color:#7a9e7e;font-family:monospace;margin-left:4px">in library</span>'
+      : '';
+    const oaBadge = isOA && hasDOI
+      ? '<span style="font-size:9px;color:#7a9e7e;font-family:monospace;margin-left:4px">open access</span>'
+      : '';
+    const doiLink = hasDOI
+      ? `<a href="${lead.doi}" target="_blank" style="font-size:9px;font-family:monospace;color:var(--muted);text-decoration:none;margin-left:4px">${lead.doi_raw}</a>`
+      : '';
+
+    // Checkbox: only for leads not already in library
+    const checkbox = !inLib
+      ? `<input type="checkbox" data-lead-idx="${idx}" onchange="updateLeadsSaveBtn()" style="margin-right:6px;cursor:pointer;accent-color:var(--accent)">`
+      : '<span style="display:inline-block;width:18px"></span>';
+
+    // Preview toggle: only for leads with DOI
+    const previewBtn = hasDOI && !inLib
+      ? `<button onclick="toggleLeadPreview(${idx})" style="font-size:9px;padding:2px 6px;background:transparent;border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer;margin-left:4px;font-family:monospace" id="lead-preview-btn-${idx}">+ preview</button>`
+      : '';
+
+    return `<div id="lead-row-${idx}" style="padding:6px 0;border-bottom:1px solid var(--border);opacity:${inLib ? '0.5' : '1'}">
+      <div style="display:flex;align-items:flex-start;gap:4px">
+        ${checkbox}
+        <div style="flex:1">
+          <div style="font-size:11px;font-weight:500;margin-bottom:2px">${title}${libBadge}${oaBadge}</div>
+          <div style="font-size:10px;color:var(--muted)">${meta}${doiLink}${previewBtn}</div>
+          <div id="lead-preview-${idx}" style="display:none;margin-top:6px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;font-size:10px;line-height:1.5;color:var(--text)">
+            <span style="color:var(--muted);font-family:monospace">Fetching abstract...</span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  container.innerHTML = html;
+  updateLeadsSaveBtn();
+}
+
+function updateLeadsSaveBtn() {
+  const btn      = document.getElementById('leads-save-btn');
+  if (!btn) return;
+  const checked  = document.querySelectorAll('input[data-lead-idx]:checked');
+  btn.style.display = checked.length > 0 ? 'inline-block' : 'none';
+  btn.textContent   = checked.length === 1
+    ? 'Save 1 lead to References'
+    : `Save ${checked.length} leads to References`;
+}
+
+function toggleAllLeads() {
+  const boxes   = document.querySelectorAll('input[data-lead-idx]');
+  const allOn   = Array.from(boxes).every(b => b.checked);
+  boxes.forEach(b => { b.checked = !allOn; });
+  updateLeadsSaveBtn();
+}
+
+async function toggleLeadPreview(idx) {
+  const pane = document.getElementById(`lead-preview-${idx}`);
+  const btn  = document.getElementById(`lead-preview-btn-${idx}`);
+  if (!pane) return;
+
+  if (pane.style.display !== 'none') {
+    pane.style.display = 'none';
+    if (btn) btn.textContent = '+ preview';
+    return;
+  }
+
+  pane.style.display = 'block';
+  if (btn) btn.textContent = '- hide';
+
+  const lead = currentLeads[idx];
+  if (!lead || !lead.doi_raw) {
+    pane.innerHTML = '<span style="color:var(--muted)">No DOI -- abstract unavailable</span>';
+    return;
+  }
+
+  // Already fetched?
+  if (pane.dataset.fetched) return;
+
+  try {
+    const res    = await fetch('/api/academic/fetch', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ doi: lead.doi_raw, preferred_source: academicSource }),
+    });
+    if (!res.ok) throw new Error('not found');
+    const data = await res.json();
+    const abstract = data.abstract || 'Abstract not available from index';
+    const source   = data.tldr_source || data.source || '';
+    pane.innerHTML = `<div style="font-size:9px;color:var(--muted);font-family:monospace;margin-bottom:4px">${source}</div>${abstract}`;
+    pane.dataset.fetched = '1';
+    // Auto-check this lead now that researcher has seen the abstract
+    const box = document.querySelector(`input[data-lead-idx="${idx}"]`);
+    if (box && !box.checked) box.checked = true;
+    updateLeadsSaveBtn();
+  } catch(e) {
+    pane.innerHTML = '<span style="color:var(--muted)">Abstract unavailable from index</span>';
+    pane.dataset.fetched = '1';
+  }
+}
+
+async function saveCheckedLeads() {
+  const checked = Array.from(document.querySelectorAll('input[data-lead-idx]:checked'));
+  if (!checked.length) return;
+
+  const btn = document.getElementById('leads-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+  let saved = 0;
+  for (const box of checked) {
+    const idx  = parseInt(box.dataset.leadIdx);
+    const lead = currentLeads[idx];
+    if (!lead) continue;
+
+    try {
+      // Fetch full record (abstract etc) if not already previewed
+      const pane = document.getElementById(`lead-preview-${idx}`);
+      let result = null;
+
+      if (lead.doi_raw) {
+        const res = await fetch('/api/academic/fetch', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ doi: lead.doi_raw, preferred_source: academicSource }),
+        });
+        if (res.ok) result = await res.json();
+      }
+
+      // Fall back to what Crossref gave us if fetch failed or no DOI
+      if (!result) {
+        result = {
+          title:      lead.title || lead.unstructured || '',
+          authors:    lead.author || '',
+          year:       lead.year || '',
+          url_doi:    lead.doi || '',
+          abstract:   '',
+          tldr_source: 'Crossref lead (no abstract retrieved)',
+        };
+      }
+
+      await fetch('/api/academic/save-to-references', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(result),
+      });
+      saved++;
+
+      // Mark row as saved
+      box.checked   = false;
+      box.disabled  = true;
+      const row = document.getElementById(`lead-row-${idx}`);
+      if (row) row.style.opacity = '0.4';
+    } catch(e) {}
+  }
+
+  if (btn) { btn.disabled = false; }
+  updateLeadsSaveBtn();
+  loadReferences();
+  // Refresh leads to update in-library flags
+  if (saved > 0) academicFetchLeads();
+}
+
+function closeLeadsPanel() {
+  const panel = document.getElementById('academic-leads-panel');
+  if (panel) panel.style.display = 'none';
+  currentLeads = [];
+}

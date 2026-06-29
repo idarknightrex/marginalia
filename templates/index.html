@@ -247,6 +247,50 @@
       </div>
     </div>
 
+    <!-- Academic index search -->
+    <div style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;flex:1">Search Academic Index</div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <button class="filter-btn active" id="src-ss" onclick="setAcademicSource('semantic_scholar', this)" data-tooltip="Semantic Scholar — Allen Institute, nonprofit, free">S2</button>
+          <button class="filter-btn" id="src-oa" onclick="setAcademicSource('openalex', this)" data-tooltip="OpenAlex — OurResearch, nonprofit, free — failover">OA</button>
+        </div>
+        <div id="academic-health-indicators" style="display:flex;gap:5px;align-items:center" data-tooltip="Academic index availability">
+          <span id="health-ss" style="font-size:9px;font-family:monospace;color:var(--muted)">S2&#xB7;</span>
+          <span id="health-oa" style="font-size:9px;font-family:monospace;color:var(--muted)">OA&#xB7;</span>
+          <span id="health-cr" style="font-size:9px;font-family:monospace;color:var(--muted)">CR</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <input class="doi-input" id="academic-search-input" placeholder="Title, author keywords -- or paste a DOI for abstract" style="flex:1" onkeydown="if(event.key==='Enter') academicSearch()">
+        <button class="btn-secondary" onclick="academicSearch()">Search</button>
+      </div>
+      <div id="academic-preview" style="display:none;margin-top:10px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:6px">
+        <div style="font-size:11px;font-family:monospace;color:var(--muted);margin-bottom:4px" id="academic-preview-source"></div>
+        <div style="font-weight:600;font-size:12px;margin-bottom:4px" id="academic-preview-title"></div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px" id="academic-preview-meta"></div>
+        <div style="font-size:11px;line-height:1.5;margin-bottom:10px;max-height:80px;overflow:hidden;position:relative">
+          <div id="academic-preview-abstract-text"></div>
+          <div style="position:absolute;bottom:0;left:0;right:0;height:24px;background:linear-gradient(transparent,var(--surface))"></div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <button class="btn-primary" style="font-size:10px;padding:4px 10px" onclick="academicSaveToReferences()">Save to References</button>
+          <button class="btn-secondary" style="font-size:10px;padding:4px 10px" id="academic-leads-btn" onclick="academicFetchLeads()">Citation Leads</button>
+          <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="closeAcademicPreview()">Cancel</button>
+        </div>
+      </div>
+      <div id="academic-leads-panel" style="display:none;margin-top:10px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:6px">
+        <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Citation Leads <span id="leads-count" style="font-weight:normal;text-transform:none"></span></div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Signals from Crossref -- the researcher decides what to chase</div>
+        <div id="leads-list" style="max-height:260px;overflow-y:auto"></div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">
+          <button class="btn-primary" id="leads-save-btn" style="font-size:10px;padding:4px 10px;display:none" onclick="saveCheckedLeads()">Save checked as leads</button>
+          <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="toggleAllLeads()">Select all</button>
+          <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="closeLeadsPanel()">Close</button>
+        </div>
+      </div>
+    </div>
+
     <div class="search-row">
       <input class="search-input" id="ref-search" placeholder="Search author, title, or theme..." oninput="filterRefs()">
       <button class="btn-secondary" onclick="showView('ingest', document.querySelector('[onclick*=\'ingest\']'))">&#8853; Import</button>
