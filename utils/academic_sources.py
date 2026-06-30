@@ -284,6 +284,60 @@ def _normalize_oa(paper: dict, source: str) -> dict:
 
 # ── Primary fetch with automatic failover ─────────────────────────────────────
 
+def search_candidates(query: str, limit: int = 3) -> list:
+    """
+    Search both Semantic Scholar and OpenAlex, return up to `limit` candidates
+    from EACH source (so up to 2x limit total), without auto-selecting any of
+    them. Used by the Enrich UI's candidate picker so the researcher chooses
+    which match is actually correct, rather than the system silently trusting
+    the top search hit.
+
+    Built June 30 2026 directly in response to a confirmed mismatch: an
+    auto-selected OpenAlex top hit for "Ken Bain, What the Best College
+    Teachers Do" turned out to be a Portuguese-language review of the book,
+    not the book's own record -- a real abstract, wrong paper, written
+    silently with no way for the researcher to catch it before the fact.
+    See seeds.md, "Enrich's false-success bug, and what it revealed."
+
+    Each candidate includes title, authors, year, a short abstract preview,
+    and enough info (doi or ss_paper_id) to re-fetch the full record on
+    selection. Candidates with no abstract at all are excluded -- there's
+    nothing useful to show for those.
+    """
+    candidates = []
+
+    # Semantic Scholar candidates
+    try:
+        encoded = urllib.parse.quote(query.strip())
+        url = f"{SEMANTIC_SCHOLAR_BASE}/paper/search?query={encoded}&limit={limit}&fields={SS_FIELDS}"
+        data = _ss_request(url)
+        if data and data.get("data"):
+            for paper in data["data"][:limit]:
+                if paper.get("abstract"):
+                    normalized = _normalize_ss(paper, "semantic_scholar")
+                    normalized["preview"] = normalized["abstract"][:220]
+                    candidates.append(normalized)
+    except Exception:
+        pass
+
+    # OpenAlex candidates
+    try:
+        encoded = urllib.parse.quote(query.strip())
+        url = f"{OPENALEX_BASE}/works?filter=title.search:{encoded}&per-page={limit}&select=id,title,authorships,publication_year,abstract_inverted_index,doi,primary_location,cited_by_count,open_access"
+        data = _oa_request(url)
+        if data and data.get("results"):
+            for paper in data["results"][:limit]:
+                if paper.get("abstract_inverted_index"):
+                    normalized = _normalize_oa(paper, "openalex")
+                    if normalized.get("abstract"):
+                        normalized["preview"] = normalized["abstract"][:220]
+                        candidates.append(normalized)
+    except Exception:
+        pass
+
+    return candidates
+
+
 def fetch_paper(query: str = "", doi: str = "", preferred_source: str = "semantic_scholar") -> dict | None:
     """
     Fetch paper metadata with automatic failover.

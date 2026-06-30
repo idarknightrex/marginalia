@@ -693,16 +693,24 @@
         <div id="conn-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:4px;z-index:100;max-height:160px;overflow-y:auto"></div>
       </div>
     </div>
+    <div class="edit-field"><label>Your Notes</label><textarea id="edit-user-notes" rows="3" placeholder="Your own reading notes and thoughts -- this is the layer that matters most"></textarea></div>
+
     <div class="edit-field">
-      <label>AI Annotation</label>
-      <textarea id="edit-annotation" rows="4"></textarea>
+      <label>Abstract <span style="font-weight:normal;color:var(--muted);font-size:10px">(machine-fetched, source-stamped -- the most trustworthy machine content)</span></label>
+      <textarea id="edit-abstract" rows="4"></textarea>
+      <div id="edit-abstract-meta" style="font-size:10px;color:var(--muted);margin-top:4px;display:none;white-space:pre-line"></div>
       <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
-        <button class="btn-secondary" id="edit-annotate-btn" style="font-size:10px" onclick="annotateInModal(editingFilename)">&#9670; Generate</button>
-        <button class="btn-secondary" id="edit-enrich-btn" style="font-size:10px" onclick="enrichInModal(editingFilename)" data-tooltip="Search Semantic Scholar / OpenAlex for this reference's abstract and ground it here before Generate runs">&#x1F50D; Enrich from Index</button>
+        <input id="edit-enrich-query" type="text" placeholder="Search query (defaults to title + author)" style="flex:1;min-width:160px;padding:5px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:10px">
+        <button class="btn-secondary" id="edit-enrich-btn" style="font-size:10px" onclick="searchEnrichCandidates(editingFilename)" data-tooltip="Search Semantic Scholar / OpenAlex for this reference's abstract">&#x1F50D; Search Index</button>
       </div>
-      <div id="edit-enrich-status" style="font-size:10px;color:var(--muted);margin-top:4px;display:none"></div>
+      <div id="edit-enrich-candidates" style="display:none;margin-top:8px;border:1px solid var(--border);border-radius:4px;padding:8px;background:var(--bg);max-height:280px;overflow-y:auto"></div>
     </div>
-    <div class="edit-field"><label>Your Annotation</label><textarea id="edit-user-notes" rows="3" placeholder="Your own reading notes and thoughts"></textarea></div>
+
+    <div class="edit-field">
+      <label>AI Annotation <span style="font-weight:normal;color:var(--muted);font-size:10px">(model interpretation -- least trusted layer, verify before relying on it)</span></label>
+      <textarea id="edit-annotation" rows="4"></textarea>
+      <button class="btn-secondary" id="edit-annotate-btn" style="margin-top:6px;font-size:10px" onclick="annotateInModal(editingFilename)">&#9670; Generate</button>
+    </div>
     <div class="edit-field"><label>Argument Connection</label><textarea id="edit-argument" rows="3" placeholder="How does this source connect to your argument?"></textarea></div>
     <div class="edit-modal-actions">
       <button class="btn-secondary" onclick="closeEditModal()">Cancel</button>

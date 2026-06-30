@@ -922,6 +922,7 @@ function openEditModal(ref, runAnnotate) {
   document.getElementById('edit-holding-location').value   = ref.holding_location || '';
   document.getElementById('edit-themes-body').value        = ref.themes_body || (ref.themes ? ref.themes.split(',').map(t => '- ' + t.trim()).join('\n') : '');
   document.getElementById('edit-connections').value        = ref.connections || '';
+  document.getElementById('edit-abstract').value            = ref.abstract || '';
   document.getElementById('edit-annotation').value         = ref.annotation || '';
   document.getElementById('edit-user-notes').value         = ref.user_notes || '';
   document.getElementById('edit-argument').value           = ref.argument_connection || '';
@@ -948,6 +949,7 @@ async function saveEdit() {
     holding_location:    document.getElementById('edit-holding-location').value.trim(),
     themes_body:         document.getElementById('edit-themes-body').value.trim(),
     connections:         document.getElementById('edit-connections').value.trim(),
+    abstract:            document.getElementById('edit-abstract').value.trim(),
     annotation:          document.getElementById('edit-annotation').value.trim(),
     user_notes:          document.getElementById('edit-user-notes').value.trim(),
     argument_connection: document.getElementById('edit-argument').value.trim(),
@@ -999,48 +1001,108 @@ async function annotateInModal(filename) {
   }
 }
 
-async function enrichInModal(filename) {
+// ── Enrich from Index — search, then human picks the candidate ────────────────
+// Two-step flow: search returns candidates, nothing is written until the
+// researcher explicitly selects one. Replaces the old single-shot version
+// that auto-picked the top hit -- confirmed in the wild (Ken Bain reference,
+// June 30 2026) that a top hit can be a real abstract for the WRONG paper
+// (a Portuguese-language review, not the book itself), written silently.
+// See seeds.md, "Enrich's false-success bug, and what it revealed."
+
+let enrichCandidatesCache = [];   // holds last search results for selection
+
+async function searchEnrichCandidates(filename) {
   if (!filename) return;
-  const btn    = document.getElementById('edit-enrich-btn');
-  const status = document.getElementById('edit-enrich-status');
-  if (btn) { btn.textContent = 'Searching index…'; btn.disabled = true; }
-  if (status) { status.style.display = 'block'; status.textContent = ''; }
+  const btn        = document.getElementById('edit-enrich-btn');
+  const panel       = document.getElementById('edit-enrich-candidates');
+  const queryInput  = document.getElementById('edit-enrich-query');
+  const customQuery = queryInput ? queryInput.value.trim() : '';
+
+  if (btn) { btn.textContent = 'Searching\u2026'; btn.disabled = true; }
+  if (panel) { panel.style.display = 'block'; panel.innerHTML = '<div style="font-size:10px;color:var(--muted);font-family:monospace">Searching Semantic Scholar and OpenAlex\u2026</div>'; }
 
   try {
-    const res  = await fetch('/api/references/' + encodeURIComponent(filename) + '/enrich', {
-      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({})
+    const res  = await fetch('/api/references/' + encodeURIComponent(filename) + '/enrich/search', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ query: customQuery })
+    });
+    const data = await res.json();
+    enrichCandidatesCache = data.candidates || [];
+
+    if (btn) { btn.textContent = '\ud83d\udd0d Search Index'; btn.disabled = false; }
+    renderEnrichCandidates(enrichCandidatesCache, data.query_used, filename);
+  } catch(e) {
+    if (btn) { btn.textContent = '\ud83d\udd0d Search Index'; btn.disabled = false; }
+    if (panel) panel.innerHTML = '<div style="font-size:10px;color:#c94242">Search failed: ' + e.message + '</div>';
+  }
+}
+
+function renderEnrichCandidates(candidates, queryUsed, filename) {
+  const panel = document.getElementById('edit-enrich-candidates');
+  if (!panel) return;
+
+  if (!candidates.length) {
+    panel.innerHTML = `
+      <div style="font-size:10px;color:var(--muted);margin-bottom:8px">
+        No results for "${queryUsed}" -- common for older books, essays, and non-indexed work.
+        This reference may need a human-written entry instead.
+      </div>
+      <button class="btn-secondary" style="font-size:10px" onclick="searchEnrichCandidates('${filename}')">&#x21bb; Retry search</button>
+    `;
+    return;
+  }
+
+  const cards = candidates.map((c, idx) => {
+    const meta = [c.authors, c.year, c.venue].filter(Boolean).join(' \u00b7 ');
+    return `
+      <div style="padding:8px;border:1px solid var(--border);border-radius:4px;margin-bottom:6px;background:var(--surface)">
+        <div style="font-size:9px;font-family:monospace;color:var(--muted);margin-bottom:3px">${c.source === 'semantic_scholar' ? 'Semantic Scholar' : 'OpenAlex'}</div>
+        <div style="font-weight:600;font-size:11px;margin-bottom:2px">${c.title || 'Untitled'}</div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:6px">${meta}</div>
+        <div style="font-size:10px;line-height:1.4;margin-bottom:8px;color:var(--text)">${c.preview || ''}${c.abstract && c.abstract.length > 220 ? '\u2026' : ''}</div>
+        <button class="btn-primary" style="font-size:10px;padding:3px 8px" onclick="selectEnrichCandidate(${idx}, '${filename}')">Use this</button>
+      </div>
+    `;
+  }).join('');
+
+  panel.innerHTML = `
+    <div style="font-size:10px;color:var(--muted);margin-bottom:8px">${candidates.length} result(s) for "${queryUsed}" -- pick the correct match, or retry with a different query</div>
+    ${cards}
+    <button class="btn-secondary" style="font-size:10px;margin-top:4px" onclick="searchEnrichCandidates('${filename}')">&#x21bb; Retry search</button>
+  `;
+}
+
+async function selectEnrichCandidate(idx, filename) {
+  const candidate = enrichCandidatesCache[idx];
+  if (!candidate) return;
+
+  const panel = document.getElementById('edit-enrich-candidates');
+  if (panel) panel.innerHTML = '<div style="font-size:10px;color:var(--muted);font-family:monospace">Writing to Abstract field\u2026</div>';
+
+  try {
+    const res  = await fetch('/api/references/' + encodeURIComponent(filename) + '/enrich/confirm', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ candidate })
     });
     const data = await res.json();
 
     if (data.status === 'enriched') {
-      // Pull the freshly written annotation back from the file
-      const refRes  = await fetch('/api/references');
-      const allRefs = await refRes.json();
-      const updated = allRefs.find(r => r._filename === filename);
-      if (updated) document.getElementById('edit-annotation').value = updated.annotation || '';
-
-      if (btn) { btn.textContent = '✓ Grounded'; setTimeout(() => { btn.textContent = '🔍 Enrich from Index'; btn.disabled = false; }, 2500); }
-      if (status) {
-        let msg = 'Source: ' + (data.tldr_source || 'academic index');
-        if (data.matched_title) msg += '\nMatched: "' + data.matched_title + '"';
-        if (data.title_mismatch_warning) {
-          msg = '⚠ ' + data.title_mismatch_warning;
-          status.style.color = '#c94242';
-        } else {
-          status.style.color = 'var(--muted)';
-        }
-        status.textContent = msg;
-        status.style.whiteSpace = 'pre-line';
+      document.getElementById('edit-abstract').value = candidate.abstract || '';
+      const metaEl = document.getElementById('edit-abstract-meta');
+      if (metaEl) {
+        metaEl.style.display = 'block';
+        metaEl.textContent = 'Source: ' + (data.tldr_source || 'academic index') + '\nMatched: "' + (data.matched_title || '') + '"';
       }
+      if (panel) panel.innerHTML = '<div style="font-size:10px;color:var(--verified)">\u2713 Written to Abstract field above.</div>';
+      await loadRefs();
     } else {
-      if (btn) { btn.textContent = '🔍 Enrich from Index'; btn.disabled = false; }
-      if (status) status.textContent = data.error || 'Not found in academic index — may need a human-written annotation.';
+      if (panel) panel.innerHTML = '<div style="font-size:10px;color:#c94242">' + (data.error || 'Write failed') + '</div>';
     }
   } catch(e) {
-    if (btn) { btn.textContent = '🔍 Enrich from Index'; btn.disabled = false; }
-    if (status) status.textContent = 'Error: ' + e.message;
+    if (panel) panel.innerHTML = '<div style="font-size:10px;color:#c94242">Error: ' + e.message + '</div>';
   }
 }
+
 
 async function annotateRef(filename, btn) {
   if (!filename) return;

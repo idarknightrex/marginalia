@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.7.0630-1800
+Marginalia — app.py  v1.6.8.0630-1900
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -59,7 +59,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.7.0630-1800"
+APP_VERSION = "1.6.8.0630-1900"
 
 
 
@@ -107,6 +107,7 @@ def write_canonical_reference(data: dict) -> Path:
     title_slug = "".join(c for c in title_slug if c.isalnum() or c == "-")
     filename = f"{first_author}_{year}_{title_slug}.md"
 
+    abstract     = data.get("abstract") or "<!-- Machine-fetched abstract — use Enrich from Index to populate -->"
     annotation   = data.get("annotation") or "<!-- AI annotation — run Generate to populate -->"
     user_notes   = data.get("user_notes") or "<!-- Your own critical reading of this source -->"
     argument     = data.get("argument_connection") or "<!-- How does this source support, complicate, or challenge your research argument? -->"
@@ -153,6 +154,9 @@ updated_at: {datetime.now(timezone.utc).isoformat()}
 
 ## Connections
 {conn_lines}
+
+## Abstract
+{abstract}
 
 ## Annotation
 {annotation}
@@ -246,9 +250,10 @@ def read_all_references() -> list:
                             if raw and not raw.startswith("<!--"):
                                 return raw
                         return ""
+                    meta["abstract"]             = extract_section(body, "Abstract")
                     meta["annotation"]          = extract_section(body, "Annotation")
                     meta["argument_connection"] = extract_section(body, "Argument Connection")
-                    meta["user_notes"]           = extract_section(body, "Your Annotation")
+                    meta["user_notes"]           = extract_section(body, "Your Notes")
                     meta["themes_body"]          = extract_section(body, "Themes")
                     meta["connections"]          = extract_section(body, "Connections")
 
@@ -909,20 +914,24 @@ def update_reference(ref_filename):
             return body.rstrip() + "\n\n" + marker + "\n" + new_content + "\n"
 
     def ensure_sections(body):
-        for section in ["Themes", "Connections", "Annotation", "Argument Connection", "Your Annotation", "Edit History", "Status History"]:
+        for section in ["Themes", "Connections", "Abstract", "Annotation", "Argument Connection", "Your Notes", "Edit History", "Status History"]:
             if "## " + section not in body:
                 placeholder = {
                     "Themes": "<!-- Conceptual themes — full phrases, one per line as: - theme -->",
                     "Connections": "<!-- Connections to writing/projects: name | note -->",
+                    "Abstract": "<!-- Machine-fetched abstract — use Enrich from Index to populate -->",
                     "Annotation": "<!-- AI annotation — run Generate to populate -->",
                     "Argument Connection": "<!-- How does this source support, complicate, or challenge your research argument? -->",
-                    "Your Annotation": "<!-- Your own critical reading of this source -->",
+                    "Your Notes": "<!-- Your own critical reading of this source -->",
                 }.get(section, "")
                 if placeholder:
                     body = body.rstrip() + "\n\n## " + section + "\n" + placeholder + "\n"
         return body
 
     body = ensure_sections(body)
+    if "abstract" in data and data["abstract"]:
+        body = replace_section(body, "Abstract", data["abstract"])
+        meta.pop("abstract", None)
     if "annotation" in data and data["annotation"]:
         body = replace_section(body, "Annotation", data["annotation"])
         meta.pop("annotation", None)
@@ -930,7 +939,7 @@ def update_reference(ref_filename):
         body = replace_section(body, "Argument Connection", data["argument_connection"])
         meta.pop("argument_connection", None)
     if "user_notes" in data and data["user_notes"]:
-        body = replace_section(body, "Your Annotation", data["user_notes"])
+        body = replace_section(body, "Your Notes", data["user_notes"])
         meta.pop("user_notes", None)
     if "themes_body" in data and data["themes_body"]:
         body = replace_section(body, "Themes", data["themes_body"])
@@ -1963,24 +1972,25 @@ def academic_leads():
     return jsonify(result)
 
 
-@app.route("/api/references/<ref_filename>/enrich", methods=["POST"])
-def enrich_reference(ref_filename):
+@app.route("/api/references/<ref_filename>/enrich/search", methods=["POST"])
+def enrich_search(ref_filename):
     """
-    Fetch an abstract from the academic index for an EXISTING reference,
-    using its current title/authors as the query, and write the result
-    into that reference's Annotation field in place.
+    Step 1 of the Enrich flow: search the academic index, return CANDIDATES,
+    write nothing. The researcher picks which (if any) is correct before
+    anything touches the file.
 
-    This is the missing piece for references created before academic_sources.py
-    existed (pre-v1.6.0) — they have no abstract grounding at all, which raises
-    confabulation risk during AI annotation (see seeds.md, "A concrete
-    confabulation, caught"). This route lets the researcher ground an existing
-    card with a real abstract before running Generate, rather than only being
-    able to search-and-save as a brand new reference.
+    Built June 30 2026 to replace the old single-shot enrich, which
+    auto-selected the top search hit and wrote it directly. That approach
+    produced a confirmed real failure: an OpenAlex top hit for the Ken Bain
+    reference turned out to be a Portuguese-language review of the book,
+    not the book itself -- a genuine abstract, wrong paper, written
+    silently. See seeds.md, "Enrich's false-success bug, and what it
+    revealed." Source selection must be a human gate, not automatic --
+    this route exists specifically to make that true.
 
-    Does NOT create a duplicate. Updates the existing file directly.
-    If the academic index has nothing (common for older books, essays,
-    non-indexed work), returns a clear "not found" rather than failing
-    silently or fabricating anything.
+    Body:
+      query  str  optional override search query. If omitted, built from
+                  the reference's own title + first author.
     """
     if "/" in ref_filename or "\\" in ref_filename or ".." in ref_filename:
         return jsonify({"error": "Invalid filename"}), 400
@@ -1990,9 +2000,8 @@ def enrich_reference(ref_filename):
     if not filepath.exists():
         return jsonify({"error": "Reference not found"}), 404
 
-    from utils.academic_sources import fetch_paper, build_tldr_section
+    from utils.academic_sources import search_candidates
 
-    # Read current title/authors from the file to build the query
     text = filepath.read_text(encoding="utf-8")
     parts = text.split("---", 2)
     if len(parts) < 3:
@@ -2006,73 +2015,115 @@ def enrich_reference(ref_filename):
 
     title   = meta.get("title", "")
     authors = meta.get("authors", "")
-    doi     = meta.get("url_doi", "")
-
-    if not title and not doi:
-        return jsonify({"error": "Reference has no title or DOI to search with"}), 400
 
     data = request.json or {}
-    preferred_source = data.get("preferred_source", "semantic_scholar")
+    query = data.get("query", "").strip()
+    if not query:
+        query = f"{title} {authors.split(';')[0].strip()}" if authors else title
 
-    # Prefer DOI if present, else search by title + first author for precision
-    query = f"{title} {authors.split(';')[0].strip()}" if authors else title
-    result = fetch_paper(query=query, doi=doi, preferred_source=preferred_source)
+    if not query:
+        return jsonify({"error": "No title or query to search with"}), 400
 
-    if not result or not result.get("abstract"):
-        return jsonify({
-            "error": "No abstract found in academic index. "
-                     "Common for older books, essays, and non-indexed work — "
-                     "this reference may need a human-written TLDR instead.",
-            "found_metadata": bool(result),
-        }), 404
+    candidates = search_candidates(query)
 
-    tldr_section = build_tldr_section(result["abstract"], result.get("tldr_source", ""))
+    return jsonify({
+        "candidates": candidates,
+        "query_used": query,
+        "reference_title": title,
+        "count": len(candidates),
+    })
 
-    # Sanity flag: if the matched title doesn't share meaningful overlap
-    # with the reference's own title, this may be a mismatched record --
-    # OpenAlex/Semantic Scholar search has no real relevance threshold.
-    # Surface this to the researcher rather than writing silently and
-    # trusting it. Discovered June 30 2026 alongside the empty-abstract
-    # bug -- a wrong-but-real abstract is arguably worse than no abstract,
-    # since it looks trustworthy. See seeds.md.
-    matched_title = result.get("title", "")
-    title_words   = set(w.lower() for w in title.split() if len(w) > 3)
-    match_words   = set(w.lower() for w in matched_title.split() if len(w) > 3)
-    overlap       = len(title_words & match_words)
-    title_mismatch_warning = None
-    if title_words and overlap == 0:
-        title_mismatch_warning = (
-            f"Matched record title (\"{matched_title}\") shares no obvious "
-            f"words with this reference's title (\"{title}\") -- this may be "
-            f"the wrong paper. Review before trusting this abstract."
-        )
 
-    # Write into the existing file's Annotation field, reusing the same
-    # section-replace logic as update_reference, scoped to just this field.
+@app.route("/api/references/<ref_filename>/enrich/confirm", methods=["POST"])
+def enrich_confirm(ref_filename):
+    """
+    Step 2 of the Enrich flow: the researcher has picked a specific
+    candidate from the search step. Write it into the Abstract field,
+    cleanly replacing any prior content there (and ONLY there -- the
+    Annotation field, with Generate's interpretation, is untouched).
+
+    Built June 30 2026. The old single-shot enrich also had a section-
+    replace bug: it could leave stale fragments from a previous Generate
+    run sitting below the newly-written content, because the split logic
+    only looked for the next "\\n## " boundary rather than properly
+    bounding the whole section being replaced. Confirmed in the wild on
+    the Ken Bain reference -- old DEEPSEEK/COHERE synthesis fragments
+    survived underneath a freshly-written (and wrong) abstract. This
+    route writes to a dedicated Abstract section, separate from
+    Annotation, so the two can never collide or leave cross-contaminated
+    fragments in each other's space.
+
+    Body:
+      candidate  dict  one of the candidates returned by enrich/search,
+                       passed back exactly as received
+    """
+    if "/" in ref_filename or "\\" in ref_filename or ".." in ref_filename:
+        return jsonify({"error": "Invalid filename"}), 400
+    filepath = (REFERENCES_DIR / ref_filename).resolve()
+    if REFERENCES_DIR.resolve() not in filepath.parents:
+        return jsonify({"error": "Invalid path"}), 400
+    if not filepath.exists():
+        return jsonify({"error": "Reference not found"}), 404
+
+    from utils.academic_sources import build_tldr_section
+
+    data = request.json or {}
+    candidate = data.get("candidate")
+    if not candidate or not candidate.get("abstract"):
+        return jsonify({"error": "No candidate with an abstract provided"}), 400
+
+    text = filepath.read_text(encoding="utf-8")
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return jsonify({"error": "Invalid canonical format"}), 400
+
+    meta = {}
+    for line in parts[1].strip().splitlines():
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            meta[k.strip()] = v.strip()
+
+    abstract_section = build_tldr_section(candidate["abstract"], candidate.get("tldr_source", ""))
+
+    # Cleanly replace JUST the Abstract section. Properly bounded this time:
+    # find the Abstract marker, find the NEXT "## " heading after it
+    # (whatever it is -- Annotation, Argument Connection, etc.), and
+    # replace everything between the two. This is the same general
+    # approach as before but applied to a section that's never shared
+    # with Generate's output, so there's no cross-contamination risk
+    # even if the boundary-finding has an edge case.
     body = parts[2]
-    marker = "## Annotation"
+    marker = "## Abstract"
     if marker in body:
-        before = body.split(marker)[0]
-        rest   = body.split(marker)[1]
+        before = body.split(marker, 1)[0]
+        rest   = body.split(marker, 1)[1]
         after  = ("\n## " + rest.split("\n## ", 1)[1]) if "\n## " in rest else ""
-        new_body = before + marker + "\n" + tldr_section + "\n" + after
+        new_body = before + marker + "\n" + abstract_section + "\n" + after
     else:
-        new_body = body.rstrip() + "\n\n" + marker + "\n" + tldr_section + "\n"
+        # No Abstract section exists yet (older reference, pre-this-build).
+        # Insert it right after Connections if present, else just append.
+        if "## Connections" in body:
+            before = body.split("## Connections", 1)[0]
+            rest   = body.split("## Connections", 1)[1]
+            conn_content, _, after = rest.partition("\n## ")
+            after = ("## " + after) if after else ""
+            new_body = (before + "## Connections" + conn_content.rstrip() + "\n\n"
+                        + marker + "\n" + abstract_section + "\n\n" + after)
+        else:
+            new_body = body.rstrip() + "\n\n" + marker + "\n" + abstract_section + "\n"
 
     meta["updated_at"] = datetime.now(timezone.utc).isoformat()
     new_meta_block = "\n".join(f"{k}: {v}" for k, v in meta.items())
     new_text = f"---\n{new_meta_block}\n---{new_body}"
     filepath.write_text(new_text, encoding="utf-8")
 
-    response = {
+    return jsonify({
         "status": "enriched",
         "file": filepath.name,
-        "matched_title": matched_title,
-        "tldr_source": result.get("tldr_source", ""),
-        "abstract_preview": result["abstract"][:200],
-        "title_mismatch_warning": title_mismatch_warning,
-    }
-    return jsonify(response)
+        "matched_title": candidate.get("title", ""),
+        "tldr_source": candidate.get("tldr_source", ""),
+        "abstract_preview": candidate["abstract"][:200],
+    })
 
 
 @app.route("/api/ingest/scan-pdf-folder", methods=["POST"])
