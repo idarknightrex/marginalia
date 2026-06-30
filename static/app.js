@@ -948,6 +948,17 @@ async function saveEdit() {
 // ── Annotation ────────────────────────────────────────────────────────────
 async function annotateInModal(filename) {
   if (!filename) return;
+  // Gate: refuse to annotate references still at 'surfaced' status.
+  // A model reasoning about a bare title the researcher hasn't even
+  // confirmed is real is the highest-confabulation-risk case there is.
+  // Verification is the human saying "I've looked at this, it's real" --
+  // that should come before any model is allowed to start interpreting it.
+  // See seeds.md, "A concrete confabulation, caught."
+  const statusEl = document.getElementById('edit-status');
+  if (statusEl && statusEl.value === 'surfaced') {
+    alert('This reference is still marked "Surfaced" -- not yet verified.\n\nMark it Located or Verified first, so a model isn\'t reasoning about something nobody has confirmed is real. If the academic index has an abstract, try "Enrich from Index" first too -- it gives the model something real to ground on instead of just a title.');
+    return;
+  }
   const btn = document.getElementById('edit-annotate-btn');
   if (btn) { btn.textContent = 'Annotating…'; btn.disabled = true; }
   const localModels = [...activeModels].filter(m => ['deepseek','qwen','mistral','cohere','gemma','llama'].includes(m));

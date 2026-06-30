@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.4.0630-1100
+Marginalia — app.py  v1.6.5.0630-1130
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -59,7 +59,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.4.0630-1100"
+APP_VERSION = "1.6.5.0630-1130"
 
 
 
@@ -1770,6 +1770,23 @@ def annotate_reference(ref_filename):
     authors = meta.get("authors", "Unknown")
     year    = meta.get("year", "")
     themes  = meta.get("themes", "")
+
+    # Gate: refuse to annotate references still at 'surfaced' status.
+    # Surfaced means the researcher hasn't yet confirmed this reference is
+    # real -- annotating it anyway is the highest-confabulation-risk case
+    # there is, a model reasoning confidently about something nobody has
+    # verified exists. Enforced server-side so every annotate path (modal
+    # Generate button, card-level quick-annotate, batch annotation once
+    # built) is covered by one rule rather than relying on each UI surface
+    # to remember to check. See seeds.md, "A concrete confabulation, caught."
+    verification_status = meta.get("verification_status", "surfaced")
+    if verification_status == "surfaced":
+        return jsonify({
+            "error": "Reference is still 'Surfaced' -- mark it Located or "
+                     "Verified before annotating, so a model isn't reasoning "
+                     "about something nobody has confirmed is real. Try "
+                     "'Enrich from Index' first if you want real grounding."
+        }), 400
 
     existing_body = parts[2]
     existing_annotation = ""

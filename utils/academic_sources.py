@@ -20,6 +20,16 @@ Design principles:
 Raj Boora / Marginalia v1.6.0
 """
 
+# Python 3.9 compatibility: this file uses modern union-type syntax
+# (e.g. `dict | None`) which is only natively valid in Python 3.10+.
+# `from __future__ import annotations` makes all type hints lazy/string-
+# evaluated, so the syntax works correctly on 3.9 without rewriting every
+# signature to typing.Optional[dict]. Must be the first statement after
+# the module docstring. Discovered June 30 2026 when Solaris's venv
+# (Python 3.9) crashed on import the first time this module's enrich
+# path was actually exercised — see seeds.md.
+from __future__ import annotations
+
 import json
 import urllib.request
 import urllib.parse
