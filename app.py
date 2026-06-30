@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.5.0630-1130
+Marginalia — app.py  v1.6.6.0630-1700
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -59,7 +59,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.5.0630-1130"
+APP_VERSION = "1.6.6.0630-1700"
 
 
 
@@ -2028,6 +2028,25 @@ def enrich_reference(ref_filename):
 
     tldr_section = build_tldr_section(result["abstract"], result.get("tldr_source", ""))
 
+    # Sanity flag: if the matched title doesn't share meaningful overlap
+    # with the reference's own title, this may be a mismatched record --
+    # OpenAlex/Semantic Scholar search has no real relevance threshold.
+    # Surface this to the researcher rather than writing silently and
+    # trusting it. Discovered June 30 2026 alongside the empty-abstract
+    # bug -- a wrong-but-real abstract is arguably worse than no abstract,
+    # since it looks trustworthy. See seeds.md.
+    matched_title = result.get("title", "")
+    title_words   = set(w.lower() for w in title.split() if len(w) > 3)
+    match_words   = set(w.lower() for w in matched_title.split() if len(w) > 3)
+    overlap       = len(title_words & match_words)
+    title_mismatch_warning = None
+    if title_words and overlap == 0:
+        title_mismatch_warning = (
+            f"Matched record title (\"{matched_title}\") shares no obvious "
+            f"words with this reference's title (\"{title}\") -- this may be "
+            f"the wrong paper. Review before trusting this abstract."
+        )
+
     # Write into the existing file's Annotation field, reusing the same
     # section-replace logic as update_reference, scoped to just this field.
     body = parts[2]
@@ -2045,12 +2064,15 @@ def enrich_reference(ref_filename):
     new_text = f"---\n{new_meta_block}\n---{new_body}"
     filepath.write_text(new_text, encoding="utf-8")
 
-    return jsonify({
+    response = {
         "status": "enriched",
         "file": filepath.name,
+        "matched_title": matched_title,
         "tldr_source": result.get("tldr_source", ""),
         "abstract_preview": result["abstract"][:200],
-    })
+        "title_mismatch_warning": title_mismatch_warning,
+    }
+    return jsonify(response)
 
 
 @app.route("/api/ingest/scan-pdf-folder", methods=["POST"])

@@ -1001,7 +1001,18 @@ async function enrichInModal(filename) {
       if (updated) document.getElementById('edit-annotation').value = updated.annotation || '';
 
       if (btn) { btn.textContent = '✓ Grounded'; setTimeout(() => { btn.textContent = '🔍 Enrich from Index'; btn.disabled = false; }, 2500); }
-      if (status) status.textContent = 'Source: ' + (data.tldr_source || 'academic index');
+      if (status) {
+        let msg = 'Source: ' + (data.tldr_source || 'academic index');
+        if (data.matched_title) msg += '\nMatched: "' + data.matched_title + '"';
+        if (data.title_mismatch_warning) {
+          msg = '⚠ ' + data.title_mismatch_warning;
+          status.style.color = '#c94242';
+        } else {
+          status.style.color = 'var(--muted)';
+        }
+        status.textContent = msg;
+        status.style.whiteSpace = 'pre-line';
+      }
     } else {
       if (btn) { btn.textContent = '🔍 Enrich from Index'; btn.disabled = false; }
       if (status) status.textContent = data.error || 'Not found in academic index — may need a human-written annotation.';

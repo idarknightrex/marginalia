@@ -134,7 +134,14 @@ def fetch_from_semantic_scholar(query: str = "", doi: str = "") -> dict | None:
         url = f"{SEMANTIC_SCHOLAR_BASE}/paper/search?query={encoded}&limit=1&fields={SS_FIELDS}"
         data = _ss_request(url)
         if data and data.get("data") and len(data["data"]) > 0:
-            return _normalize_ss(data["data"][0], "semantic_scholar")
+            candidate = data["data"][0]
+            # Guard: a search match with no abstract is not a usable result --
+            # the old code returned it anyway, which let a wrong or
+            # abstract-less record silently masquerade as a successful
+            # enrich. Discovered June 30 2026 (Ken Bain reference: enrich
+            # returned 200 with nothing real written). See seeds.md.
+            if candidate.get("abstract"):
+                return _normalize_ss(candidate, "semantic_scholar")
 
     return None
 
@@ -207,7 +214,16 @@ def fetch_from_openalex(query: str = "", doi: str = "") -> dict | None:
         url = f"{OPENALEX_BASE}/works?filter=title.search:{encoded}&per-page=1&select=id,title,authorships,publication_year,abstract_inverted_index,doi,primary_location,cited_by_count,open_access"
         data = _oa_request(url)
         if data and data.get("results") and len(data["results"]) > 0:
-            return _normalize_oa(data["results"][0], "openalex")
+            candidate = data["results"][0]
+            # Guard: a title-search match with no reconstructable abstract
+            # is not a usable result. OpenAlex's title.search has no
+            # relevance threshold -- it can match a tangential or wrong
+            # record and we'd otherwise return it as a "success" with an
+            # empty or junk abstract. Same fix as Semantic Scholar above.
+            if candidate.get("abstract_inverted_index"):
+                normalized = _normalize_oa(candidate, "openalex")
+                if normalized.get("abstract"):
+                    return normalized
 
     return None
 
