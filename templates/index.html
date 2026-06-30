@@ -291,26 +291,31 @@
       </div>
     </div>
 
-    <div class="search-row">
-      <input class="search-input" id="ref-search" placeholder="Search author, title, or theme..." oninput="filterRefs()">
+    <!-- Actions row -- separate from filtering, so the two don't compete visually -->
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:12px">
       <button class="btn-secondary" onclick="showView('ingest', document.querySelector('[onclick*=\'ingest\']'))">&#8853; Import</button>
       <button class="btn-primary" onclick="openAddPanel()">+ Add</button>
     </div>
 
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-      <select id="ref-project-filter" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;flex:1" onchange="filterRefs()">
-        <option value="">All projects</option>
-      </select>
-      <input id="ref-year-filter" type="text" placeholder="Year (e.g. 1952 or 1950-1960)" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;width:160px" oninput="filterRefs()">
-      <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="document.getElementById('ref-project-filter').value='';document.getElementById('ref-year-filter').value='';filterRefs()">Clear</button>
-    </div>
-
-    <div class="filter-row">
-      <div style="font-size:10px;font-family:monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:10px 0 6px">Filter by status</div>
-      <button class="filter-btn active" data-filter="all" id="filter-all" onclick="setFilter(this)">all</button>
-      <button class="filter-btn" data-filter="verified" id="filter-verified" onclick="setFilter(this)">verified</button>
-      <button class="filter-btn" data-filter="located" id="filter-located" onclick="setFilter(this)">located</button>
-      <button class="filter-btn" data-filter="surfaced" id="filter-surfaced" onclick="setFilter(this)">surfaced</button>
+    <!-- Unified filter panel -- find-by-text, project, year, status all in one visual block -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:14px">
+      <div class="search-row" style="margin-bottom:8px">
+        <input class="search-input" id="ref-search" placeholder="Search author, title, or theme..." oninput="filterRefs()">
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <select id="ref-project-filter" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;flex:1" onchange="filterRefs()">
+          <option value="">All projects</option>
+        </select>
+        <input id="ref-year-filter" type="text" placeholder="Year (e.g. 1952 or 1950-1960)" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;width:160px" oninput="filterRefs()">
+        <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="document.getElementById('ref-search').value='';document.getElementById('ref-project-filter').value='';document.getElementById('ref-year-filter').value='';filterRefs()">Clear all</button>
+      </div>
+      <div class="filter-row" style="margin:0">
+        <div style="font-size:10px;font-family:monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Filter by status</div>
+        <button class="filter-btn active" data-filter="all" id="filter-all" onclick="setFilter(this)">all</button>
+        <button class="filter-btn" data-filter="verified" id="filter-verified" onclick="setFilter(this)">verified</button>
+        <button class="filter-btn" data-filter="located" id="filter-located" onclick="setFilter(this)">located</button>
+        <button class="filter-btn" data-filter="surfaced" id="filter-surfaced" onclick="setFilter(this)">surfaced</button>
+      </div>
     </div>
 
     <div id="ref-list"></div>
