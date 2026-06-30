@@ -301,7 +301,8 @@
       <select id="ref-project-filter" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;flex:1" onchange="filterRefs()">
         <option value="">All projects</option>
       </select>
-      <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="document.getElementById('ref-project-filter').value='';filterRefs()">Clear</button>
+      <input id="ref-year-filter" type="text" placeholder="Year (e.g. 1952 or 1950-1960)" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;width:160px" oninput="filterRefs()">
+      <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="document.getElementById('ref-project-filter').value='';document.getElementById('ref-year-filter').value='';filterRefs()">Clear</button>
     </div>
 
     <div class="filter-row">

@@ -549,13 +549,32 @@ function updateFilterLabels() {
 function renderRefs() {
   const q       = document.getElementById('ref-search').value.toLowerCase();
   const slug    = (document.getElementById('ref-project-filter')?.value || '').trim();
+  const yearRaw = (document.getElementById('ref-year-filter')?.value || '').trim();
   const list    = document.getElementById('ref-list');
   list.innerHTML = '';
+
+  // Year filter: accepts a single year ("1952") or a range ("1950-1960").
+  // Blank passes everything through. Non-numeric input is ignored safely
+  // rather than throwing -- a half-typed year shouldn't break the list.
+  let yearMin = null, yearMax = null;
+  if (yearRaw) {
+    const rangeMatch = yearRaw.match(/^(\d{1,4})\s*-\s*(\d{1,4})$/);
+    if (rangeMatch) {
+      yearMin = parseInt(rangeMatch[1]);
+      yearMax = parseInt(rangeMatch[2]);
+    } else if (/^\d{1,4}$/.test(yearRaw)) {
+      yearMin = yearMax = parseInt(yearRaw);
+    }
+    // else: unparseable input, yearMin/yearMax stay null, filter is a no-op
+  }
+
   const filtered = allRefs.filter(r => {
     const matchFilter  = activeFilter === 'all' || r.verification_status === activeFilter;
     const matchSearch  = !q || [r.title, r.authors, r.themes].some(f => f && f.toLowerCase().includes(q));
     const matchProject = !slug || (r.conn_list || []).some(line => line.split('|')[0].trim() === slug);
-    return matchFilter && matchSearch && matchProject;
+    const refYear       = parseInt(r.year);
+    const matchYear      = yearMin === null || (!isNaN(refYear) && refYear >= yearMin && refYear <= yearMax);
+    return matchFilter && matchSearch && matchProject && matchYear;
   });
   document.getElementById('ref-count').textContent = filtered.length + ' of ' + allRefs.length + ' sources';
   if (!filtered.length) {
