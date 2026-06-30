@@ -2621,8 +2621,11 @@ async function checkAcademicHealth() {
       if (status && status.status === 'ok') {
         el.style.color = '#7a9e7e';  // muted green -- warm not alarming
         el.title = `${key.replace('_', ' ')}: available`;
+      } else if (status && status.status === 'rate_limited') {
+        el.style.color = '#c9a04a';  // warm yellow -- distinct from amber/red, "busy not broken"
+        el.title = `${key.replace('_', ' ')}: rate limited right now -- the service is up, just temporarily throttling this client. Try again shortly.`;
       } else {
-        el.style.color = '#b87a4a';  // amber -- unreachable
+        el.style.color = '#b87a4a';  // amber -- genuinely unreachable
         el.title = `${key.replace('_', ' ')}: unreachable`;
       }
     }

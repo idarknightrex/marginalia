@@ -31,6 +31,8 @@ Raj Boora / Marginalia v1.6.0
 from __future__ import annotations
 
 import json
+import os
+import time
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -51,16 +53,48 @@ SS_REF_FIELDS = "title,authors,year,externalIds,isOpenAccess,openAccessPdf"
 REQUEST_TIMEOUT = 8
 HEALTH_TIMEOUT  = 4
 
+# Semantic Scholar API key, read from environment (set in setup.env, never
+# committed). Unauthenticated requests share a low rate limit and are subject
+# to throttling during heavy use -- confirmed in practice June 30 2026, a
+# single afternoon of Enrich testing triggered 429s. Authenticated requests
+# get a dedicated, much higher limit. If unset, requests still work, just
+# unauthenticated and more easily rate-limited -- this is a degrade-gracefully
+# fallback, not a hard requirement, since the module must keep working for
+# anyone who hasn't set up a key yet.
+SS_API_KEY = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "")
+
+# Exponential backoff for 429 (rate limited) responses specifically.
+# Does NOT retry on other errors (404, network failure, etc) -- those are
+# real "nothing found" or "unreachable" states that retrying won't fix.
+# Only a 429 means "the data is there, you're just asking too fast."
+MAX_RETRIES_429   = 3
+BACKOFF_BASE_SECS = 1.5
+
 
 # ── Health checks ─────────────────────────────────────────────────────────────
 
 def check_semantic_scholar() -> dict:
-    """Lightweight health check for Semantic Scholar API."""
+    """
+    Lightweight health check for Semantic Scholar API.
+
+    Distinguishes "unreachable" from "rate limited" -- these look identical
+    to a researcher otherwise and were confirmed to cause real confusion
+    June 30 2026 (read as "maybe S2 is down" when it was actually a 429).
+    A rate-limited status still means the service is up, just temporarily
+    refusing this client's requests.
+    """
     try:
         url = f"{SEMANTIC_SCHOLAR_BASE}/paper/search?query=test&limit=1&fields=title"
-        req = urllib.request.Request(url, headers={"User-Agent": "Marginalia/1.6 (research tool; contact via github.com/idarknightrex/marginalia)"})
+        headers = {"User-Agent": "Marginalia/1.6 (research tool; contact via github.com/idarknightrex/marginalia)"}
+        if SS_API_KEY:
+            headers["x-api-key"] = SS_API_KEY
+        req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=HEALTH_TIMEOUT) as r:
             return {"source": "semantic_scholar", "status": "ok", "http": r.status}
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            return {"source": "semantic_scholar", "status": "rate_limited", "http": 429}
+        return {"source": "semantic_scholar", "status": "unreachable", "error": str(e)}
     except Exception as e:
         return {"source": "semantic_scholar", "status": "unreachable", "error": str(e)}
 
@@ -104,16 +138,41 @@ def check_all_sources() -> dict:
 # ── Semantic Scholar ───────────────────────────────────────────────────────────
 
 def _ss_request(url: str) -> dict | None:
-    """Make a Semantic Scholar API request. Returns parsed JSON or None."""
-    try:
-        req = urllib.request.Request(
-            url,
-            headers={"User-Agent": "Marginalia/1.6 (research tool; contact via github.com/idarknightrex/marginalia)"}
-        )
-        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as r:
-            return json.loads(r.read().decode("utf-8"))
-    except Exception:
-        return None
+    """
+    Make a Semantic Scholar API request. Returns parsed JSON or None.
+
+    Includes the API key (if set via SS_API_KEY) as the x-api-key header --
+    authenticated requests get a dedicated, much higher rate limit than the
+    shared unauthenticated tier. Retries with exponential backoff specifically
+    on 429 (rate limited) responses, up to MAX_RETRIES_429 times. Does not
+    retry on other failures (404, timeout, network error) -- those won't be
+    fixed by waiting, only a 429 means "the data exists, slow down."
+
+    Added June 30 2026 after confirming via direct curl test that a single
+    afternoon of Enrich/candidate-search testing was enough to hit the
+    unauthenticated rate limit, which silently looked like "Semantic Scholar
+    has nothing" rather than what it actually was. See seeds.md.
+    """
+    headers = {"User-Agent": "Marginalia/1.6 (research tool; contact via github.com/idarknightrex/marginalia)"}
+    if SS_API_KEY:
+        headers["x-api-key"] = SS_API_KEY
+
+    for attempt in range(MAX_RETRIES_429 + 1):
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < MAX_RETRIES_429:
+                # Exponential backoff: 1.5s, 3s, 6s -- short enough to not
+                # hang a single Enrich click for too long, long enough to
+                # actually clear a brief rate-limit window.
+                time.sleep(BACKOFF_BASE_SECS * (2 ** attempt))
+                continue
+            return None
+        except Exception:
+            return None
+    return None
 
 
 def fetch_from_semantic_scholar(query: str = "", doi: str = "") -> dict | None:
