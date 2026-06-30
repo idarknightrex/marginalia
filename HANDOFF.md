@@ -14,9 +14,24 @@ Marginalia (Largely Local Marginalia / LLM) — a local-first PhD research workb
 
 ---
 
+## ⚠ Production vs. Bootstrap Scripts — read this first
+**As of June 29 2026.** `bootstrap.sh` (and its platform variants `bootstrap-macos.sh` / `bootstrap-linux.sh`) are **first-time human setup scripts only**. They install dependencies, create the venv, check for `.env`, and hunt for a free port — useful for someone cloning the repo and running it manually once.
+
+**Production on Solaris does NOT use any bootstrap script.** The launchd plist (`com.marginalia.server.plist`) calls the venv's Python interpreter and `app.py` directly:
+```
+/Users/rajboora/Developer/marginalia/.venv/bin/python /Users/rajboora/Developer/marginalia/app.py
+```
+with `MARGINALIA_PORT=5001` set via the plist's `EnvironmentVariables`. `app.py` already reads this directly (`os.environ.get("MARGINALIA_PORT", 5000)`) — no shell wrapper needed.
+
+**Why this matters:** a June 2026 macOS update caused the plist to drop out of launchd. When reloaded, it had been pointed at `bootstrap.sh` instead of `app.py` directly — and `bootstrap.sh`'s port-check used `ss`, a Linux-only tool that doesn't exist on macOS, so it silently failed to detect anything was wrong and defaulted to port 5000, which macOS reserves for AirPlay Receiver. The result was a crash loop that looked like nothing was wrong until the actual stderr log was checked. Full writeup in `marginalia-seeds.md`, "The bootstrap.sh / production plist incident."
+
+**If you ever rebuild or reinstall the launchd plist, always point `ProgramArguments` at the venv's `python` and `app.py` directly. Never at a bootstrap script.**
+
+---
+
 ## Hardware State
 **Mac Mini M4 — "Solaris"** — headless, Tailscale IP: 100.126.14.57
-- Marginalia running via `nohup ./bootstrap.command > /tmp/marginalia.log 2>&1 &`
+- Marginalia running via launchd, calling `.venv/bin/python app.py` directly on port 5001 (see note above — never via bootstrap.sh/.command)
 - launchd plist installed — survives power cycles (com.marginalia.server.plist)
 
 **Restart commands (SSH into Solaris first):**

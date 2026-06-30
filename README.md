@@ -92,8 +92,13 @@ chmod +x setup.sh
 ```bash
 ollama pull deepseek-r1:8b   # 5.2GB — enough to begin
 # Add GOOGLE_API_KEY to setup.env for Gemini (free tier)
-./bootstrap.command
+./bootstrap.sh               # auto-detects macOS or Linux
+# or run the platform script directly:
+#   ./bootstrap-macos.sh
+#   ./bootstrap-linux.sh
 ```
+
+> **Production deployments:** `bootstrap.sh` and its platform variants are for first-time setup and manual runs only. If you're configuring a launchd/systemd/supervisor entry to keep Marginalia running unattended, point it at `.venv/bin/python app.py` directly with `MARGINALIA_PORT` set in the environment — not at any bootstrap script. See `HANDOFF.md` for why this distinction matters.
 
 ---
 
@@ -103,9 +108,11 @@ ollama pull deepseek-r1:8b   # 5.2GB — enough to begin
 marginalia/
 ├── app.py                    # Flask backend — all API routes
 ├── setup.sh                  # Safe install and setup script
-├── bootstrap.command         # Double-click to start (Mac)
-├── bootstrap.sh              # Start script (Linux/headless)
-├── com.marginalia.server.plist  # launchd auto-start (Mac)
+├── bootstrap.sh               # OS-detecting dispatcher (calls one of the two below)
+├── bootstrap-macos.sh         # macOS setup/start script (lsof port check)
+├── bootstrap-linux.sh         # Linux setup/start script (ss port check)
+├── bootstrap.command          # Double-click to start (Mac, GUI convenience)
+├── com.marginalia.server.plist  # launchd auto-start (Mac) — calls app.py directly, not a bootstrap script
 ├── setup.env                 # API keys — gitignored, never pushed
 ├── requirements.txt
 ├── static/

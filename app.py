@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.1.0629-1630
+Marginalia — app.py  v1.6.2.0630-0300
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -59,7 +59,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.1.0629-1630"
+APP_VERSION = "1.6.2.0630-0300"
 
 
 
