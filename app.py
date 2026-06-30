@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.2.0630-0300
+Marginalia — app.py  v1.6.4.0630-1100
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -59,7 +59,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.2.0630-0300"
+APP_VERSION = "1.6.4.0630-1100"
 
 
 
@@ -1944,6 +1944,96 @@ def academic_leads():
 
     result = fetch_crossref_leads(doi=doi, existing_dois=existing_dois)
     return jsonify(result)
+
+
+@app.route("/api/references/<ref_filename>/enrich", methods=["POST"])
+def enrich_reference(ref_filename):
+    """
+    Fetch an abstract from the academic index for an EXISTING reference,
+    using its current title/authors as the query, and write the result
+    into that reference's Annotation field in place.
+
+    This is the missing piece for references created before academic_sources.py
+    existed (pre-v1.6.0) — they have no abstract grounding at all, which raises
+    confabulation risk during AI annotation (see seeds.md, "A concrete
+    confabulation, caught"). This route lets the researcher ground an existing
+    card with a real abstract before running Generate, rather than only being
+    able to search-and-save as a brand new reference.
+
+    Does NOT create a duplicate. Updates the existing file directly.
+    If the academic index has nothing (common for older books, essays,
+    non-indexed work), returns a clear "not found" rather than failing
+    silently or fabricating anything.
+    """
+    if "/" in ref_filename or "\\" in ref_filename or ".." in ref_filename:
+        return jsonify({"error": "Invalid filename"}), 400
+    filepath = (REFERENCES_DIR / ref_filename).resolve()
+    if REFERENCES_DIR.resolve() not in filepath.parents:
+        return jsonify({"error": "Invalid path"}), 400
+    if not filepath.exists():
+        return jsonify({"error": "Reference not found"}), 404
+
+    from utils.academic_sources import fetch_paper, build_tldr_section
+
+    # Read current title/authors from the file to build the query
+    text = filepath.read_text(encoding="utf-8")
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return jsonify({"error": "Invalid canonical format"}), 400
+
+    meta = {}
+    for line in parts[1].strip().splitlines():
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            meta[k.strip()] = v.strip()
+
+    title   = meta.get("title", "")
+    authors = meta.get("authors", "")
+    doi     = meta.get("url_doi", "")
+
+    if not title and not doi:
+        return jsonify({"error": "Reference has no title or DOI to search with"}), 400
+
+    data = request.json or {}
+    preferred_source = data.get("preferred_source", "semantic_scholar")
+
+    # Prefer DOI if present, else search by title + first author for precision
+    query = f"{title} {authors.split(';')[0].strip()}" if authors else title
+    result = fetch_paper(query=query, doi=doi, preferred_source=preferred_source)
+
+    if not result or not result.get("abstract"):
+        return jsonify({
+            "error": "No abstract found in academic index. "
+                     "Common for older books, essays, and non-indexed work — "
+                     "this reference may need a human-written TLDR instead.",
+            "found_metadata": bool(result),
+        }), 404
+
+    tldr_section = build_tldr_section(result["abstract"], result.get("tldr_source", ""))
+
+    # Write into the existing file's Annotation field, reusing the same
+    # section-replace logic as update_reference, scoped to just this field.
+    body = parts[2]
+    marker = "## Annotation"
+    if marker in body:
+        before = body.split(marker)[0]
+        rest   = body.split(marker)[1]
+        after  = ("\n## " + rest.split("\n## ", 1)[1]) if "\n## " in rest else ""
+        new_body = before + marker + "\n" + tldr_section + "\n" + after
+    else:
+        new_body = body.rstrip() + "\n\n" + marker + "\n" + tldr_section + "\n"
+
+    meta["updated_at"] = datetime.now(timezone.utc).isoformat()
+    new_meta_block = "\n".join(f"{k}: {v}" for k, v in meta.items())
+    new_text = f"---\n{new_meta_block}\n---{new_body}"
+    filepath.write_text(new_text, encoding="utf-8")
+
+    return jsonify({
+        "status": "enriched",
+        "file": filepath.name,
+        "tldr_source": result.get("tldr_source", ""),
+        "abstract_preview": result["abstract"][:200],
+    })
 
 
 @app.route("/api/ingest/scan-pdf-folder", methods=["POST"])

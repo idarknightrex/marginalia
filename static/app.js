@@ -483,7 +483,7 @@ async function sendPrompt() {
   } catch(e) {
     if (e.name !== 'AbortError') {
       const msg = e.message === 'Load failed' || e.message === 'Failed to fetch'
-        ? 'Connection lost — check that Marginalia is still running (tail /tmp/marginalia.log on Solaris)'
+        ? 'Connection lost — check that Marginalia is still running (tail /tmp/marginalia.log on the server)'
         : e.message;
       grid.innerHTML = '<div style="color:#c94242;font-family:monospace;font-size:12px">Error: ' + msg + '</div>';
     }
@@ -966,6 +966,38 @@ async function annotateInModal(filename) {
     }
   } catch(e) {
     if (btn) { btn.textContent = '⚠ Error'; btn.disabled = false; }
+  }
+}
+
+async function enrichInModal(filename) {
+  if (!filename) return;
+  const btn    = document.getElementById('edit-enrich-btn');
+  const status = document.getElementById('edit-enrich-status');
+  if (btn) { btn.textContent = 'Searching index…'; btn.disabled = true; }
+  if (status) { status.style.display = 'block'; status.textContent = ''; }
+
+  try {
+    const res  = await fetch('/api/references/' + encodeURIComponent(filename) + '/enrich', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({})
+    });
+    const data = await res.json();
+
+    if (data.status === 'enriched') {
+      // Pull the freshly written annotation back from the file
+      const refRes  = await fetch('/api/references');
+      const allRefs = await refRes.json();
+      const updated = allRefs.find(r => r._filename === filename);
+      if (updated) document.getElementById('edit-annotation').value = updated.annotation || '';
+
+      if (btn) { btn.textContent = '✓ Grounded'; setTimeout(() => { btn.textContent = '🔍 Enrich from Index'; btn.disabled = false; }, 2500); }
+      if (status) status.textContent = 'Source: ' + (data.tldr_source || 'academic index');
+    } else {
+      if (btn) { btn.textContent = '🔍 Enrich from Index'; btn.disabled = false; }
+      if (status) status.textContent = data.error || 'Not found in academic index — may need a human-written annotation.';
+    }
+  } catch(e) {
+    if (btn) { btn.textContent = '🔍 Enrich from Index'; btn.disabled = false; }
+    if (status) status.textContent = 'Error: ' + e.message;
   }
 }
 

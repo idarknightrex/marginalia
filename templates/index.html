@@ -695,7 +695,11 @@
     <div class="edit-field">
       <label>AI Annotation</label>
       <textarea id="edit-annotation" rows="4"></textarea>
-      <button class="btn-secondary" id="edit-annotate-btn" style="margin-top:6px;font-size:10px" onclick="annotateInModal(editingFilename)">&#9670; Generate</button>
+      <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+        <button class="btn-secondary" id="edit-annotate-btn" style="font-size:10px" onclick="annotateInModal(editingFilename)">&#9670; Generate</button>
+        <button class="btn-secondary" id="edit-enrich-btn" style="font-size:10px" onclick="enrichInModal(editingFilename)" data-tooltip="Search Semantic Scholar / OpenAlex for this reference's abstract and ground it here before Generate runs">&#x1F50D; Enrich from Index</button>
+      </div>
+      <div id="edit-enrich-status" style="font-size:10px;color:var(--muted);margin-top:4px;display:none"></div>
     </div>
     <div class="edit-field"><label>Your Annotation</label><textarea id="edit-user-notes" rows="3" placeholder="Your own reading notes and thoughts"></textarea></div>
     <div class="edit-field"><label>Argument Connection</label><textarea id="edit-argument" rows="3" placeholder="How does this source connect to your argument?"></textarea></div>
