@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Present — Marginalia</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&family=IBM+Plex+Serif:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink: #e8e4dc;
+    --ink-dim: #9a9488;
+    --ink-faint: #4a4640;
+    --desk: #161412;
+    --desk-raised: #1e1b18;
+    --desk-card: #232018;
+    --desk-border: #2e2a24;
+    --amber: #c8922a;
+    --amber-dim: #7a5918;
+    --green: #4a7c59;
+    --green-bright: #6aab7e;
+    --red: #8c3a2e;
+    --red-bright: #c05040;
+    --blue: #3a5c7a;
+    --blue-bright: #5a8caa;
+    --violet: #5e4a7c;
+    --violet-bright: #8c6aab;
+  }
+
+  html { background: var(--desk); color: var(--ink); font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; line-height: 1.6; }
+  body { max-width: 900px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+
+  /* Header -- now shows PROJECT NAME, not a fixed person/dissertation title,
+     since this is a per-project generated view, not a hand-maintained file */
+  .header { border-bottom: 1px solid var(--desk-border); padding-bottom: 1rem; margin-bottom: 1.5rem; }
+  .header-top { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+  .breadcrumb { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.3rem; }
+  .title { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 500; color: var(--amber); letter-spacing: 0.12em; text-transform: uppercase; }
+  .meta { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--ink-dim); }
+  .subtitle { font-family: 'IBM Plex Serif', serif; font-style: italic; font-size: 1rem; color: var(--ink-dim); margin-top: 0.4rem; }
+  .pulse-bar { height: 2px; background: linear-gradient(90deg, var(--amber-dim) 0%, var(--amber) 40%, var(--amber-dim) 70%, transparent 100%); margin: 1rem 0 0; border-radius: 1px; }
+
+  /* Status strip -- now generated live from canonical, not typed by hand */
+  .status-strip { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; padding: 0.75rem 1rem; background: var(--desk-raised); border: 1px solid var(--desk-border); border-radius: 2px; }
+  .stat { display: flex; flex-direction: column; gap: 0.1rem; }
+  .stat-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.08em; }
+  .stat-value { font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; color: var(--ink); }
+  .stat-value.waiting { color: var(--amber); }
+  .stat-value.active { color: var(--green-bright); }
+
+  /* Refresh indicator -- new: shows this is live-generated, not a stale file */
+  .refresh-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+  .refresh-note { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: var(--ink-faint); }
+  .refresh-btn { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: var(--ink-dim); background: var(--desk-raised); border: 1px solid var(--desk-border); border-radius: 2px; padding: 0.3rem 0.6rem; cursor: pointer; text-transform: uppercase; letter-spacing: 0.06em; }
+  .refresh-btn:hover { color: var(--amber); border-color: var(--amber-dim); }
+
+  .tabs { display: flex; gap: 0; margin-bottom: 0; border-bottom: 1px solid var(--desk-border); flex-wrap: wrap; }
+  .tab { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.5rem 1rem; cursor: pointer; color: var(--ink-dim); border: 1px solid transparent; border-bottom: none; background: none; transition: color 0.15s, background 0.15s; border-radius: 2px 2px 0 0; user-select: none; }
+  .tab:hover { color: var(--ink); background: var(--desk-raised); }
+  .tab.active { color: var(--amber); background: var(--desk-card); border-color: var(--desk-border); border-bottom-color: var(--desk-card); }
+
+  .panel { display: none; padding: 1rem 0; }
+  .panel.active { display: block; }
+
+  .card { background: var(--desk-card); border: 1px solid var(--desk-border); border-radius: 2px; margin-bottom: 0.5rem; overflow: hidden; }
+  .card-head { display: flex; align-items: center; gap: 0.75rem; padding: 0.65rem 0.85rem; cursor: pointer; user-select: none; transition: background 0.1s; }
+  .card-head:hover { background: var(--desk-raised); }
+  .card-head .toggle { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--ink-dim); width: 1rem; flex-shrink: 0; }
+  .card-title { font-size: 0.85rem; font-weight: 500; flex: 1; color: var(--ink); }
+  .chip { font-family: 'IBM Plex Mono', monospace; font-size: 0.6rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.15rem 0.4rem; border-radius: 2px; flex-shrink: 0; }
+  .chip.active   { background: rgba(74,124,89,0.25);  color: var(--green-bright); border: 1px solid var(--green); }
+  .chip.watch    { background: rgba(200,146,42,0.2);  color: var(--amber);        border: 1px solid var(--amber-dim); }
+  .chip.waiting  { background: rgba(58,92,122,0.25);  color: var(--blue-bright);  border: 1px solid var(--blue); }
+  .chip.deferred { background: rgba(74,70,64,0.4);    color: var(--ink-dim);      border: 1px solid var(--ink-faint); }
+  .chip.resolved { background: rgba(74,124,89,0.1);   color: var(--ink-dim);      border: 1px solid var(--ink-faint); }
+  .chip.core     { background: rgba(200,146,42,0.25); color: var(--amber);        border: 1px solid var(--amber); }
+  .chip.verified { background: rgba(74,124,89,0.2);   color: var(--green-bright); border: 1px solid var(--green); }
+  .chip.surfaced { background: rgba(74,70,64,0.4);    color: var(--ink-dim);      border: 1px solid var(--ink-faint); }
+  .chip.grounded { background: rgba(58,92,122,0.25);  color: var(--blue-bright);  border: 1px solid var(--blue); }
+  .chip.ungrounded { background: rgba(140,58,46,0.2); color: var(--red-bright);   border: 1px solid var(--red); }
+  .chip.coined   { background: rgba(94,74,124,0.3);   color: var(--violet-bright);border: 1px solid var(--violet); }
+
+  .card-body { display: none; padding: 0 0.85rem 0.85rem; font-size: 0.82rem; color: var(--ink-dim); line-height: 1.65; border-top: 1px solid var(--desk-border); padding-top: 0.6rem; }
+  .card-body.open { display: block; }
+  .card-body em { color: var(--ink); font-style: normal; }
+  .card-body .note { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--amber); margin-top: 0.4rem; display: block; }
+  .card-body .source-link { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--blue-bright); margin-top: 0.4rem; display: block; text-decoration: none; }
+  .card-body .source-link:hover { text-decoration: underline; }
+
+  .concept-def { color: var(--ink); font-size: 0.85rem; margin-bottom: 0.6rem; padding: 0.6rem 0.7rem; background: var(--desk-raised); border-left: 2px solid var(--violet); border-radius: 0 2px 2px 0; }
+  .concept-history { margin-top: 0.5rem; }
+  .history-entry { display: flex; gap: 0.6rem; padding: 0.35rem 0; border-top: 1px dashed var(--desk-border); align-items: baseline; }
+  .history-entry:first-child { border-top: none; }
+  .history-date { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: var(--ink-faint); flex-shrink: 0; width: 4.2rem; }
+  .history-text { font-size: 0.8rem; color: var(--ink-dim); }
+  .concept-refs { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: var(--ink-faint); margin-top: 0.5rem; }
+
+  .section-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.1em; margin: 1rem 0 0.4rem; padding-left: 0.2rem; }
+
+  .empty-state { padding: 1.5rem 1rem; text-align: center; color: var(--ink-faint); font-size: 0.8rem; font-family: 'IBM Plex Mono', monospace; }
+
+  .footer { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--desk-border); font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: var(--ink-faint); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="breadcrumb">Marginalia · Present · Project View</div>
+  <div class="header-top">
+    <div class="title">Enaction &amp; Pedagogy — Project Desk</div>
+    <div class="meta">Generated live · Jul 2 2026, 14:32 · from canonical/projects/enaction-pedagogy/</div>
+  </div>
+  <div class="subtitle">How do embodied community-building activities influence performance anxiety and intellectual risk-taking among first-year undergraduates?</div>
+  <div class="pulse-bar"></div>
+</div>
+
+<div class="status-strip">
+  <div class="stat"><span class="stat-label">References</span><span class="stat-value active">12 attached · 4 verified</span></div>
+  <div class="stat"><span class="stat-label">Sessions</span><span class="stat-value">7 logged · 2 core-flagged</span></div>
+  <div class="stat"><span class="stat-label">Open Threads</span><span class="stat-value waiting">5 unresolved</span></div>
+  <div class="stat"><span class="stat-label">Concepts</span><span class="stat-value">9 tracked</span></div>
+  <div class="stat"><span class="stat-label">Last activity</span><span class="stat-value">2 hours ago</span></div>
+</div>
+
+<div class="refresh-row">
+  <span class="refresh-note">This view regenerates from canonical each time you open it -- nothing here is hand-maintained.</span>
+  <button class="refresh-btn" onclick="alert('In the real build: re-reads canonical/projects/enaction-pedagogy/ and rebuilds this panel.')">&#8635; Refresh now</button>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab(this,'concepts')">Concepts</div>
+  <div class="tab" onclick="switchTab(this,'threads')">Open Threads</div>
+  <div class="tab" onclick="switchTab(this,'moves')">Next Moves</div>
+  <div class="tab" onclick="switchTab(this,'refs')">References</div>
+  <div class="tab" onclick="switchTab(this,'sessions')">Sessions</div>
+</div>
+
+<!-- CONCEPTS -->
+<div class="panel active" id="concepts">
+
+  <div class="section-label">Core Concepts</div>
+
+  <div class="card">
+    <div class="card-head" onclick="toggle(this)">
+      <span class="toggle">&#9656;</span>
+      <span class="card-title">Enaction as gut feeling of where to go</span>
+      <span class="chip core">Core</span>
+    </div>
+    <div class="card-body">
+      <div class="concept-def">Enaction: "gives rise to a gut feeling of where to go." Constructivism: "I know that from before and here is a little more." Additive/cognitive (constructivism) vs. orientational/whole-organism (enaction). Autopoiesis is the mechanism underneath -- the organism's continuous self-production determines what even registers as a perturbation worth responding to.</div>
+      <div class="concept-history">
+        <div class="history-entry">
+          <span class="history-date">Jun 30</span>
+          <span class="history-text">First articulated during Varela reading session. Sharpened through sibling-thread dialogue -- the autopoiesis-as-threat-response connection surfaced here, not in council synthesis.</span>
+        </div>
+        <div class="history-entry">
+          <span class="history-date">Jul 1</span>
+          <span class="history-text">Connected to Odell's sustained attention and Simmons's story-as-contrivance during handwritten note ingest.</span>
+        </div>
+      </div>
+      <div class="concept-refs">Linked: Varela (1991) · Odell, J. · Simmons, A. · Session 2026-06-30-varela-enaction</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head" onclick="toggle(this)">
+      <span class="toggle">&#9656;</span>
+      <span class="card-title">Step Zero</span>
+      <span class="chip core">Core</span>
+    </div>
+    <div class="card-body">
+      <div class="concept-def">If a student's autopoietic organization is running a threat response, the perturbations the teacher offers get filtered out as noise before they can become learning. Step Zero is the embodied, relational work that has to happen before intellectual risk-taking is even possible.</div>
+      <div class="concept-history">
+        <div class="history-entry">
+          <span class="history-date">Jun 30</span>
+          <span class="history-text">Surfaced in sibling thread, not council synthesis -- see "single-thread depth vs council breadth" seeds entry.</span>
+        </div>
+      </div>
+      <div class="concept-refs">Linked: Varela (1991) · dissertation core argument</div>
+    </div>
+  </div>
+
+  <div class="section-label">In Development</div>
+
+  <div class="card">
+    <div class="card-head" onclick="toggle(this)">
+      <span class="toggle">&#9656;</span>
+      <span class="card-title">Broadening attention (Odell)</span>
+      <span class="chip coined">Coined</span>
+    </div>
+    <div class="card-body">
+      <div class="concept-def">Sustained attention needs to be contrived -- attention is fleeting by default. "Broadening" as a practice, not a capacity: change the conditions that make sustained attention possible rather than telling students to attend differently.</div>
+      <div class="concept-history">
+        <div class="history-entry">
+          <span class="history-date">Jul 1</span>
+          <span class="history-text">From handwritten napkin note, OCR'd via Claude after Gemma lost the connection. See "First napkin note" seeds entry.</span>
+        </div>
+      </div>
+      <div class="concept-refs">Linked: Odell, J. · Simmons, A. (pending Enrich)</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- OPEN THREADS -->
+<div class="panel" id="threads">
+  <div class="section-label">Unresolved -- worth returning to</div>
+
+  <div class="card">
+    <div class="card-head" onclick="toggle(this)">
+      <span class="toggle">&#9656;</span>
+      <span class="card-title">Where does autopoiesis end and performance begin?</span>
+      <span class="chip watch">Open</span>
+    </div>
+    <div class="card-body">Surfaced during Kintsugi-mode-style follow-up on the Step Zero concept. Not yet pursued in depth.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-head" onclick="toggle(this)">
+      <span class="toggle">&#9656;</span>
+      <span class="card-title">Who decides when the perturbation was learning and when it was harm?</span>
+      <span class="chip watch">Open</span>
+    </div>
+    <div class="card-body">Ethics-board-adjacent question. May need its own session before candidacy chapters are drafted.</div>
+  </div>
+
+  <div class="empty-state">3 more open threads not shown in this wireframe</div>
+</div>
+
+<!-- NEXT MOVES -->
+<div class="panel" id="moves">
+  <div class="section-label">Action Items</div>
+
+  <div class="card">
+    <div class="card-head" onclick="toggle(this)">
+      <span class="toggle">&#9656;</span>
+      <span class="card-title">Verify Barrett (1996) -- journal and volume needed</span>
+      <span class="chip watch">To Do</span>
+    </div>
+    <div class="card-body">Flagged during reference cleanup, not yet resolved.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-head" onclick="toggle(this)">
+      <span class="toggle">&#9656;</span>
+      <span class="card-title">Write TLDR for Pieper (1952) by hand -- not indexed anywhere</span>
+      <span class="chip watch">To Do</span>
+    </div>
+    <div class="card-body">Confirmed via Enrich testing June 30 -- Semantic Scholar/OpenAlex have nothing on the primary source.</div>
+  </div>
+</div>
+
+<!-- REFERENCES -->
+<div class="panel" id="refs">
+  <div class="section-label">Attached to this project</div>
+
+  <div class="card">
+    <div class="card-head" onclick="toggle(this)">
+      <span class="toggle">&#9656;</span>
+      <span class="card-title">Varela, F.J. (1991). The Embodied Mind.</span>
+      <span class="chip verified">Verified</span>
+      <span class="chip grounded">Grounded</span>
+    </div>
+    <div class="card-body">Core theoretical anchor. Structural coupling, autopoiesis, the middle way between objectivism and subjectivism.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-head" onclick="toggle(this)">
+      <span class="toggle">&#9656;</span>
+      <span class="card-title">Bain, K. (2004). What the Best College Teachers Do.</span>
+      <span class="chip surfaced">Surfaced</span>
+      <span class="chip ungrounded">Ungrounded</span>
+    </div>
+    <div class="card-body">No indexed primary abstract found -- see seeds.md "Enrich's false-success bug." Secondary citation via Johnson (1969, likely metadata error on year) available as starter grounding.</div>
+  </div>
+
+  <div class="empty-state">10 more references not shown in this wireframe</div>
+</div>
+
+<!-- SESSIONS -->
+<div class="panel" id="sessions">
+  <div class="section-label">Logged sessions</div>
+
+  <div class="card">
+    <div class="card-head" onclick="toggle(this)">
+      <span class="toggle">&#9656;</span>
+      <span class="card-title">Enaction vs Constructivism -- Varela</span>
+      <span class="chip core">Core</span>
+    </div>
+    <div class="card-body">Jun 30 2026. Produced the Step Zero connection. See concept card above.</div>
+  </div>
+
+  <div class="empty-state">6 more sessions not shown in this wireframe</div>
+</div>
+
+<div class="footer">
+  <span>Live view · canonical/projects/enaction-pedagogy/ · Marginalia v1.6.10</span>
+  <span>This is a wireframe -- concept, session, and reference data shown here is illustrative of the real July 2026 project, not connected to a live backend.</span>
+</div>
+
+<script>
+  function toggle(head) {
+    const body = head.nextElementSibling;
+    const tog = head.querySelector('.toggle');
+    const isOpen = body.classList.contains('open');
+    body.classList.toggle('open', !isOpen);
+    tog.innerHTML = isOpen ? '&#9656;' : '&#9662;';
+  }
+
+  function switchTab(el, id) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    el.classList.add('active');
+  }
+</script>
+</body>
+</html>
