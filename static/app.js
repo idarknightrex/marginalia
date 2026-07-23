@@ -371,7 +371,7 @@ async function sendPrompt() {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
-        prompt:           getActivePrompt(),
+        prompt:           prompt,
         full_prompt:      prompt,
         models,
         synthesis_model:  document.getElementById('synthesis-model-select')?.value || 'deepseek',
@@ -452,6 +452,14 @@ async function sendPrompt() {
           text.style.fontStyle = 'normal';
           _lastSynthesis = evt.text;
           renderSynthesisSections(evt.text, text);
+          // Collect all model response text for refs chunk
+          const allResponseText = [...document.querySelectorAll('.response-text')]
+            .map(el => el.textContent).join(' ');
+          renderSynthesisRefsChunk(
+            document.getElementById('prompt-input')?.value || '',
+            allResponseText,
+            evt.text
+          );
           showRelatedSessions();
           // Show cycling nudge banner
           const nudge = document.getElementById('synth-cycle-nudge');
@@ -926,6 +934,12 @@ function openEditModal(ref, runAnnotate) {
   document.getElementById('edit-annotation').value         = ref.annotation || '';
   document.getElementById('edit-user-notes').value         = ref.user_notes || '';
   document.getElementById('edit-argument').value           = ref.argument_connection || '';
+  // Clear stale enrich search state from any previous reference
+  enrichCandidatesCache = [];
+  const enrichPanel = document.getElementById('edit-enrich-candidates');
+  if (enrichPanel) enrichPanel.innerHTML = '';
+  const enrichQuery = document.getElementById('edit-enrich-query');
+  if (enrichQuery) enrichQuery.value = '';
   document.getElementById('edit-modal').style.display      = 'flex';
   if (runAnnotate) setTimeout(() => annotateInModal(ref._filename), 300);
 }
@@ -1864,6 +1878,9 @@ async function saveAndBreak() {
 
 // ── Session timer — silent save every 30 min, note prompt every 2 hours ──
 async function silentSave() {
+  // Guard: skip if this tab is hidden (another tab is active).
+  // Prevents double git commits when two windows are open simultaneously.
+  if (document.hidden) return;
   try {
     await fetch('/api/save-break', {
       method: 'POST', headers: {'Content-Type':'application/json'},
@@ -1979,7 +1996,7 @@ async function highlightAuthorsInResponses() {
       });
     });
     // Highlight in all response cards
-    document.querySelectorAll('.response-body').forEach(el => {
+    document.querySelectorAll('.response-text').forEach(el => {
       if (el.dataset.highlighted) return;
       el.dataset.highlighted = '1';
       let html = el.innerHTML;
@@ -1995,6 +2012,162 @@ async function highlightAuthorsInResponses() {
   } catch(e) {}
 }
 
+
+// ── Synthesis refs chunk ──────────────────────────────────────────────────────
+// Scans all model responses + synthesis for author surnames. Discounts names
+// already present in the prompt (known context). Shows frequency count with
+// green/yellow/rose library status. Rose names open search-confirm modal.
+async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText) {
+  const container = document.getElementById('synth-refs-chunk');
+  if (!container) return;
+
+  try {
+    const res  = await fetch('/api/references?limit=200');
+    const data = await res.json();
+    const refs = data.references || [];
+
+    // Build surname → ref map from canonical library
+    const surnameMap = {};  // surname → { ref, status }
+    refs.forEach(r => {
+      (r.authors || '').split(/[,;&]/).forEach(a => {
+        const parts   = a.trim().split(/\s+/);
+        const surname = parts[parts.length - 1]?.replace(/[^a-zA-Z\-]/g, '');
+        if (surname && surname.length > 3) {
+          surnameMap[surname.toLowerCase()] = {
+            surname,
+            title:  r.title,
+            status: r.verification_status || 'surfaced',
+          };
+        }
+      });
+    });
+
+    // Extract surnames present in the prompt — these are known context, discount them
+    const promptSurnames = new Set();
+    const promptWords = promptText.split(/\s+/);
+    promptWords.forEach(w => {
+      const clean = w.replace(/[^a-zA-Z\-]/g, '').toLowerCase();
+      if (clean.length > 3) promptSurnames.add(clean);
+    });
+
+    // Count surname appearances across responses + synthesis
+    const allText = (responsesText + ' ' + synthesisText).toLowerCase();
+    const counts  = {};
+    Object.keys(surnameMap).forEach(s => {
+      if (promptSurnames.has(s)) return;  // discount prompt names
+      const re    = new RegExp(`\\b${s}\\b`, 'g');
+      const hits  = (allText.match(re) || []).length;
+      if (hits > 0) counts[s] = hits;
+    });
+
+    // Also scan for capitalised word pairs not in library (rose candidates)
+    // Simple heuristic: Capitalised tokens not in surnameMap and not in promptSurnames
+    const roseCandidates = {};
+    const tokens = (responsesText + ' ' + synthesisText).match(/\b[A-Z][a-z]{3,}\b/g) || [];
+    tokens.forEach(t => {
+      const tl = t.toLowerCase();
+      if (promptSurnames.has(tl)) return;
+      if (surnameMap[tl]) return;
+      // Skip common non-name capitalised words
+      const skip = new Set(['this','that','they','their','there','these','those',
+        'when','where','while','which','what','with','from','have','will','been',
+        'also','into','over','than','then','each','more','most','such','both',
+        'very','just','some','only','even','here','after','before','about',
+        'through','between','during','however','although','therefore','furthermore',
+        'consensus','divergence','unique','absent','voices','contributions',
+        'survey','pressure','test','synthesis','model','research','study',
+        'cognitive','embodied','learning','academic','physical','activity']);
+      if (skip.has(tl)) return;
+      roseCandidates[tl] = (roseCandidates[tl] || 0) + 1;
+    });
+
+    // Sort library hits by count descending
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+    // Sort rose candidates, threshold ≥ 2 mentions to reduce noise
+    const roseFiltered = Object.entries(roseCandidates)
+      .filter(([, n]) => n >= 2)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8);  // cap at 8 to avoid noise flood
+
+    if (!sorted.length && !roseFiltered.length) {
+      container.style.display = 'none';
+      return;
+    }
+
+    container.style.display = 'block';
+    container.innerHTML = '';
+
+    // Header
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'font-family:monospace;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px';
+    hdr.textContent = 'References surfaced';
+    container.appendChild(hdr);
+
+    // Library entries
+    sorted.forEach(([sl, count]) => {
+      const info   = surnameMap[sl];
+      const status = info.status;
+      const color  = status === 'verified' ? '#3d8b37' : status === 'located' ? '#c9a832' : '#6e56cf';
+      const row    = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:baseline;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)';
+      const left = document.createElement('span');
+      left.style.cssText = `font-size:11px;color:${color};font-family:monospace`;
+      left.textContent = info.surname;
+      const right = document.createElement('span');
+      right.style.cssText = 'font-size:10px;color:var(--muted);font-family:monospace';
+      right.textContent = count + 'x · ' + (info.title || '').slice(0, 40) + (info.title && info.title.length > 40 ? '…' : '');
+      row.appendChild(left);
+      row.appendChild(right);
+      container.appendChild(row);
+    });
+
+    // Rose candidates — model-surfaced, not in library
+    if (roseFiltered.length) {
+      const divider = document.createElement('div');
+      divider.style.cssText = 'font-family:monospace;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#c94262;margin:8px 0 4px';
+      divider.textContent = 'Not in library — verify before adding';
+      container.appendChild(divider);
+
+      roseFiltered.forEach(([tl, count]) => {
+        const display = tl.charAt(0).toUpperCase() + tl.slice(1);
+        const row     = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:baseline;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);cursor:pointer';
+        row.title = 'Search for ' + display + ' in academic index';
+        const left = document.createElement('span');
+        left.style.cssText = 'font-size:11px;color:#c97a8a;font-family:monospace;text-decoration:underline dotted';
+        left.textContent = display;
+        const right = document.createElement('span');
+        right.style.cssText = 'font-size:10px;color:var(--muted);font-family:monospace';
+        right.textContent = count + 'x';
+        row.appendChild(left);
+        row.appendChild(right);
+        row.onclick = () => openRoseSearchModal(display);
+        container.appendChild(row);
+      });
+    }
+
+  } catch(e) {
+    container.style.display = 'none';
+  }
+}
+
+// Rose name search modal — pre-populate enrich query and open Add Reference flow
+function openRoseSearchModal(name) {
+  // Pre-fill the enrich query in the Add Reference modal if it exists,
+  // otherwise surface a simple confirm to open the references tab
+  const confirmed = confirm(
+    '"' + name + '" was mentioned by models but isn\'t in your library.\n\nOpen References to search for and add it?'
+  );
+  if (confirmed) {
+    showView('references', document.querySelector('.nav-btn[onclick*="references"]'));
+    // Small delay to let the view render, then focus the search field
+    setTimeout(() => {
+      const search = document.getElementById('ref-search');
+      if (search) { search.value = name; search.dispatchEvent(new Event('input')); }
+    }, 300);
+  }
+}
 
 // ── Network map — live session connections ────────────────────────────────────
 async function populateNetworkMap(synthesisText) {
