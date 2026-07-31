@@ -1862,32 +1862,73 @@ function dismissSetup() {
 
 
 // ── Save & Break ──────────────────────────────────────────────────────────
+// Always writes a full local snapshot zip first (primary safety net).
+// Git commit fires only if MARGINALIA_GIT_ENABLED=true in setup.env.
 async function saveAndBreak() {
   const btn = document.getElementById('save-break-btn');
-  btn.textContent = 'Saving...'; btn.disabled = true;
-  const res  = await fetch('/api/save-break', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ message: 'Session \u2014 ' + new Date().toISOString().slice(0,16) })
-  });
-  const data = await res.json();
-  btn.textContent = data.status === 'committed' ? 'Saved \u2713' : '\u26A0 Check terminal';
+  btn.textContent = 'Saving\u2026'; btn.disabled = true;
+  try {
+    const res  = await fetch('/api/save-break', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ message: 'Session \u2014 ' + new Date().toISOString().slice(0,16) })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      btn.textContent = 'Saved \u2713';
+      // Show amber git indicator if git is enabled but failed
+      if (data.git_enabled && !data.git_ok) {
+        const indicator = document.getElementById('git-status-indicator');
+        if (indicator) { indicator.style.color = '#c9a832'; indicator.title = 'Git push lagging — local backup is safe'; }
+      }
+    } else {
+      btn.textContent = '\u26A0 Backup failed';
+      alert('Backup failed: ' + (data.snapshot || 'unknown error'));
+    }
+  } catch(e) {
+    btn.textContent = '\u26A0 Error';
+  }
   btn.disabled = false;
-  if (data.warnings && data.warnings.length) alert('Saved with warnings:\n\n' + data.warnings.join('\n'));
+  // Track last snapshot time for delta comparison
+  window._lastSnapshotAt = new Date().toISOString();
   setTimeout(() => { btn.textContent = '\u2191 Save & Take a Break'; }, 3000);
 }
 
 
-// ── Session timer — silent save every 30 min, note prompt every 2 hours ──
+// ── Session timer — rolling delta every 30 min, nudge every 2 hours ──────────
+// silentSave fires the delta endpoint -- writes only changed files since last save.
+// No prompt, no interruption. The 2h nudge is a gentle banner to take a break.
 async function silentSave() {
   // Guard: skip if this tab is hidden (another tab is active).
-  // Prevents double git commits when two windows are open simultaneously.
   if (document.hidden) return;
   try {
-    await fetch('/api/save-break', {
+    await fetch('/api/save-delta', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ message: 'Auto-save \u2014 ' + new Date().toISOString().slice(0,16) })
+      body: JSON.stringify({ since: window._lastSnapshotAt || null })
     });
+    window._lastDeltaAt = new Date().toISOString();
   } catch(e) {}
+}
+
+// ── 2h nudge banner ───────────────────────────────────────────────────────────
+// Gentle reminder to take a break and do a full snapshot.
+// Auto-dismisses to delta after 60 seconds if ignored.
+// If researcher is away, delta already ran silently -- no stale prompt on return.
+function show2hNudge() {
+  // Fire delta silently regardless -- catches changes if researcher is away
+  silentSave();
+  // Only show banner if tab is visible (researcher is present)
+  if (document.hidden) return;
+  let existing = document.getElementById('nudge-banner');
+  if (existing) return; // already showing
+  const banner = document.createElement('div');
+  banner.id = 'nudge-banner';
+  banner.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--accent);border-radius:6px;padding:10px 16px;font-family:monospace;font-size:12px;color:var(--text);display:flex;gap:12px;align-items:center;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,0.15)';
+  banner.innerHTML = `<span>Two hours in \u2014 time to get up and move.</span>
+    <button onclick="saveAndBreak();document.getElementById('nudge-banner').remove()" style="font-family:monospace;font-size:11px;padding:3px 8px;border:1px solid var(--accent);border-radius:3px;background:var(--accent);color:#fff;cursor:pointer">Snapshot & Break</button>
+    <button onclick="document.getElementById('nudge-banner').remove()" style="font-family:monospace;font-size:11px;padding:3px 8px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer">Keep going</button>`;
+  document.body.appendChild(banner);
+  // Auto-dismiss after 60 seconds
+  setTimeout(() => { if (document.getElementById('nudge-banner')) banner.remove(); }, 60000);
 }
 
 function showSessionNotePrompt() {
@@ -1919,11 +1960,11 @@ setInterval(() => {
   document.getElementById('session-time').textContent =
     h > 0 ? 'Session: ' + h + 'h' + (m > 0 ? ' ' + m + 'm' : '') : 'Session: ' + m + 'm';
 
-  // Silent save every 30 min
+  // Rolling delta every 30 min -- silent, no prompt
   if (sessionMinutes % 30 === 0) silentSave();
 
-  // Session note prompt every 2 hours
-  if (sessionMinutes % 120 === 0) showSessionNotePrompt();
+  // 2h nudge -- gentle banner if researcher is active, delta runs silently if away
+  if (sessionMinutes % 120 === 0) show2hNudge();
 }, 60000);
 
 

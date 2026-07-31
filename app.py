@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.13.0731-1439
+Marginalia — app.py  v1.6.14.0731-1500
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -40,12 +40,17 @@ KEYS = {
 OLLAMA_BASE = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 
 # Research PDF folder — configurable in setup.env, defaults to ~/Documents/Research/PDFs/
-# Why configurable: researchers may store PDFs on external drives (Vault SSD),
-# network shares, or non-standard locations. Hardcoding ~/Documents/Research/PDFs/
-# was removed in v0.9.8 to avoid assuming Mac filesystem conventions for
-# a tool intended for distribution to other researchers.
 _research_pdf_path = os.getenv("RESEARCH_PDF_PATH", "")
 RESEARCH_PDF_DIR = Path(_research_pdf_path).expanduser() if _research_pdf_path else Path.home() / "Documents" / "Research" / "PDFs"
+
+# Backup folder — configurable in setup.env as MARGINALIA_BACKUP_PATH.
+# Defaults to ~/Documents/Marginalia Backups/ if not set.
+# Primary safety net -- always local, always succeeds, no auth, no network.
+# Git is developer-only, opt-in, secondary. Set MARGINALIA_GIT_ENABLED=true in setup.env.
+_backup_path = os.getenv("MARGINALIA_BACKUP_PATH", "")
+BACKUP_DIR = Path(_backup_path).expanduser() if _backup_path else Path.home() / "Documents" / "Marginalia Backups"
+BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+GIT_ENABLED = os.getenv("MARGINALIA_GIT_ENABLED", "").lower() == "true"
 
 # If OLLAMA_MODELS_PATH is set in setup.env, inject it into the environment
 # so Ollama finds models on external drives (e.g. Vault SSD on Mac Mini)
@@ -59,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.13.0731-1439"
+APP_VERSION = "1.6.14.0731-1500"
 
 
 
@@ -2513,9 +2518,105 @@ def get_broadcast():
 
 @app.route("/api/save-break", methods=["POST"])
 def save_and_break():
-    from utils.git_preflight import safe_commit
-    message = request.json.get("message", f"Session — {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}")
-    return jsonify(safe_commit(APP_ROOT, message))
+    """
+    Save & Take a Break — always writes a full timestamped snapshot zip to the
+    local backup folder first. Git commit is optional (developer-only, opt-in).
+
+    Backup hierarchy:
+    1. Local folder snapshot (always, primary safety net)
+    2. Git commit + push (only if MARGINALIA_GIT_ENABLED=true in setup.env)
+
+    The 2h nudge is the reminder to take this break -- get up, move, come back.
+    The snapshot is the artefact of that pause.
+    """
+    import zipfile
+    now     = datetime.now(timezone.utc)
+    ts      = now.strftime("%Y%m%d-%H%M")
+    zipname = f"marginalia-snapshot-{ts}.zip"
+    zippath = BACKUP_DIR / zipname
+
+    # Always write local snapshot — sessions, refs, notes, projects, writing, seeds
+    try:
+        with zipfile.ZipFile(zippath, "w", zipfile.ZIP_DEFLATED) as zf:
+            for folder in [REFERENCES_DIR, SESSIONS_DIR, NOTES_DIR, PROJECTS_DIR, WRITING_DIR]:
+                if folder.exists():
+                    for f in folder.rglob("*"):
+                        if f.is_file():
+                            zf.write(f, f.relative_to(CANONICAL_DIR))
+            # Include seeds if present
+            seeds = CANONICAL_DIR / "marginalia-seeds.md"
+            if seeds.exists():
+                zf.write(seeds, seeds.relative_to(CANONICAL_DIR))
+        snapshot_ok  = True
+        snapshot_msg = f"Snapshot saved: {zipname}"
+    except Exception as e:
+        snapshot_ok  = False
+        snapshot_msg = f"Snapshot failed: {e}"
+
+    # Git commit — developer-only, opt-in
+    git_ok  = None
+    git_msg = None
+    if GIT_ENABLED:
+        try:
+            from utils.git_preflight import safe_commit
+            message  = request.json.get("message", f"Session snapshot {ts}")
+            git_result = safe_commit(APP_ROOT, message)
+            git_ok   = git_result.get("ok", False)
+            git_msg  = git_result.get("message", "")
+        except Exception as e:
+            git_ok  = False
+            git_msg = str(e)
+
+    return jsonify({
+        "ok":           snapshot_ok,
+        "snapshot":     snapshot_msg,
+        "snapshot_path": str(zippath) if snapshot_ok else None,
+        "git_enabled":  GIT_ENABLED,
+        "git_ok":       git_ok,
+        "git_message":  git_msg,
+    })
+
+
+@app.route("/api/save-delta", methods=["POST"])
+def save_delta():
+    """
+    2h rolling delta -- writes only files changed since last save to backup folder.
+    Silent, no prompt, no interruption. Fires in background.
+    Nudge banner only appears if researcher is actively in tool at 2h mark.
+    """
+    import zipfile
+    now       = datetime.now(timezone.utc)
+    ts        = now.strftime("%Y%m%d-%H%M")
+    since_ts  = request.json.get("since")  # ISO timestamp from frontend
+    zipname   = f"marginalia-delta-{ts}.zip"
+    zippath   = BACKUP_DIR / zipname
+
+    try:
+        since_dt = datetime.fromisoformat(since_ts.replace("Z", "+00:00")) if since_ts else None
+        changed  = []
+        for folder in [REFERENCES_DIR, SESSIONS_DIR, NOTES_DIR, PROJECTS_DIR, WRITING_DIR]:
+            if folder.exists():
+                for f in folder.rglob("*"):
+                    if f.is_file():
+                        if since_dt is None or datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc) > since_dt:
+                            changed.append(f)
+
+        if not changed:
+            return jsonify({"ok": True, "message": "No changes since last save", "files": 0})
+
+        with zipfile.ZipFile(zippath, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in changed:
+                zf.write(f, f.relative_to(CANONICAL_DIR))
+
+        return jsonify({
+            "ok":      True,
+            "message": f"Delta saved: {zipname} ({len(changed)} files)",
+            "files":   len(changed),
+            "path":    str(zippath),
+            "saved_at": now.isoformat(),
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "message": f"Delta failed: {e}"}), 500
 
 
 @app.route("/assets/<path:filename>")
