@@ -2062,13 +2062,16 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
 
     // Also scan for capitalised word pairs not in library (rose candidates)
     // Simple heuristic: Capitalised tokens not in surnameMap and not in promptSurnames
+    // Matches both plain surnames (Varela) and hyphenated names (Merleau-Ponty, Tuhiwai)
     const roseCandidates = {};
-    const tokens = (responsesText + ' ' + synthesisText).match(/\b[A-Z][a-z]{3,}\b/g) || [];
+    const tokens = (responsesText + ' ' + synthesisText).match(/\b[A-Z][a-z]{2,}(?:-[A-Z][a-z]{2,})?\b/g) || [];
     tokens.forEach(t => {
       const tl = t.toLowerCase();
       if (promptSurnames.has(tl)) return;
       if (surnameMap[tl]) return;
-      // Skip common non-name capitalised words
+      // Also check each part of hyphenated names against library
+      if (t.includes('-') && t.split('-').some(p => surnameMap[p.toLowerCase()])) return;
+      // Skip common non-name capitalised words and model names
       const skip = new Set(['this','that','they','their','there','these','those',
         'when','where','while','which','what','with','from','have','will','been',
         'also','into','over','than','then','each','more','most','such','both',
@@ -2076,7 +2079,17 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
         'through','between','during','however','although','therefore','furthermore',
         'consensus','divergence','unique','absent','voices','contributions',
         'survey','pressure','test','synthesis','model','research','study',
-        'cognitive','embodied','learning','academic','physical','activity']);
+        'cognitive','embodied','learning','academic','physical','activity',
+        // Model names
+        'gemini','deepseek','qwen','mistral','cohere','gemma','llama','claude',
+        'openai','anthropic','chatgpt',
+        // Synthesis section headers
+        'consensus','divergence','unique','contributions','absent','voices',
+        // Common academic words that capitalise mid-sentence
+        'western','eastern','indigenous','canadian','english','french','latin',
+        'january','february','march','april','june','july','august','september',
+        'october','november','december','monday','tuesday','wednesday','thursday',
+        'friday','saturday','sunday']);
       if (skip.has(tl)) return;
       roseCandidates[tl] = (roseCandidates[tl] || 0) + 1;
     });
