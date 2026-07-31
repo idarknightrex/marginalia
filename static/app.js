@@ -34,6 +34,7 @@ function getModelMeta(model) {
 // ── Navigation ────────────────────────────────────────────────────────────
 function showView(name, btn) {
   if (name === 'projects')     loadProjects();
+  if (name === 'references')   loadProjects();
   populateProjectSlugs();
   initFontSize();
   if (name === 'writing')      loadWriting();
