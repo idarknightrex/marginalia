@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.15.0813-1748
+Marginalia — app.py  v1.6.15.0813-1956
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.15.0813-1748"
+APP_VERSION = "1.6.15.0813-1956"
 
 
 
@@ -475,6 +475,8 @@ def parse_bibtex_import(text: str) -> list:
         authors = "; ".join(a.strip() for a in authors_raw.split(" and ")) if authors_raw else ""
         abstract = entry.get("abstract", "").strip()
         note     = (entry.get("note", "") or entry.get("annote", "")).strip()
+        if note:
+            note = f"<!-- [import] BibTeX note field — review and edit -->\n\n{note}"
         truncated = (note and len(note) > 50 and note[-1] not in '.!?') or                     (abstract and len(abstract) > 50 and abstract[-1] not in '.!?')
         rec = {
             "title":        entry.get("title", "").replace("{", "").replace("}", ""),
@@ -516,6 +518,8 @@ def _parse_bibtex_minimal(text: str) -> list:
         authors = "; ".join(a.strip() for a in authors_raw.split(" and ")) if authors_raw else ""
         abstract = field("abstract").strip()
         note     = (field("note") or field("annote")).strip()
+        if note:
+            note = f"<!-- [import] BibTeX note field — review and edit -->\n\n{note}"
         truncated = (note and len(note) > 50 and note[-1] not in '.!?') or                     (abstract and len(abstract) > 50 and abstract[-1] not in '.!?')
         rec = {
             "title":        field("title").replace("{","").replace("}",""),

@@ -3121,11 +3121,28 @@ checkLocalModels();
 // Pre-populate session scope selectors and synth save dropdown on load
 (async () => {
   try {
-    const res  = await fetch('/api/projects');
-    const data = await res.json();
-    if (data.length) {
-      populateSessionScopeSelectors(data);
-      populateSynthProjectDropdown(data);
+    const [projRes, writRes] = await Promise.all([
+      fetch('/api/projects'),
+      fetch('/api/writing'),
+    ]);
+    const projects = await projRes.json();
+    const writings = await writRes.json();
+    if (projects.length) {
+      populateSessionScopeSelectors(projects);
+      populateSynthProjectDropdown(projects);
+      populateNoteProjectFilter(projects);
+    }
+    // Writing selector loads independently — not gated on projects existing
+    const wSel = document.getElementById('session-writing-select');
+    if (wSel && writings.length) {
+      wSel.innerHTML = '<option value="">No writing element</option>';
+      writings.forEach(w => {
+        const slug = w.slug || (w._filename || '').replace('.md','');
+        const opt  = document.createElement('option');
+        opt.value       = slug;
+        opt.textContent = (w.title || slug).slice(0, 40);
+        wSel.appendChild(opt);
+      });
     }
   } catch(e) {}
 })();
