@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.15.0813-1552
+Marginalia — app.py  v1.6.15.0813-1748
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.15.0813-1552"
+APP_VERSION = "1.6.15.0813-1748"
 
 
 
@@ -335,28 +335,33 @@ def run_synthesis(prompt: str, responses: dict, synthesis_model: str = "deepseek
     names_list = ", ".join(m.upper() for m in model_names)
 
     if synth_mode == "prompt_pressure":
-        # Prompt Pressure Test — examines the researcher's question before firing.
-        # Target is the prompt itself, not model responses.
-        # Fires before or without model responses — responses may be empty.
-        # Hardcore version of shower thought: moves inward not forward.
-        # Output: what assumptions are baked in, what isn't being asked, what would an examiner challenge.
-        synth_prompt = f"""You are a rigorous research examiner. A researcher has written a prompt they are about to send to multiple AI models. Your job is not to answer the question — examine whether it is a good question to be asking.
+        # Prompt Pressure Test — examines the researcher's position before firing.
+        # Target is the argument being made, not the generic shape of the question.
+        # The +++ separator layers are deliberate context stacking — read them as
+        # evidence of the researcher's existing thinking, not as padding.
+        # Do not produce rubric output. Do not assume ignorance.
+        # Find where the argument is weakest and push there specifically.
+        synth_prompt = f"""You are a dissertation examiner who has read this researcher's work before. You are not introducing yourself to their ideas — you are pressure-testing an argument you already know is sophisticated.
 
-RESEARCHER'S PROMPT:
+The researcher may have used +++ to stack context layers. Everything before the last +++ is prior thinking they are bringing into this prompt. Read it as evidence of what they already know. Do not tell them what they already know.
+
+RESEARCHER'S PROMPT (with any context layers):
 {prompt}
 
-Output exactly three sections with these exact headers. No preamble. No meta-commentary. Be direct and specific.
+Your job: find the load-bearing assumptions in this specific argument and push on the ones most likely to crack. Do not list generic gaps. Do not explain what academic rigour requires in the abstract. Engage with what is actually being claimed here.
+
+Output exactly three sections. No preamble. No numbered lists. No meta-commentary. Write in direct prose — one or two sharp sentences per point, not a rubric.
 
 ## ASSUMED
-What assumptions are baked into this prompt? What does it take for granted about the topic, the models, or the researcher's framing? Name them precisely.
+What is this argument taking for granted that it cannot afford to take for granted? Name the specific assumption and why it is doing too much work here.
 
 ## UNASKED
-What important questions is this prompt not asking? What angles, perspectives, or complications does it ignore or sidestep?
+What question does this argument most need to answer that it is currently avoiding? Not what is generically missing — what would destabilise this specific claim if left unaddressed.
 
 ## EXAMINER CHALLENGES
-If a dissertation examiner or peer reviewer saw this question, what would they push back on? What would they say is missing, loaded, or insufficiently rigorous?
+What would an examiner who knows this field say to this researcher's face — not to a generic student? What is the sharpest, most specific pushback on the argument as constructed?
 
-Output the three ## sections only. No preamble."""
+Three sections only. No preamble. Be the examiner who has read the work, not the one who hasn't."""
 
     elif synth_mode == "pressure":
         synth_prompt = f"""You are a research pressure-tester. A researcher brought a half-formed idea and sent it through multiple AI models. Your job is not to summarize — assess what happened to the idea.
@@ -782,7 +787,7 @@ def call_model(model, prompt):
         if model == "gemini" and KEYS.get("gemini"):
             import google.generativeai as genai
             genai.configure(api_key=KEYS["gemini"])
-            r = genai.GenerativeModel("gemini-2.5-flash").generate_content(prompt, request_options={"timeout": 30})
+            r = genai.GenerativeModel("gemini-3.6-flash").generate_content(prompt, request_options={"timeout": 30})
             return (model, r.text, None, 0, 0)
         elif model == "anthropic" and KEYS.get("anthropic"):
             import anthropic as _anth

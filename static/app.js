@@ -1576,11 +1576,16 @@ function renderSynthesisSections(raw, container) {
     'EVOLUTION':            '#0891b2',
     'MOMENTUM':             '#52c41a',
     'RESEARCH QUESTION FIT':'#8b4513',
+    'ASSUMED':              '#0891b2',
+    'UNASKED':              '#6e56cf',
     'UNASKED QUESTIONS':    '#6e56cf',
     'ARGUMENT WEAKNESSES':  '#c94242',
     'MISSING PERSPECTIVES': '#0891b2',
     'EXAMINER CHALLENGES':  '#c9a832',
     'NEXT MOVES':           '#3d8b37',
+    'SURVIVED':             '#3d8b37',
+    'DESTABILIZED':         '#c94242',
+    'STILL OPEN':           '#c9a832',
   };
   const parts = raw.split(/\n##\s+/);
   const preamble = parts[0].trim();
@@ -2213,6 +2218,23 @@ async function highlightAuthorsInResponses() {
       // Library concepts (tags/themes) — green tint
       libraryConceptsSet.forEach(c => {
         if (c.length < 5) return;  // skip short noise
+        // Stoplist: high-frequency academic words too generic to signal anything.
+        // A highlight on "learning" fires on every response and means nothing.
+        // Same principle as the rose candidate skip list -- length alone doesn't
+        // distinguish "enactivism" from "learning".
+        const conceptStoplist = new Set([
+          'learning','teaching','research','practice','knowledge','theory',
+          'student','students','teacher','teachers','education','educational',
+          'social','cultural','human','people','world','study','studies',
+          'approach','process','experience','context','system','systems',
+          'model','models','method','methods','analysis','framework',
+          'based','using','through','within','across','about','their',
+          'these','those','other','which','where','while','after',
+          'understanding','development','thinking','reading','writing',
+          'academic','university','school','course','class','program',
+          'data','results','findings','evidence','review','literature',
+        ]);
+        if (conceptStoplist.has(c)) return;
         const escaped = c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const re = new RegExp(`\\b(${escaped})\\b`, 'gi');
         html = html.replace(re, `<mark style="background:rgba(61,139,55,0.15);color:#3d8b37;border-radius:2px;padding:0 2px">$1</mark>`);
@@ -2308,6 +2330,10 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
         'response','question','argument','approach','framework','perspective',
         'analysis','evidence','context','example','focus','sense','point',
         'given','found','noted','shows','takes','makes','based','used','using',
+        'overall','similarly','likewise','furthermore','additionally','however',
+        'therefore','specifically','particularly','essentially','generally',
+        'bond','course','gauge','mortar','brick','bricks','masonry','mason',
+        'simply','merely','directly','currently','recently','typically',
         // Model names
         'gemini','deepseek','qwen','mistral','cohere','gemma','llama','claude',
         'openai','anthropic','chatgpt',
