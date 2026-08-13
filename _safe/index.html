@@ -177,13 +177,29 @@
     <div class="response-grid" id="response-grid"></div>
 
     <div class="synthesis-panel" id="synthesis-panel" style="display:none">
-      <!-- Small "Currently: X" mode indicator at top — always visible -->
-      <div id="synthesis-current-mode" style="font-family:monospace;font-size:10px;color:var(--muted);margin-bottom:6px;padding-left:2px">
-        Currently: <span id="synthesis-mode-label" style="color:var(--text)">Survey</span>
+      <div class="synthesis-model-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="synthesis-label" style="flex:1;min-width:120px">Synthesis</div>
+        <select class="synthesis-model-select" id="synthesis-mode-select" title="Synthesis format"
+          data-tooltip="Survey: all models respond independently, find divergence · Pressure Test: what survived, what was destabilized, what's still open · Prompt Pressure Test: examine your question before firing — what are you assuming?"
+          style="font-family:monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:3px">
+          <option value="survey">Survey</option>
+          <option value="pressure">Pressure Test</option>
+          <option value="prompt_pressure">Prompt Pressure Test</option>
+        </select>
+        <select class="synthesis-model-select" id="synthesis-model-select"
+          data-tooltip="Model used for the synthesis pass — runs after all other models have responded"
+          title="Model used for synthesis pass">
+          <option value="deepseek">DeepSeek R1</option>
+          <option value="qwen">Qwen 2.5</option>
+          <option value="mistral">Mistral</option>
+          <option value="gemma">Gemma 4</option>
+          <option value="llama">Llama 3.1</option>
+          <option value="cohere">Cohere</option>
+        </select>
       </div>
       <div id="synthesis-text"></div>
       <div id="synth-cycle-nudge" style="display:none;margin-top:10px;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:3px;font-family:monospace;font-size:10px;color:var(--muted)">
-        &#8635; Before saving — consider cycling this through a follow-up prompt. What's missing? What would your examiner challenge? Try <span onclick="document.getElementById('synthesis-mode-select').value='pressure'; updateSynthesisModeDescription();" style="color:var(--accent);cursor:pointer;text-decoration:underline dotted">Pressure Test</span> mode for a sharper pass.
+        ↺ Before saving — consider cycling this through a follow-up prompt. What's missing? What would your examiner challenge? Try <em style="color:var(--text)">Pressure Test</em> mode for a sharper pass.
         <span onclick="document.getElementById('synth-cycle-nudge').style.display='none'" style="float:right;cursor:pointer;color:var(--accent)">×</span>
       </div>
       <div style="margin-top:10px;display:flex;gap:6px;align-items:center">
@@ -207,33 +223,6 @@
       <div id="related-sessions-strip" style="display:none;margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
         <span style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">↗ related sessions &nbsp;</span>
         <span id="related-sessions-links" style="font-family:monospace;font-size:10px;color:var(--accent)"></span>
-      </div>
-      <!-- Mode selector + model selector + Re-synthesise at bottom -->
-      <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border)">
-        <div class="synthesis-model-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <select class="synthesis-model-select" id="synthesis-mode-select" title="Synthesis format"
-            style="font-family:monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:3px 6px;border-radius:3px"
-            onchange="updateSynthesisModeDescription()">
-            <option value="survey">Survey</option>
-            <option value="pressure">Pressure Test</option>
-            <option value="prompt_pressure">Prompt Pressure Test</option>
-          </select>
-          <select class="synthesis-model-select" id="synthesis-model-select"
-            data-tooltip="Model used for the synthesis pass — runs after all other models have responded"
-            title="Model used for synthesis pass">
-            <option value="deepseek">DeepSeek R1</option>
-            <option value="qwen">Qwen 2.5</option>
-            <option value="mistral">Mistral</option>
-            <option value="gemma">Gemma 4</option>
-            <option value="llama">Llama 3.1</option>
-            <option value="cohere">Cohere</option>
-          </select>
-          <button class="ref-action" id="resynth-btn" onclick="reSynthesise()"
-            data-tooltip="Re-run synthesis with the selected mode and model">&#8635; Re-synthesise</button>
-        </div>
-        <div id="synthesis-mode-desc" style="font-family:monospace;font-size:10px;color:var(--muted);margin-top:4px;padding-left:2px;font-style:italic">
-          All models respond independently — find consensus, divergence, and what's still open.
-        </div>
       </div>
     </div>
   </div>

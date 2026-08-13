@@ -473,8 +473,6 @@ async function sendPrompt() {
           document.getElementById('cancel-btn').classList.remove('visible');
           document.getElementById('send-btn').disabled = false;
           activeReader = null;
-          // Track the saved session filename for retroactive project write-back
-          if (evt.session_filename) window._lastSessionFilename = evt.session_filename;
           if (evt.anthropic_cost_usd !== undefined) {
             const el = document.getElementById('cost-display');
             el.textContent = 'Claude: $' + evt.anthropic_cost_usd.toFixed(4);
@@ -487,21 +485,6 @@ async function sendPrompt() {
             text.style.color = 'var(--muted)';
             text.style.fontStyle = 'italic';
             text.textContent = 'Single model \u2014 no synthesis. Session saved.';
-          }
-          // Gentle nudge if no project was selected when session was saved
-          const activeProject = document.getElementById('session-project-select')?.value?.trim();
-          if (evt.session_saved && !activeProject) {
-            const synthPanel = document.getElementById('synthesis-panel');
-            if (synthPanel) {
-              let nudgeEl = document.getElementById('no-project-nudge');
-              if (!nudgeEl) {
-                nudgeEl = document.createElement('div');
-                nudgeEl.id = 'no-project-nudge';
-                nudgeEl.style.cssText = 'font-family:monospace;font-size:10px;color:var(--muted);margin-top:8px;padding:6px 8px;border:1px solid var(--border);border-radius:3px;background:var(--surface)';
-                synthPanel.appendChild(nudgeEl);
-              }
-              nudgeEl.innerHTML = '\u25a1 Session saved without a project. Use the <em>Save to project</em> dropdown below to tag it retroactively.';
-            }
           }
         }
       }
@@ -1012,16 +995,8 @@ async function annotateInModal(filename) {
     alert('This reference is still marked "Surfaced" -- not yet verified.\n\nMark it Located or Verified first, so a model isn\'t reasoning about something nobody has confirmed is real. If the academic index has an abstract, try "Enrich from Index" first too -- it gives the model something real to ground on instead of just a title.');
     return;
   }
-  const btn         = document.getElementById('edit-annotate-btn');
-  const annotField  = document.getElementById('edit-annotation');
-  const prevAnnot   = annotField ? annotField.value : '';
-  if (btn) { btn.textContent = '\u29d7 Annotating\u2026'; btn.disabled = true; }
-  // Show working state in the annotation field itself
-  if (annotField) {
-    annotField.value = 'Generating annotated bibliography entry\u2026';
-    annotField.style.color = 'var(--muted)';
-    annotField.disabled = true;
-  }
+  const btn = document.getElementById('edit-annotate-btn');
+  if (btn) { btn.textContent = 'Annotating…'; btn.disabled = true; }
   const localModels = [...activeModels].filter(m => ['deepseek','qwen','mistral','cohere','gemma','llama'].includes(m));
   const allActive   = [...activeModels];
   const models      = localModels.length > 0 ? localModels.slice(0,2) : allActive.length > 0 ? allActive.slice(0,1) : ['deepseek'];
@@ -1030,17 +1005,14 @@ async function annotateInModal(filename) {
       method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ models })
     });
     const data = await res.json();
-    if (annotField) { annotField.style.color = 'var(--text)'; annotField.disabled = false; }
     if (data.status === 'annotated') {
-      if (annotField) annotField.value = data.synthesis || '';
-      if (btn) { btn.textContent = '\u2713 Done'; setTimeout(() => { btn.textContent = '\u25c6 Generate'; btn.disabled = false; }, 2000); }
+      document.getElementById('edit-annotation').value = data.synthesis || '';
+      if (btn) { btn.textContent = '✓ Done'; setTimeout(() => { btn.textContent = '◆ Generate'; btn.disabled = false; }, 2000); }
     } else {
-      if (annotField) annotField.value = prevAnnot;  // restore on error
-      if (btn) { btn.textContent = '\u26a0 ' + (data.error || 'Failed'); btn.disabled = false; }
+      if (btn) { btn.textContent = '⚠ ' + (data.error || 'Failed'); btn.disabled = false; }
     }
   } catch(e) {
-    if (annotField) { annotField.value = prevAnnot; annotField.style.color = 'var(--text)'; annotField.disabled = false; }
-    if (btn) { btn.textContent = '\u26a0 Error'; btn.disabled = false; }
+    if (btn) { btn.textContent = '⚠ Error'; btn.disabled = false; }
   }
 }
 
@@ -1242,47 +1214,13 @@ document.addEventListener('click', () => {
   if (cb) cb.style.display = 'none';
 });
 
-async function launchPromptFromRef(filename) {
-  // Build a prompt from the reference, using the active project framing as context
-  // if a project is selected. Falls back to a generic editable template if not.
-  // Tags from the reference are injected so the researcher sees the conceptual frame.
+function launchPromptFromRef(filename) {
   const ref = allRefs.find(r => r._filename === filename);
   if (!ref) return;
   showView('prompt', document.querySelectorAll('.nav-btn')[0]);
   const input = document.getElementById('prompt-input');
-
-  const activeProjectSlug = document.getElementById('session-project-select')?.value?.trim() || '';
-  const refCitation = ref.authors + ' (' + ref.year + '). ' + ref.title + '.';
-  const refTags     = (ref.tags || '').split(',').map(t => t.trim()).filter(Boolean).join(', ');
-  const tagsLine    = refTags ? '\nTags: ' + refTags : '';
-
-  if (activeProjectSlug) {
-    // Fetch projects to find framing for the active project
-    let framing = '';
-    try {
-      const res  = await fetch('/api/projects');
-      const data = await res.json();
-      const proj = (Array.isArray(data) ? data : (data.projects || []))
-        .find(p => (p.slug || (p._filename || '').replace('.md', '')) === activeProjectSlug);
-      framing = proj?.framing || '';
-    } catch(e) {}
-
-    if (framing) {
-      input.value = 'How does this source speak to the following research framing?\n\n' +
-        'FRAMING: ' + framing + '\n\n' +
-        'SOURCE: ' + refCitation + tagsLine;
-    } else {
-      // Project selected but no framing set -- nudge researcher to add one
-      input.value = 'How does this source contribute to project \u201c' + activeProjectSlug + '\u201d?\n' +
-        '(Tip: add a framing to this project to sharpen this prompt automatically.)\n\n' +
-        'SOURCE: ' + refCitation + tagsLine;
-    }
-  } else {
-    // No project selected -- generic editable template
-    input.value = 'What does this source argue, and why does it matter to my research?\n\n' +
-      'SOURCE: ' + refCitation + tagsLine;
-  }
-
+  input.value = 'Analyse this source in the context of embodied learning and intellectual risk-taking in undergraduates:\n\n' +
+    ref.authors + ' (' + ref.year + '). ' + ref.title + '.\n\nThemes: ' + (ref.themes || 'not specified');
   input.dispatchEvent(new Event('input'));
 }
 
@@ -1561,7 +1499,6 @@ function cancelIntelSynthesis() {
 // The colour assignments are not arbitrary: red=tension/conflict,
 // blue=patterns/recurring, purple=absence/missing, green=connection/conversation.
 function renderSynthesisSections(raw, container) {
-  if (!raw || typeof raw !== 'string') return;
   container.innerHTML = '';
   const sectionColors = {
     'CONSENSUS':            '#3d8b37',
@@ -2082,149 +2019,36 @@ function initFontSize() {
 }
 
 
-// ── Author surname extraction ─────────────────────────────────────────────────
-// Handles two canonical author format conventions:
-//   "Last, First" (comma-separated, surname is the first token before the comma)
-//   "First Last" (space-separated, semicolon between authors)
-// Also handles:
-//   Particles: Van der Berg, de la Torre, Tuhiwai Smith (preserve full particle+surname)
-//   Lowercase names: bell hooks, adrienne maree brown (match as-is)
-//   Hyphenated: Merleau-Ponty, Tuhiwai-Smith
-// Returns a Set of lowercase surname strings for matching.
-const SURNAME_PARTICLES = new Set(['van','de','der','den','la','le','du','di','von','da','al','el','bin','bint','ter','ten']);
-function extractSurnames(authorsString) {
-  const surnames = new Set();
-  if (!authorsString) return surnames;
-
-  // Split on semicolons first (First Last; First Last format), then commas that
-  // aren't followed by a space+lowercase (which would be "Last, First" pairs).
-  // Strategy: detect format by checking if the string contains ", " — if the
-  // first segment has ", " it's likely "Last, First" convention.
-  const hasCsvLastFirst = /^[A-Z][a-z]+,\s+[A-Z]/.test(authorsString.trim());
-
-  if (hasCsvLastFirst) {
-    // "Last, First M.; Last, First" format — surname is everything before first comma
-    authorsString.split(/;\s*|,\s*(?=[A-Z])/).forEach(chunk => {
-      const part = chunk.trim();
-      if (!part) return;
-      // In "Last, First" — last name is the first word(s) before the comma
-      const beforeComma = part.split(',')[0].trim();
-      const tokens = beforeComma.split(/\s+/);
-      // Check for particle prefix: "Van der Berg" → keep "Van der Berg" or just "Berg"
-      // We store the final non-particle token as the match surname
-      let surname = '';
-      for (let i = tokens.length - 1; i >= 0; i--) {
-        const t = tokens[i].toLowerCase();
-        if (SURNAME_PARTICLES.has(t)) continue;
-        surname = tokens.slice(i).join(' ');
-        break;
-      }
-      if (!surname) surname = beforeComma;
-      surname = surname.replace(/[^a-zA-Z\-\s]/g, '').trim();
-      if (surname.length > 3) surnames.add(surname.toLowerCase());
-    });
-  } else {
-    // "First Last" format — semicolon or & between authors
-    authorsString.split(/[;&]/).forEach(chunk => {
-      const part = chunk.trim();
-      if (!part) return;
-      const tokens = part.split(/\s+/);
-      if (tokens.length === 0) return;
-
-      // Check for entirely lowercase name (bell hooks, adrienne maree brown)
-      const allLower = tokens.every(t => t === t.toLowerCase() && /^[a-z]/.test(t));
-      if (allLower) {
-        // Use last token as surname key, but also add full name for matching
-        const surname = tokens[tokens.length - 1].replace(/[^a-z\-]/g, '');
-        if (surname.length > 2) surnames.add(surname);
-        return;
-      }
-
-      // Normal "First Last" — find the last non-particle token as surname
-      // and include any preceding particle in the stored value
-      let surnameStart = tokens.length - 1;
-      while (surnameStart > 0 && SURNAME_PARTICLES.has(tokens[surnameStart - 1].toLowerCase())) {
-        surnameStart--;
-      }
-      const surnameParts = tokens.slice(surnameStart).join(' ').replace(/[^a-zA-Z\-\s]/g, '').trim();
-      if (surnameParts.length > 3) surnames.add(surnameParts.toLowerCase());
-    });
-  }
-  return surnames;
-}
-
 // ── Author/reference highlighting in model responses ─────────────────────────
 async function highlightAuthorsInResponses() {
   try {
-    const [refsRes, tagsRes] = await Promise.all([
-      fetch('/api/references?limit=200'),
-      fetch('/api/tags'),
-    ]);
-    const refsData = await refsRes.json();
-    const refs     = refsData.references || [];
-    const allTags  = await tagsRes.json();  // array of tag strings
-
-    // Build surname set using robust extraction helper
+    const res  = await fetch('/api/references?limit=200');
+    const data = await res.json();
+    const refs = data.references || [];
+    // Build surname list from references
     const surnames = new Set();
     refs.forEach(r => {
-      extractSurnames(r.authors || '').forEach(s => surnames.add(s));
-    });
-
-    // Build concept set from library tags and themes
-    // Tags are hyphen-separated (embodied-cognition) — we match each word and the full phrase
-    // Themes are comma-separated strings — we match each theme phrase
-    const libraryConceptsSet = new Set();
-    allTags.forEach(t => {
-      libraryConceptsSet.add(t.toLowerCase());
-      // Also add individual words from hyphenated tags that are substantive
-      t.split('-').forEach(w => { if (w.length > 4) libraryConceptsSet.add(w.toLowerCase()); });
-    });
-    refs.forEach(r => {
-      (r.themes || '').split(',').forEach(th => {
-        const clean = th.trim().toLowerCase();
-        if (clean.length > 3) libraryConceptsSet.add(clean);
+      const authors = (r.authors || '').split(/[,;&]/);
+      authors.forEach(a => {
+        const parts = a.trim().split(/\s+/);
+        if (parts.length > 0) {
+          const surname = parts[parts.length - 1].replace(/[^a-zA-Z\-]/g, '');
+          if (surname.length > 3) surnames.add(surname);
+        }
       });
     });
-
-    // Core theoretical concepts that should always surface even if not yet in library
-    // Rose (not in library) if absent from tags/themes, green/yellow if present
-    const coreConceptsNotInLibrary = [
-      'autopoiesis','enactivism','enactive','enaction',
-      'polyvagal','zpd','zone of proximal development',
-      'embodied cognition','somatic','interoception',
-      'psychological safety','affect regulation',
-      'decolonization','indigenization',
-      'metacognition','self-efficacy',
-    ].filter(c => !libraryConceptsSet.has(c));
-
     // Highlight in all response cards
     document.querySelectorAll('.response-text').forEach(el => {
       if (el.dataset.highlighted) return;
       el.dataset.highlighted = '1';
       let html = el.innerHTML;
-
-      // Author surnames — amber
       surnames.forEach(s => {
-        const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const re = new RegExp(`\\b(${escaped})\\b`, 'gi');
+        // Known author — amber highlight
+        const re = new RegExp(`\b(${s})\b`, 'g');
         html = html.replace(re, `<mark style="background:rgba(200,146,42,0.25);color:var(--accent);border-radius:2px;padding:0 2px">$1</mark>`);
       });
-
-      // Library concepts (tags/themes) — green tint
-      libraryConceptsSet.forEach(c => {
-        if (c.length < 5) return;  // skip short noise
-        const escaped = c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const re = new RegExp(`\\b(${escaped})\\b`, 'gi');
-        html = html.replace(re, `<mark style="background:rgba(61,139,55,0.15);color:#3d8b37;border-radius:2px;padding:0 2px">$1</mark>`);
-      });
-
-      // Core concepts not in library — rose tint, signals gap
-      coreConceptsNotInLibrary.forEach(c => {
-        const escaped = c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const re = new RegExp(`\\b(${escaped})\\b`, 'gi');
-        html = html.replace(re, `<mark style="background:rgba(201,66,98,0.15);color:#c94262;border-radius:2px;padding:0 2px">$1</mark>`);
-      });
-
+      // Unknown authors — scan for "Firstname Lastname" patterns not in refs
+      // Simple heuristic: capitalized word pairs not already marked
       el.innerHTML = html;
     });
   } catch(e) {}
@@ -2244,17 +2068,19 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
     const data = await res.json();
     const refs = data.references || [];
 
-    // Build surname → ref map using robust extraction helper
-    const surnameMap = {};  // surname (lowercase) → { surname (display), title, status }
+    // Build surname → ref map from canonical library
+    const surnameMap = {};  // surname → { ref, status }
     refs.forEach(r => {
-      extractSurnames(r.authors || '').forEach(s => {
-        // Display form: capitalize first letter of each word
-        const display = s.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-        surnameMap[s] = {
-          surname: display,
-          title:   r.title,
-          status:  r.verification_status || 'surfaced',
-        };
+      (r.authors || '').split(/[,;&]/).forEach(a => {
+        const parts   = a.trim().split(/\s+/);
+        const surname = parts[parts.length - 1]?.replace(/[^a-zA-Z\-]/g, '');
+        if (surname && surname.length > 3) {
+          surnameMap[surname.toLowerCase()] = {
+            surname,
+            title:  r.title,
+            status: r.verification_status || 'surfaced',
+          };
+        }
       });
     });
 
@@ -2279,51 +2105,35 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
     // Also scan for capitalised word pairs not in library (rose candidates)
     // Simple heuristic: Capitalised tokens not in surnameMap and not in promptSurnames
     // Matches both plain surnames (Varela) and hyphenated names (Merleau-Ponty, Tuhiwai)
-    // Min token length raised to 5 chars to cut noise (The, You, Role etc.)
     const roseCandidates = {};
-    const roseContextMap = {};  // tl → sentence containing first appearance (for search context)
-    const allResponseSentences = (responsesText + ' ' + synthesisText).split(/[.!?]+/);
-    const tokens = (responsesText + ' ' + synthesisText).match(/\b[A-Z][a-z]{3,}(?:-[A-Z][a-z]{2,})?\b/g) || [];
+    const tokens = (responsesText + ' ' + synthesisText).match(/\b[A-Z][a-z]{2,}(?:-[A-Z][a-z]{2,})?\b/g) || [];
     tokens.forEach(t => {
       const tl = t.toLowerCase();
       if (promptSurnames.has(tl)) return;
       if (surnameMap[tl]) return;
       // Also check each part of hyphenated names against library
       if (t.includes('-') && t.split('-').some(p => surnameMap[p.toLowerCase()])) return;
-      // Skip common non-name capitalised words, model names, and known noise tokens
-      const skip = new Set([
-        // Common words
-        'this','that','they','their','there','these','those',
+      // Skip common non-name capitalised words and model names
+      const skip = new Set(['this','that','they','their','there','these','those',
         'when','where','while','which','what','with','from','have','will','been',
         'also','into','over','than','then','each','more','most','such','both',
         'very','just','some','only','even','here','after','before','about',
         'through','between','during','however','although','therefore','furthermore',
-        // Known noise from synthesis output
         'consensus','divergence','unique','absent','voices','contributions',
-        'survived','destabilized','unresolved','unasked','assumed','examiner',
         'survey','pressure','test','synthesis','model','research','study',
         'cognitive','embodied','learning','academic','physical','activity',
-        'instead','rather','regarding','theory','zone','role','grounding',
-        'proximal','concepts','section','above','below','across','within',
-        'response','question','argument','approach','framework','perspective',
-        'analysis','evidence','context','example','focus','sense','point',
-        'given','found','noted','shows','takes','makes','based','used','using',
         // Model names
         'gemini','deepseek','qwen','mistral','cohere','gemma','llama','claude',
         'openai','anthropic','chatgpt',
+        // Synthesis section headers
+        'consensus','divergence','unique','contributions','absent','voices',
         // Common academic words that capitalise mid-sentence
         'western','eastern','indigenous','canadian','english','french','latin',
         'january','february','march','april','june','july','august','september',
         'october','november','december','monday','tuesday','wednesday','thursday',
-        'friday','saturday','sunday',
-      ]);
+        'friday','saturday','sunday']);
       if (skip.has(tl)) return;
       roseCandidates[tl] = (roseCandidates[tl] || 0) + 1;
-      // Capture the first sentence containing this token for search context
-      if (!roseContextMap[tl]) {
-        const sentence = allResponseSentences.find(s => s.includes(t));
-        if (sentence) roseContextMap[tl] = sentence.trim().slice(0, 120);
-      }
     });
 
     // Sort library hits by count descending
@@ -2376,10 +2186,9 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
 
       roseFiltered.forEach(([tl, count]) => {
         const display = tl.charAt(0).toUpperCase() + tl.slice(1);
-        const context = roseContextMap[tl] || '';
         const row     = document.createElement('div');
         row.style.cssText = 'display:flex;align-items:baseline;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);cursor:pointer';
-        row.title = context ? 'Context: ' + context : 'Search for ' + display + ' in academic index';
+        row.title = 'Search for ' + display + ' in academic index';
         const left = document.createElement('span');
         left.style.cssText = 'font-size:11px;color:#c97a8a;font-family:monospace;text-decoration:underline dotted';
         left.textContent = display;
@@ -2388,8 +2197,7 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
         right.textContent = count + 'x';
         row.appendChild(left);
         row.appendChild(right);
-        // Route to Ingest tab academic search, pre-populated with sentence context not bare name
-        row.onclick = () => openRoseIngestSearch(display, context);
+        row.onclick = () => openRoseSearchModal(display);
         container.appendChild(row);
       });
     }
@@ -2400,19 +2208,20 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
 }
 
 // Rose name search modal — pre-populate enrich query and open Add Reference flow
-function openRoseIngestSearch(name, context) {
-  // Route to References view and pre-populate the academic search with sentence context
-  // (not bare name) so the researcher sees why the model surfaced this person.
-  // Academic search (academic-search-input) lives in the References view.
-  const query = context || name;
-  showView('references', document.querySelector('.nav-btn[onclick*="references"]'));
-  setTimeout(() => {
-    const searchInput = document.getElementById('academic-search-input');
-    if (searchInput) {
-      searchInput.value = query;
-      searchInput.focus();
-    }
-  }, 300);
+function openRoseSearchModal(name) {
+  // Pre-fill the enrich query in the Add Reference modal if it exists,
+  // otherwise surface a simple confirm to open the references tab
+  const confirmed = confirm(
+    '"' + name + '" was mentioned by models but isn\'t in your library.\n\nOpen References to search for and add it?'
+  );
+  if (confirmed) {
+    showView('references', document.querySelector('.nav-btn[onclick*="references"]'));
+    // Small delay to let the view render, then focus the search field
+    setTimeout(() => {
+      const search = document.getElementById('ref-search');
+      if (search) { search.value = name; search.dispatchEvent(new Event('input')); }
+    }, 300);
+  }
 }
 
 // ── Network map — live session connections ────────────────────────────────────
@@ -2459,82 +2268,6 @@ async function populateNetworkMap(synthesisText) {
   }
 }
 
-// ── Synthesis mode description ────────────────────────────────────────────────
-// Updates the small descriptor line under the mode selector when mode changes,
-// and syncs the "Currently: X" indicator at the top of the synthesis panel.
-const SYNTH_MODE_DESCRIPTIONS = {
-  survey:         'All models respond independently \u2014 find consensus, divergence, and what\u2019s still open.',
-  pressure:       'After responses: what survived scrutiny, what was destabilized, what remains unresolved.',
-  prompt_pressure:'Examines your question before firing \u2014 what are you assuming? What are you not asking?',
-};
-const SYNTH_MODE_LABELS = {
-  survey:         'Survey',
-  pressure:       'Pressure Test',
-  prompt_pressure:'Prompt Pressure Test',
-};
-function updateSynthesisModeDescription() {
-  const sel   = document.getElementById('synthesis-mode-select');
-  const desc  = document.getElementById('synthesis-mode-desc');
-  const label = document.getElementById('synthesis-mode-label');
-  if (!sel) return;
-  if (desc)  desc.textContent  = SYNTH_MODE_DESCRIPTIONS[sel.value] || '';
-  if (label) label.textContent = SYNTH_MODE_LABELS[sel.value] || sel.value;
-}
-
-// ── Re-synthesise ─────────────────────────────────────────────────────────────
-// Runs synthesis on the current prompt + existing model responses using the
-// newly selected mode and model. Does not re-fire the models.
-async function reSynthesise() {
-  const prompt = document.getElementById('prompt-input')?.value?.trim();
-  if (!prompt) { return; }
-  const textEl    = document.getElementById('synthesis-text');
-  const panel     = document.getElementById('synthesis-panel');
-  const btn       = document.getElementById('resynth-btn');
-  const synthMode = document.getElementById('synthesis-mode-select')?.value || 'survey';
-  const synthModel= document.getElementById('synthesis-model-select')?.value || 'deepseek';
-
-  if (!textEl || !panel) return;
-
-  // Collect current response card text as the responses object
-  const responseCards = [...document.querySelectorAll('.response-text')];
-  const responses = {};
-  responseCards.forEach(el => {
-    const card  = el.closest('[id^="card-"]');
-    const model = card?.id?.replace('card-', '');
-    if (model && el.textContent.trim()) responses[model] = el.textContent.trim();
-  });
-
-  if (btn) { btn.textContent = '\u29d7 Synthesising\u2026'; btn.disabled = true; }
-  panel.classList.add('pulsing');
-  textEl.style.color     = 'var(--muted)';
-  textEl.style.fontStyle = 'italic';
-  textEl.innerHTML = '<div style="font-family:monospace;font-size:11px;color:var(--muted)">Re-synthesising\u2026</div>';
-
-  try {
-    const res  = await fetch('/api/synthesise', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ prompt, responses, synthesis_model: synthModel, synth_mode: synthMode })
-    });
-    const data = await res.json();
-    panel.classList.remove('pulsing');
-    textEl.style.color     = 'var(--text)';
-    textEl.style.fontStyle = 'normal';
-    if (data.synthesis) {
-      _lastSynthesis = data.synthesis;
-      renderSynthesisSections(data.synthesis, textEl);
-      showSynthesisInjectRow(synthModel, synthMode);
-      updateSynthesisModeDescription();
-    } else {
-      textEl.textContent = data.error || 'Re-synthesis failed.';
-    }
-  } catch(e) {
-    panel.classList.remove('pulsing');
-    textEl.textContent = 'Error: ' + e.message;
-  } finally {
-    if (btn) { btn.textContent = '\u21ba Re-synthesise'; btn.disabled = false; }
-  }
-}
-
 // ── Prompt synthesis save to project ─────────────────────────────────────
 // ── Prompt Pressure Test ──────────────────────────────────────────────────────
 // Examines the researcher's question before firing — what is assumed, what is
@@ -2546,20 +2279,13 @@ async function promptPressureTest() {
     alert('Write a prompt first — Prompt Pressure Test examines your question before firing.');
     return;
   }
-  // Find the button by its onclick attribute so we can show working state
-  const btn = document.querySelector('[onclick*="promptPressureTest"]');
   const synthModel = document.getElementById('synthesis-model-select')?.value || 'deepseek';
   const panel      = document.getElementById('synthesis-panel');
   const textEl     = document.getElementById('synthesis-text');
   if (!panel || !textEl) return;
 
-  // Show working state on button and panel immediately
-  if (btn) { btn.textContent = '\u29d7 Examining\u2026'; btn.disabled = true; }
   panel.style.display = 'block';
-  panel.classList.add('pulsing');
-  textEl.style.color     = 'var(--muted)';
-  textEl.style.fontStyle = 'italic';
-  textEl.innerHTML = '<div style="font-family:monospace;font-size:11px;color:var(--muted)">Examining your prompt \u2014 checking assumptions, gaps, and examiner challenges\u2026</div>';
+  textEl.innerHTML = '<div style="font-family:monospace;font-size:11px;color:var(--muted)">Examining your prompt — checking assumptions, gaps, and examiner challenges...</div>';
 
   try {
     const res  = await fetch('/api/synthesise', {
@@ -2573,9 +2299,6 @@ async function promptPressureTest() {
       })
     });
     const data = await res.json();
-    panel.classList.remove('pulsing');
-    textEl.style.color     = 'var(--text)';
-    textEl.style.fontStyle = 'normal';
     if (data.synthesis) {
       renderSynthesisSections(data.synthesis, textEl);
       showSynthesisInjectRow(synthModel, 'prompt_pressure');
@@ -2583,10 +2306,7 @@ async function promptPressureTest() {
       textEl.textContent = data.error || 'Prompt pressure test unavailable.';
     }
   } catch(e) {
-    panel.classList.remove('pulsing');
     textEl.textContent = 'Error: ' + e.message;
-  } finally {
-    if (btn) { btn.textContent = '\u25c6 Test prompt'; btn.disabled = false; }
   }
 }
 
@@ -2623,26 +2343,6 @@ async function saveSynthesisToProject() {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ synthesis })
     });
-    // Retroactive write-back: if the last session was saved without a project,
-    // PATCH it now so the canonical file reflects the project connection.
-    if (window._lastSessionFilename) {
-      const currentProject = document.getElementById('session-project-select')?.value?.trim();
-      if (!currentProject) {
-        // Session was fired without a project -- write it back now
-        try {
-          await fetch('/api/sessions/' + encodeURIComponent(window._lastSessionFilename), {
-            method: 'PATCH', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ project })
-          });
-          // Also update the session-project-select so it reflects the new state
-          const sel = document.getElementById('session-project-select');
-          if (sel) sel.value = project;
-          // Dismiss the no-project nudge
-          const nudge = document.getElementById('no-project-nudge');
-          if (nudge) nudge.remove();
-        } catch(e) {} // write-back is best-effort, don't block on failure
-      }
-    }
     if (status) { status.style.display = 'inline'; setTimeout(() => { status.style.display = 'none'; }, 3000); }
   } catch(e) { alert('Save failed: ' + e.message); }
   btn.disabled = false;

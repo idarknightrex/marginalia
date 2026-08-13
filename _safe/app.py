@@ -150,7 +150,6 @@ verification_status: {data.get("verification_status", "surfaced")}
 physical_holding: {data.get("physical_holding", "none")}
 holding_location: {data.get("holding_location", "")}
 tags: {tags}
-needs_review: {str(data.get("needs_review", False)).lower()}
 created_at: {datetime.now(timezone.utc).isoformat()}
 updated_at: {datetime.now(timezone.utc).isoformat()}
 ---
@@ -451,36 +450,29 @@ def parse_csv_import(text: str) -> list:
 
 
 def parse_bibtex_import(text: str) -> list:
-    # Fix: note/annote → ## Your Notes (Claude annotations land here),
-    # abstract → ## Abstract. Multi-line values handled properly.
     try:
         import bibtexparser
         db = bibtexparser.loads(text)
     except ImportError:
         return _parse_bibtex_minimal(text)
     type_map = {
-        "article": "journal article", "book": "book", "inbook": "chapter",
-        "incollection": "chapter", "inproceedings": "conference paper",
-        "proceedings": "conference paper", "phdthesis": "thesis",
+        "article": "journal", "book": "book", "inbook": "chapter",
+        "incollection": "chapter", "inproceedings": "conference",
+        "proceedings": "conference", "phdthesis": "thesis",
         "mastersthesis": "thesis", "misc": "other", "techreport": "other",
     }
     records = []
     for entry in db.entries:
         authors_raw = entry.get("author", "")
         authors = "; ".join(a.strip() for a in authors_raw.split(" and ")) if authors_raw else ""
-        abstract = entry.get("abstract", "").strip()
-        note     = (entry.get("note", "") or entry.get("annote", "")).strip()
-        truncated = (note and len(note) > 50 and note[-1] not in '.!?') or                     (abstract and len(abstract) > 50 and abstract[-1] not in '.!?')
         rec = {
-            "title":        entry.get("title", "").replace("{", "").replace("}", ""),
-            "authors":      authors,
-            "year":         entry.get("year", ""),
-            "source_type":  type_map.get(entry.get("ENTRYTYPE", "").lower(), "other"),
-            "url_doi":      entry.get("doi", "") or entry.get("url", ""),
-            "abstract":     abstract,
-            "user_notes":   note,
-            "themes":       entry.get("keywords", ""),
-            "needs_review": truncated,
+            "title":       entry.get("title", "").replace("{", "").replace("}", ""),
+            "authors":     authors,
+            "year":        entry.get("year", ""),
+            "source_type": type_map.get(entry.get("ENTRYTYPE", "").lower(), "other"),
+            "url_doi":     entry.get("doi", "") or entry.get("url", ""),
+            "annotation":  entry.get("abstract", ""),
+            "themes":      entry.get("keywords", ""),
         }
         if rec["title"]:
             records.append(rec)
@@ -488,43 +480,20 @@ def parse_bibtex_import(text: str) -> list:
 
 
 def _parse_bibtex_minimal(text: str) -> list:
-    # Handles multi-line field values by tracking brace depth — previous regex
-    # version stopped at first newline, silently truncating Claude annotations.
     import re
     records = []
-    entries = re.findall(r'@\w+\{[^@]+', text, re.DOTALL)
+    entries = re.findall(r'@\w+\{[^@]+\}', text, re.DOTALL)
     for entry in entries:
         def field(name):
-            m = re.search(rf'{name}\s*=\s*\{{', entry, re.IGNORECASE)
-            if m:
-                start = m.end()
-                depth, i = 1, start
-                while i < len(entry) and depth > 0:
-                    if entry[i] == '{': depth += 1
-                    elif entry[i] == '}': depth -= 1
-                    i += 1
-                val = entry[start:i-1].strip()
-                return re.sub(r'\s+', ' ', val)
-            m2 = re.search(rf'{name}\s*=\s*"([^"]*)"', entry, re.IGNORECASE | re.DOTALL)
-            return re.sub(r'\s+', ' ', m2.group(1).strip()) if m2 else ""
+            m = re.search(rf'{name}\s*=\s*[{{"](.+?)[{{}}"]\s*[,}}]', entry, re.IGNORECASE | re.DOTALL)
+            return m.group(1).strip().replace('\n', ' ') if m else ""
         authors_raw = field("author")
         authors = "; ".join(a.strip() for a in authors_raw.split(" and ")) if authors_raw else ""
-        abstract = field("abstract").strip()
-        note     = (field("note") or field("annote")).strip()
-        truncated = (note and len(note) > 50 and note[-1] not in '.!?') or                     (abstract and len(abstract) > 50 and abstract[-1] not in '.!?')
-        rec = {
-            "title":        field("title").replace("{","").replace("}",""),
-            "authors":      authors,
-            "year":         field("year"),
-            "url_doi":      field("doi") or field("url"),
-            "abstract":     abstract,
-            "user_notes":   note,
-            "themes":       field("keywords"),
-            "needs_review": truncated,
-        }
+        rec = {"title": field("title").replace("{","").replace("}",""), "authors": authors, "year": field("year"), "url_doi": field("doi") or field("url")}
         if rec["title"]:
             records.append(rec)
     return records
+
 
 def parse_ris_import(text: str) -> list:
     type_map = {"JOUR": "journal", "BOOK": "book", "CHAP": "chapter", "CONF": "conference", "THES": "thesis", "RPRT": "other", "ELEC": "web", "GEN": "other"}
@@ -887,20 +856,17 @@ def handle_prompt():
             synthesis = run_synthesis(prompt, results, synthesis_model=synthesis_model, synth_mode=synth_mode)
             yield json.dumps({"event": "synthesis", "text": synthesis}) + "\n"
 
-        session_filename = None
         if results:
             # Save full prompt including separator layers for canonical record
             full_prompt = data.get("full_prompt", prompt)
             project_tag = data.get("project", "")
             writing_tag = data.get("writing", "")
-            saved_path = write_canonical_session(full_prompt, results, synthesis, project=project_tag, writing=writing_tag)
-            session_filename = saved_path.name if saved_path else None
+            write_canonical_session(full_prompt, results, synthesis, project=project_tag, writing=writing_tag)
 
         cost = estimate_anthropic_cost(anthropic_tokens["input"], anthropic_tokens["output"])
         yield json.dumps({
             "event":              "done",
             "session_saved":      bool(results),
-            "session_filename":   session_filename,
             "anthropic_cost_usd": round(cost, 4),
         }) + "\n"
 
@@ -1524,28 +1490,6 @@ def get_session_raw(session_filename):
         return jsonify({"error": "Session not found"}), 404
     return jsonify({"content": filepath.read_text(encoding="utf-8"), "filename": session_filename})
 
-@app.route("/api/synthesise", methods=["POST"])
-def synthesise():
-    # General-purpose synthesis endpoint. Accepts prompt + model responses and
-    # runs run_synthesis() with the requested mode. Used by Prompt Pressure Test
-    # (synth_mode=prompt_pressure) which fires before or without model responses,
-    # and by any other caller that needs synthesis outside the session/prompt flow.
-    data      = request.json or {}
-    prompt    = data.get("prompt", "").strip()
-    responses = data.get("responses", {})
-    synth_model = data.get("synthesis_model", "deepseek").strip()
-    synth_mode  = data.get("synth_mode", "survey").strip()
-
-    if not prompt:
-        return jsonify({"error": "prompt is required"}), 400
-
-    try:
-        result = run_synthesis(prompt, responses, synthesis_model=synth_model, synth_mode=synth_mode)
-        return jsonify({"synthesis": result})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
 @app.route("/api/sessions/synthesis", methods=["POST"])
 def sessions_synthesis():
     data    = request.json or {}
@@ -1865,51 +1809,35 @@ def annotate_reference(ref_filename):
         if existing_annotation.startswith("<!--"):
             existing_annotation = ""
 
-    # Annotated bibliography style: citation + 3-5 sentences covering argument,
-    # methodology/approach, and significance to the researcher's work.
-    # Output must be plain prose — no headers, no bullet points, no bold labels.
-    # "AI draft — edit before relying on this" label is added by the frontend.
-    abstract_block = ""
-    if "## Abstract" in existing_body:
-        raw_abstract = existing_body.split("## Abstract")[1].split("\n## ")[0].strip()
-        if raw_abstract and not raw_abstract.startswith("<!--"):
-            abstract_block = f"\nAbstract: {raw_abstract[:800]}"
+    annotation_prompt = f"""Read this academic reference and provide a concise critical annotation (100-150 words).
+What does this source argue? What is its methodology? What are its limitations?
 
-    annotation_prompt = f"""Write an annotated bibliography entry for the following academic source. The annotation must be 3-5 sentences of plain prose — no headers, no bullet points, no bold labels, no preamble.
+Title: {title}
+Authors: {authors} ({year})
+Themes: {themes}
+{"Existing annotation: " + existing_annotation if existing_annotation else ""}
 
-The annotation should cover: (1) what the source argues or demonstrates, (2) its theoretical or methodological approach, (3) why it matters to a PhD researcher studying embodied learning, community-building, performance anxiety, and intellectual risk-taking in first-year undergraduates.
-
-Source:
-{authors} ({year}). {title}.
-Themes: {themes}{abstract_block}
-
-Output the annotation only. Plain prose, 3-5 sentences. No label, no preamble, no \"This source argues\" opener if it can be avoided — begin with the substance."""
+Provide a scholarly annotation suitable for a PhD research bibliography."""
 
     results = {}
     for model in models:
         try:
             _, result, error, _, _ = call_model(model, annotation_prompt)
             if result:
-                results[model] = result.strip()
+                results[model] = result
         except Exception as e:
             results[model] = f"Error: {e}"
 
     if not results:
         return jsonify({"error": "No models returned annotations"}), 500
 
-    # Single model: use output directly. Two models: pick the longer/richer one
-    # rather than running synthesis (which produces headers and structure inappropriate
-    # for an annotation field). Synthesis-style output in the annotation field was the bug.
-    if len(results) == 1:
-        synthesis = list(results.values())[0]
+    if len(results) > 1:
+        synthesis = run_synthesis(annotation_prompt, results)
     else:
-        # Pick the result with more substantive content (longer, no error prefix)
-        valid = {m: r for m, r in results.items() if not r.startswith("Error:")}
-        synthesis = max(valid.values(), key=len) if valid else list(results.values())[0]
+        synthesis = list(results.values())[0]
 
-    date_stamp = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-    models_label = ", ".join(results.keys())
-    new_annotation = f"<!-- AI draft ({models_label}, {date_stamp}) — edit before relying on this -->\n\n{synthesis}"
+    voices = "\n\n".join(f"**{m.upper()}:** {r}" for m, r in results.items())
+    new_annotation = f"<!-- Multi-voice annotation generated {datetime.now(timezone.utc).strftime('%Y-%m-%d')} -->\n\n{voices}\n\n**SYNTHESIS:** {synthesis}"
 
     if "## Annotation" in existing_body:
         before = existing_body.split("## Annotation")[0]
