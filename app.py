@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.16.0814-1820
+Marginalia — app.py  v1.6.17.0815-1635
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.16.0814-1820"
+APP_VERSION = "1.6.17.0815-1635"
 
 
 
@@ -147,6 +147,7 @@ year: {data.get("year", "")}
 source_type: {data.get("source_type", "other")}
 url_doi: {data.get("url_doi", "")}
 verification_status: {data.get("verification_status", "surfaced")}
+reading_status: {data.get("reading_status", "unread")}
 physical_holding: {data.get("physical_holding", "none")}
 holding_location: {data.get("holding_location", "")}
 tags: {tags}
@@ -673,7 +674,8 @@ REFERENCE LIST:
     for rec in records:
         if not rec.get("title"): skipped.append(rec); continue
         try:
-            rec.setdefault("verification_status", "surfaced")
+            rec.setdefault("verification_status", "imported")
+            rec.setdefault("reading_status", "unread")
             rec.setdefault("physical_holding", "none")
             imported.append(write_canonical_reference(rec).name)
         except Exception as e:
@@ -999,7 +1001,7 @@ def update_reference(ref_filename):
 
     meta["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-    tracked = ["title","authors","year","source_type","url_doi","tags","physical_holding","holding_location","verification_status"]
+    tracked = ["title","authors","year","source_type","url_doi","tags","physical_holding","holding_location","verification_status","reading_status","needs_review"]
     changed = [f for f in tracked if f in data and str(data[f]).strip() != str(meta.get(f,"")).strip()]
     body_changed = [s for s in ["annotation","themes_body","connections","argument_connection","user_notes"] if s in data and data[s]]
     all_changed = changed + body_changed

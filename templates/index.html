@@ -241,7 +241,27 @@
 
   <!-- ── References view ── -->
   <div id="view-references" class="view">
-    <div class="page-header"><h1>References</h1><small id="ref-count">Loading...</small></div>
+    <div class="page-header" style="display:flex;align-items:baseline;justify-content:space-between">
+      <div><h1>References</h1><small id="ref-count">Loading...</small></div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="toggleBibTexPanel()" data-tooltip="Export library as BibTeX — live URL for Zettlr or one-time download">↓ BibTeX</button>
+      </div>
+    </div>
+    <div id="bibtex-panel" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:10px 12px;margin-bottom:10px;font-family:monospace;font-size:11px">
+      <div style="color:var(--muted);margin-bottom:6px;font-size:10px;text-transform:uppercase;letter-spacing:.06em">BibTeX Export</div>
+      <div style="margin-bottom:8px">
+        <div style="color:var(--text);margin-bottom:3px">Live URL <span style="color:var(--muted);font-size:10px">— point Zettlr at this in Preferences → Citations</span></div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <code id="bibtex-url" style="background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:3px 8px;color:var(--accent);flex:1;font-size:11px">http://100.126.14.57:5001/api/export/bibtex</code>
+          <button class="btn-secondary" style="font-size:10px;padding:3px 8px" onclick="copyBibTexUrl()">Copy</button>
+        </div>
+        <div style="color:var(--muted);font-size:10px;margin-top:3px">Updates live as your library grows. Zettlr resolves <code>[@slug]</code> citekeys against this feed.</div>
+      </div>
+      <div>
+        <a href="/api/export/bibtex" download="marginalia.bib" style="color:var(--accent);text-decoration:none;font-size:10px">↓ Download one-time .bib file</a>
+        <span style="color:var(--muted);font-size:10px"> — static snapshot for other citation managers</span>
+      </div>
+    </div>
 
     <div style="margin-bottom:16px">
       <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Quick DOI Import</div>
@@ -320,22 +340,6 @@
         </select>
         <input id="ref-year-filter" type="text" placeholder="Year (e.g. 1952 or 1950-1960)" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;width:160px" oninput="filterRefs()">
         <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="document.getElementById('ref-search').value='';document.getElementById('ref-project-filter').value='';document.getElementById('ref-year-filter').value='';filterRefs()">Clear all</button>
-        <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="toggleBibTexPanel()" data-tooltip="Export library as BibTeX — live URL for Zettlr or one-time download">↓ BibTeX</button>
-      </div>
-      <div id="bibtex-panel" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:10px 12px;margin-bottom:10px;font-family:monospace;font-size:11px">
-        <div style="color:var(--muted);margin-bottom:6px;font-size:10px;text-transform:uppercase;letter-spacing:.06em">BibTeX Export</div>
-        <div style="margin-bottom:8px">
-          <div style="color:var(--text);margin-bottom:3px">Live URL <span style="color:var(--muted);font-size:10px">— point Zettlr at this in Preferences → Citations</span></div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <code id="bibtex-url" style="background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:3px 8px;color:var(--accent);flex:1;font-size:11px">http://100.126.14.57:5001/api/export/bibtex</code>
-            <button class="btn-secondary" style="font-size:10px;padding:3px 8px" onclick="copyBibTexUrl()">Copy</button>
-          </div>
-          <div style="color:var(--muted);font-size:10px;margin-top:3px">Updates live as your library grows. Zettlr resolves <code>[@slug]</code> citekeys against this feed.</div>
-        </div>
-        <div>
-          <a href="/api/export/bibtex" download="marginalia.bib" style="color:var(--accent);text-decoration:none;font-size:10px">↓ Download one-time .bib file</a>
-          <span style="color:var(--muted);font-size:10px"> — static snapshot for other citation managers</span>
-        </div>
       </div>
       <div class="filter-row" style="margin:0">
         <div style="font-size:10px;font-family:monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Filter by status</div>
@@ -343,6 +347,16 @@
         <button class="filter-btn" data-filter="verified" id="filter-verified" onclick="setFilter(this)">verified</button>
         <button class="filter-btn" data-filter="located" id="filter-located" onclick="setFilter(this)">located</button>
         <button class="filter-btn" data-filter="surfaced" id="filter-surfaced" onclick="setFilter(this)">surfaced</button>
+        <button class="filter-btn" data-filter="imported" id="filter-imported" onclick="setFilter(this)">imported</button>
+      </div>
+      <div class="filter-row" style="margin:4px 0 0">
+        <div style="font-size:10px;font-family:monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Filter by reading</div>
+        <button class="filter-btn" data-reading="all" id="reading-all" onclick="setReadingFilter(this)">all</button>
+        <button class="filter-btn" data-reading="unread" id="reading-unread" onclick="setReadingFilter(this)">unread</button>
+        <button class="filter-btn" data-reading="skimmed" id="reading-skimmed" onclick="setReadingFilter(this)">skimmed</button>
+        <button class="filter-btn" data-reading="read" id="reading-read" onclick="setReadingFilter(this)">read</button>
+        <button class="filter-btn" data-reading="deeply-read" id="reading-deeply" onclick="setReadingFilter(this)">deeply read</button>
+        <button class="filter-btn" data-reading="needs-review" id="reading-needs-review" onclick="setReadingFilter(this)" style="color:#c9a832;border-color:#c9a832">⚠ needs review</button>
       </div>
     </div>
 
@@ -723,6 +737,7 @@
       <div style="flex:1"><label>Status</label>
         <select id="edit-status">
           <option value="surfaced">Surfaced</option>
+          <option value="imported">Imported</option>
           <option value="located">Located</option>
           <option value="verified">Verified</option>
         </select>
@@ -733,6 +748,15 @@
           <option value="pdf">PDF</option><option value="ebook">Ebook</option>
           <option value="library-access">Library access</option>
         </select>
+      </div>
+    </div>
+    <div class="edit-field">
+      <label>Reading depth <span style="font-family:monospace;font-size:10px;color:var(--muted);font-weight:normal">— how deeply have you engaged with this source?</span></label>
+      <div id="reading-status-selector" style="display:flex;gap:0;margin-top:4px;border:1px solid var(--border);border-radius:4px;overflow:hidden;font-family:monospace;font-size:11px">
+        <button class="reading-status-btn active" data-value="unread" onclick="setReadingStatus(this)" style="flex:1;padding:5px;border:none;border-right:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer">unread</button>
+        <button class="reading-status-btn" data-value="skimmed" onclick="setReadingStatus(this)" style="flex:1;padding:5px;border:none;border-right:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer">skimmed</button>
+        <button class="reading-status-btn" data-value="read" onclick="setReadingStatus(this)" style="flex:1;padding:5px;border:none;border-right:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer">read</button>
+        <button class="reading-status-btn" data-value="deeply-read" onclick="setReadingStatus(this)" style="flex:1;padding:5px;border:none;background:var(--bg);color:var(--text);cursor:pointer">deeply read</button>
       </div>
     </div>
     <div class="edit-field"><label>Holding Location</label><input id="edit-holding-location" type="text" placeholder="e.g. Office shelf, Zotero, Downloads"></div>

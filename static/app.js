@@ -12,7 +12,7 @@ let activeModels = new Set(['deepseek']);  // HTML default; checkKeyStatus adds 
 let doiPreviewData = null;
 let pasteFormat = 'bibtex';
 
-const STATUS_COLORS = { verified: '#3d8b37', located: '#c9a832', surfaced: '#6e56cf', rejected: '#c94242' };
+const STATUS_COLORS = { verified: '#3d8b37', located: '#c9a832', surfaced: '#6e56cf', imported: '#4285f4', rejected: '#c94242' };
 const MODEL_COLORS  = { gemini: '#4285f4', anthropic: '#c96442', openai: '#10a37f', llama: '#9c6ade', deepseek: '#52c41a', gemma: '#ffab00', qwen: '#0891b2', mistral: '#ff7000', cohere: '#0d9488' };
 const MODEL_META = {
   gemini:    { type: 'cloud',  web: true,  label: 'web' },
@@ -529,11 +529,28 @@ async function loadReferences() {
   renderRefs();
 }
 function filterRefs() { renderRefs(); }
+let activeReadingFilter = 'all';
 function setFilter(btn) {
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.filter-btn[data-filter]').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   activeFilter = btn.dataset.filter;
   renderRefs();
+}
+function setReadingFilter(btn) {
+  document.querySelectorAll('.filter-btn[data-reading]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activeReadingFilter = btn.dataset.reading;
+  renderRefs();
+}
+function setReadingStatus(btn) {
+  document.querySelectorAll('.reading-status-btn').forEach(b => {
+    b.classList.remove('active');
+    b.style.background = 'var(--bg)';
+    b.style.color      = 'var(--text)';
+  });
+  btn.classList.add('active');
+  btn.style.background = 'var(--accent)';
+  btn.style.color      = '#fff';
 }
 
 function populateRefProjectFilter(projects) {
@@ -552,23 +569,29 @@ function populateRefProjectFilter(projects) {
 }
 
 function updateFilterLabels() {
-  const counts = { all: allRefs.length, verified: 0, located: 0, surfaced: 0 };
-  const lastChanged = { verified: null, located: null, surfaced: null };
+  const counts = { all: allRefs.length, verified: 0, located: 0, surfaced: 0, imported: 0 };
+  const readingCounts = { unread: 0, skimmed: 0, read: 0, 'deeply-read': 0, 'needs-review': 0 };
   allRefs.forEach(r => {
     const s = r.verification_status || 'surfaced';
     if (counts[s] !== undefined) counts[s]++;
-    if (r.updated_at) {
-      const ts = r.updated_at.slice(0, 16).replace('T', ' ');
-      if (!lastChanged[s] || ts > lastChanged[s]) lastChanged[s] = ts;
-    }
+    const rs = r.reading_status || 'unread';
+    if (readingCounts[rs] !== undefined) readingCounts[rs]++;
+    if (r.needs_review === 'true' || r.needs_review === true) readingCounts['needs-review']++;
   });
   const btn_all = document.getElementById('filter-all');
   if (btn_all) btn_all.textContent = 'all (' + counts.all + ')';
-  ['verified','located','surfaced'].forEach(s => {
+  ['verified','located','surfaced','imported'].forEach(s => {
     const btn = document.getElementById('filter-' + s);
     if (!btn) return;
-    const ts = lastChanged[s] ? ' · ' + lastChanged[s] + ' UTC' : '';
-    btn.textContent = s + (counts[s] ? ' (' + counts[s] + ')' : '') + ts;
+    btn.textContent = s + (counts[s] ? ' (' + counts[s] + ')' : '');
+  });
+  // Reading filter counts
+  const readingMap = { 'unread': 'reading-unread', 'skimmed': 'reading-skimmed', 'read': 'reading-read', 'deeply-read': 'reading-deeply', 'needs-review': 'reading-needs-review' };
+  Object.entries(readingMap).forEach(([key, id]) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    const label = key === 'needs-review' ? '⚠ needs review' : key === 'deeply-read' ? 'deeply read' : key;
+    btn.textContent = label + (readingCounts[key] ? ' (' + readingCounts[key] + ')' : '');
   });
 }
 
@@ -598,9 +621,19 @@ function renderRefs() {
     const matchFilter  = activeFilter === 'all' || r.verification_status === activeFilter;
     const matchSearch  = !q || [r.title, r.authors, r.themes].some(f => f && f.toLowerCase().includes(q));
     const matchProject = !slug || (r.conn_list || []).some(line => line.split('|')[0].trim() === slug);
-    const refYear       = parseInt(r.year);
-    const matchYear      = yearMin === null || (!isNaN(refYear) && refYear >= yearMin && refYear <= yearMax);
-    return matchFilter && matchSearch && matchProject && matchYear;
+    const refYear      = parseInt(r.year);
+    const matchYear    = yearMin === null || (!isNaN(refYear) && refYear >= yearMin && refYear <= yearMax);
+    // Reading filter: 'needs-review' matches needs_review=true OR (unread AND imported)
+    let matchReading = true;
+    if (activeReadingFilter !== 'all') {
+      if (activeReadingFilter === 'needs-review') {
+        matchReading = r.needs_review === 'true' || r.needs_review === true ||
+          ((r.reading_status === 'unread' || !r.reading_status) && r.verification_status === 'imported');
+      } else {
+        matchReading = (r.reading_status || 'unread') === activeReadingFilter;
+      }
+    }
+    return matchFilter && matchSearch && matchProject && matchYear && matchReading;
   });
   document.getElementById('ref-count').textContent = filtered.length + ' of ' + allRefs.length + ' sources';
   if (!filtered.length) {
@@ -627,14 +660,32 @@ function renderRefs() {
     titleEl.textContent = (ref.title || '').replace(/<[^>]+>/g, '');
     left.appendChild(authorEl);
     left.appendChild(titleEl);
+    const badgeGroup = document.createElement('div');
+    badgeGroup.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0';
     const statusBadge = document.createElement('span');
     statusBadge.className = 'ref-status-badge status-' + status;
     statusBadge.textContent = status;
-    statusBadge.title = 'Click to change status';
-    statusBadge.style.cssText = 'flex-shrink:0;cursor:pointer';
+    statusBadge.title = 'Click to change verification status';
+    statusBadge.style.cssText = 'cursor:pointer';
     statusBadge.onclick = () => cycleRefStatus(ref._filename || '', statusBadge);
+    badgeGroup.appendChild(statusBadge);
+    // Reading status indicator
+    const rs = ref.reading_status || 'unread';
+    const RS_COLORS = { 'unread': 'var(--muted)', 'skimmed': '#c9a832', 'read': '#4285f4', 'deeply-read': '#3d8b37' };
+    const rsEl = document.createElement('span');
+    rsEl.style.cssText = `font-family:monospace;font-size:9px;color:${RS_COLORS[rs] || 'var(--muted)'};text-transform:uppercase;letter-spacing:.05em`;
+    rsEl.textContent = rs === 'deeply-read' ? 'deeply read' : rs;
+    badgeGroup.appendChild(rsEl);
+    // Needs review warning
+    if (ref.needs_review === 'true' || ref.needs_review === true) {
+      const nrEl = document.createElement('span');
+      nrEl.style.cssText = 'font-family:monospace;font-size:9px;color:#c9a832';
+      nrEl.textContent = '⚠ review';
+      nrEl.title = 'This reference needs review — check annotation and reading status';
+      badgeGroup.appendChild(nrEl);
+    }
     topRow.appendChild(left);
-    topRow.appendChild(statusBadge);
+    topRow.appendChild(badgeGroup);
     card.appendChild(topRow);
 
     // Tags + connections
@@ -894,7 +945,7 @@ async function saveReference() {
 
 
 // ── Reference status cycle ────────────────────────────────────────────────
-const STATUS_CYCLE = ['surfaced', 'located', 'verified'];
+const STATUS_CYCLE = ['surfaced', 'imported', 'located', 'verified'];
 async function cycleRefStatus(filename, badge) {
   if (!filename) return;
   const current = badge.textContent.trim();
@@ -952,6 +1003,14 @@ function openEditModal(ref, runAnnotate) {
   document.getElementById('edit-annotation').value         = ref.annotation || '';
   document.getElementById('edit-user-notes').value         = ref.user_notes || '';
   document.getElementById('edit-argument').value           = ref.argument_connection || '';
+  // Set reading status segmented selector
+  const readingStatus = ref.reading_status || 'unread';
+  document.querySelectorAll('.reading-status-btn').forEach(btn => {
+    const isActive = btn.dataset.value === readingStatus;
+    btn.classList.toggle('active', isActive);
+    btn.style.background = isActive ? 'var(--accent)' : 'var(--bg)';
+    btn.style.color      = isActive ? '#fff' : 'var(--text)';
+  });
   // Clear stale enrich search state from any previous reference
   enrichCandidatesCache = [];
   const enrichPanel = document.getElementById('edit-enrich-candidates');
@@ -977,6 +1036,8 @@ async function saveEdit() {
     url_doi:             document.getElementById('edit-doi').value.trim(),
     tags:                document.getElementById('edit-tags').value.trim(),
     verification_status: document.getElementById('edit-status').value,
+    reading_status:      document.querySelector('.reading-status-btn.active')?.dataset.value || 'unread',
+    needs_review:        false,  // clearing needs_review on save is intentional — researcher has reviewed
     physical_holding:    document.getElementById('edit-holding').value,
     holding_location:    document.getElementById('edit-holding-location').value.trim(),
     themes_body:         document.getElementById('edit-themes-body').value.trim(),
