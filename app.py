@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.15.0813-1956
+Marginalia — app.py  v1.6.16.0814-1820
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.15.0813-1956"
+APP_VERSION = "1.6.16.0814-1820"
 
 
 
@@ -1128,7 +1128,7 @@ def update_project(project_slug):
         if ": " in line:
             k, v = line.split(": ", 1)
             meta[k.strip()] = v.strip()
-    for field in ["label", "status"]:
+    for field in ["label", "status", "abstract"]:
         if field in data:
             meta[field] = data[field]
     new_slug = data.get("slug", "").strip().lower().replace(" ", "-")
@@ -1165,10 +1165,12 @@ def create_project():
     filename = slug + ".md"
     filepath = PROJECTS_DIR / filename
     framing  = data.get("framing", "")
+    abstract = data.get("abstract", "")
     canonical = f"""---
 label: {label or slug}
 slug: {slug}
 status: active
+abstract: {abstract}
 created_at: {datetime.now(timezone.utc).isoformat()}
 updated_at: {datetime.now(timezone.utc).isoformat()}
 ---
@@ -1235,7 +1237,7 @@ def update_writing(writing_slug):
         if ": " in line:
             k, v = line.split(": ", 1)
             meta[k.strip()] = v.strip()
-    for field in ["title", "type", "project", "status"]:
+    for field in ["title", "type", "project", "status", "abstract"]:
         if field in data:
             meta[field] = data[field]
     new_slug = data.get("slug", "").strip().lower().replace(" ", "-")
@@ -1268,6 +1270,7 @@ slug: {slug}
 type: {data.get("type", "other")}
 project: {data.get("project", "")}
 status: drafting
+abstract: {data.get("abstract", "")}
 created_at: {datetime.now(timezone.utc).isoformat()}
 updated_at: {datetime.now(timezone.utc).isoformat()}
 ---
@@ -1307,6 +1310,102 @@ def save_project_synthesis(project_name):
         meta_block = re.sub(r'updated_at:.*', f'updated_at: {datetime.now(timezone.utc).isoformat()}', meta_block)
         filepath.write_text(f"---{meta_block}---\n{body}", encoding="utf-8")
     return jsonify({"status": "saved"})
+
+
+@app.route("/api/refs-chunk/concept-search", methods=["POST"])
+def refs_chunk_concept_search():
+    # Runs a lightweight local model pass to generate refined search terms
+    # from a concept and its sentence context, then fires OpenAlex.
+    # Fast and light -- single short prompt, not a council fire.
+    data    = request.json or {}
+    concept = data.get("concept", "").strip()
+    context = data.get("context", "").strip()
+    if not concept:
+        return jsonify({"error": "concept required"}), 400
+
+    # Generate refined search terms via local model
+    search_terms = concept  # fallback
+    try:
+        prompt = f"""Given this concept and its context from a research session, suggest 2-3 precise academic search terms that would find the most relevant scholarly sources. Return the search terms only, comma-separated, nothing else.
+
+Concept: {concept}
+Context: {context or "(no context available)"}
+
+Search terms:"""
+        # Use Mistral for speed — fast enough to feel near-instant
+        settings  = load_settings()
+        local_cfg = settings.get("models", {}).get("local", {})
+        model_tag = local_cfg.get("europe", "mistral:7b")
+        _, result, _, _, _ = call_model("mistral", prompt)
+        if result:
+            # Clean up — take first line, strip any preamble
+            raw = result.strip().split("\n")[0]
+            # Remove any "Search terms:" prefix the model might add
+            raw = raw.replace("Search terms:", "").strip().strip('"').strip()
+            if raw:
+                search_terms = raw
+    except Exception:
+        pass  # fall through to bare concept search
+
+    # Fire search with refined terms using existing search_candidates
+    results = []
+    try:
+        from utils.academic_sources import search_candidates
+        hits = search_candidates(search_terms)
+        # Normalize to simple format for the JS
+        for h in (hits or [])[:4]:
+            results.append({
+                "title":   h.get("title", ""),
+                "authors": h.get("authors", ""),
+                "year":    h.get("year", ""),
+                "doi":     h.get("doi", "") or h.get("url", ""),
+            })
+    except Exception:
+        pass
+
+    return jsonify({"search_terms": search_terms, "results": results})
+
+
+@app.route("/api/export/bibtex", methods=["GET"])
+def export_bibtex():
+    # Live BibTeX export — generates fresh from canonical files on every request.
+    # Point Zettlr at http://100.126.14.57:5001/api/export/bibtex as the citation library.
+    # Citekey = slug (already BibTeX-safe: lowercase, underscores, no spaces).
+    type_map = {
+        "journal article": "article", "journal": "article",
+        "book": "book", "chapter": "incollection",
+        "conference paper": "inproceedings", "conference": "inproceedings",
+        "conference presentation": "inproceedings",
+        "thesis": "phdthesis", "preprint": "misc", "essay": "misc",
+        "keynote": "misc", "poster": "misc", "talk": "misc",
+        "other": "misc", "web": "misc",
+    }
+    lines = []
+    for ref in read_all_references():
+        slug   = ref.get("slug") or (ref.get("_filename","")).replace(".md","")
+        if not slug: continue
+        entry_type = type_map.get(ref.get("source_type","").lower(), "misc")
+        # Convert "Last, First; Last, First" or "First Last; First Last" to BibTeX "and" format
+        authors_raw = ref.get("authors","")
+        authors_bib = " and ".join(a.strip() for a in authors_raw.split(";") if a.strip())
+        fields = [f"  author    = {{{authors_bib}}}",
+                  f"  title     = {{{ref.get('title','')}}}",
+                  f"  year      = {{{ref.get('year','')}}}"]
+        if ref.get("url_doi"):
+            doi = ref["url_doi"]
+            if "doi.org" in doi or doi.startswith("10."):
+                fields.append(f"  doi       = {{{doi}}}")
+            else:
+                fields.append(f"  url       = {{{doi}}}")
+        if ref.get("tags"):
+            fields.append(f"  keywords  = {{{ref['tags']}}}")
+        if ref.get("annotation"):
+            fields.append(f"  annote    = {{{ref['annotation'][:500]}}}")
+        lines.append(f"@{entry_type}{{{slug},\n" + ",\n".join(fields) + "\n}")
+    bib_content = "\n\n".join(lines)
+    from flask import Response
+    return Response(bib_content, mimetype="application/x-bibtex",
+                    headers={"Content-Disposition": "inline; filename=marginalia.bib"})
 
 
 @app.route("/api/tags", methods=["GET"])

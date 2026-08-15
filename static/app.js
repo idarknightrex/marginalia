@@ -1341,8 +1341,12 @@ async function loadProjects() {
     rightRow.appendChild(slugChip); rightRow.appendChild(editBtn);
     headerRow.appendChild(labelEl); headerRow.appendChild(rightRow);
     const framingEl = document.createElement('div');
-    framingEl.style.cssText = 'font-size:12px;color:var(--muted);font-style:italic;margin:6px 0 8px';
+    framingEl.style.cssText = 'font-size:12px;color:var(--muted);font-style:italic;margin:6px 0 4px';
     framingEl.textContent = p.framing || '— no framing set';
+    const abstractEl = document.createElement('div');
+    abstractEl.style.cssText = 'font-size:12px;color:var(--text);margin:0 0 8px;line-height:1.5';
+    abstractEl.textContent = p.abstract || '';
+    abstractEl.style.display = p.abstract ? 'block' : 'none';
     const refsEl = document.createElement('div');
     refsEl.style.cssText = 'font-size:11px;font-family:monospace;color:var(--muted)';
     if (p.ref_count) {
@@ -1359,7 +1363,7 @@ async function loadProjects() {
     const footerEl = document.createElement('div');
     footerEl.style.cssText = 'font-size:10px;font-family:monospace;color:var(--muted);margin-top:8px;padding-top:6px;border-top:1px solid var(--border)';
     footerEl.textContent = 'Created ' + (p.created_at || '').slice(0,16).replace('T',' ') + ' UTC';
-    card.appendChild(headerRow); card.appendChild(framingEl);
+    card.appendChild(headerRow); card.appendChild(framingEl); card.appendChild(abstractEl);
     card.appendChild(refsEl); card.appendChild(footerEl);
     list.appendChild(card);
   });
@@ -1407,9 +1411,10 @@ async function saveNewProject() {
 let _editingProjectSlug = null;
 function openProjectEdit(p) {
   _editingProjectSlug = p.slug || p.name || p._filename.replace('.md','');
-  document.getElementById('proj-edit-label').value   = p.label || _editingProjectSlug;
-  document.getElementById('proj-edit-slug').value    = p.slug || _editingProjectSlug;
-  document.getElementById('proj-edit-framing').value = p.framing || '';
+  document.getElementById('proj-edit-label').value    = p.label || _editingProjectSlug;
+  document.getElementById('proj-edit-slug').value     = p.slug || _editingProjectSlug;
+  document.getElementById('proj-edit-framing').value  = p.framing || '';
+  document.getElementById('proj-edit-abstract').value = p.abstract || '';
   document.getElementById('proj-edit-modal').style.display = 'flex';
 }
 function closeProjectEdit() {
@@ -1423,9 +1428,10 @@ async function saveProjectEdit() {
   await fetch('/api/projects/' + encodeURIComponent(_editingProjectSlug), {
     method: 'PUT', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({
-      label:   document.getElementById('proj-edit-label').value.trim(),
-      slug:    document.getElementById('proj-edit-slug').value.trim(),
-      framing: document.getElementById('proj-edit-framing').value.trim()
+      label:    document.getElementById('proj-edit-label').value.trim(),
+      slug:     document.getElementById('proj-edit-slug').value.trim(),
+      framing:  document.getElementById('proj-edit-framing').value.trim(),
+      abstract: document.getElementById('proj-edit-abstract').value.trim(),
     })
   });
   btn.textContent = 'Save'; btn.disabled = false;
@@ -1468,7 +1474,14 @@ async function loadWriting() {
     const meta = document.createElement('div');
     meta.style.cssText = 'font-size:11px;font-family:monospace;color:var(--muted)';
     meta.textContent = (w.slug || '') + (w.project ? ' · ' + w.project : '') + ' · ' + (w.status || 'drafting');
-    card.appendChild(top); card.appendChild(meta);
+    if (w.abstract) {
+      const abstractEl = document.createElement('div');
+      abstractEl.style.cssText = 'font-size:12px;color:var(--text);margin-top:6px;line-height:1.5';
+      abstractEl.textContent = w.abstract;
+      card.appendChild(top); card.appendChild(meta); card.appendChild(abstractEl);
+    } else {
+      card.appendChild(top); card.appendChild(meta);
+    }
     list.appendChild(card);
   });
 }
@@ -1476,11 +1489,12 @@ async function loadWriting() {
 let _editingWritingSlug = null;
 function openWritingEdit(w) {
   _editingWritingSlug = w.slug || w._filename.replace('.md','');
-  document.getElementById('writing-edit-title').value   = w.title || '';
-  document.getElementById('writing-edit-slug').value    = w.slug || _editingWritingSlug;
-  document.getElementById('writing-edit-type').value    = w.type || 'other';
-  document.getElementById('writing-edit-project').value = w.project || '';
-  document.getElementById('writing-edit-status').value  = w.status || 'drafting';
+  document.getElementById('writing-edit-title').value    = w.title || '';
+  document.getElementById('writing-edit-slug').value     = w.slug || _editingWritingSlug;
+  document.getElementById('writing-edit-type').value     = w.type || 'other';
+  document.getElementById('writing-edit-project').value  = w.project || '';
+  document.getElementById('writing-edit-status').value   = w.status || 'drafting';
+  document.getElementById('writing-edit-abstract').value = w.abstract || '';
   document.getElementById('writing-edit-modal').style.display = 'flex';
 }
 function closeWritingEdit() {
@@ -1494,11 +1508,12 @@ async function saveWritingEdit() {
   await fetch('/api/writing/' + encodeURIComponent(_editingWritingSlug), {
     method: 'PUT', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({
-      title:   document.getElementById('writing-edit-title').value.trim(),
-      slug:    document.getElementById('writing-edit-slug').value.trim(),
-      type:    document.getElementById('writing-edit-type').value,
-      project: document.getElementById('writing-edit-project').value.trim(),
-      status:  document.getElementById('writing-edit-status').value
+      title:    document.getElementById('writing-edit-title').value.trim(),
+      slug:     document.getElementById('writing-edit-slug').value.trim(),
+      type:     document.getElementById('writing-edit-type').value,
+      project:  document.getElementById('writing-edit-project').value.trim(),
+      status:   document.getElementById('writing-edit-status').value,
+      abstract: document.getElementById('writing-edit-abstract').value.trim(),
     })
   });
   btn.textContent = 'Save'; btn.disabled = false;
@@ -2298,29 +2313,42 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
       if (hits > 0) counts[s] = hits;
     });
 
-    // Also scan for capitalised word pairs not in library (rose candidates)
-    // Simple heuristic: Capitalised tokens not in surnameMap and not in promptSurnames
-    // Matches both plain surnames (Varela) and hyphenated names (Merleau-Ponty, Tuhiwai)
-    // Min token length raised to 5 chars to cut noise (The, You, Role etc.)
-    const roseCandidates = {};
-    const roseContextMap = {};  // tl → sentence containing first appearance (for search context)
+    // Split rose candidates into two buckets:
+    // (1) roseNames — surname-shaped tokens (potential missing references)
+    // (2) roseConcepts — concept-shaped tokens (potential missing tags/themes)
+    // Heuristic: concept suffixes (-tion, -ism, -ity, -ment, -ence, -ogy, -ness, -ing)
+    // or known philosophical/academic vocabulary → concept bucket.
+    // Single capitalised word or hyphenated name pattern → name bucket.
+    const CONCEPT_SUFFIXES = /(?:tion|ism|ity|ment|ence|ogy|ness|ing|ics|phy|sis|ism)$/i;
+    const KNOWN_CONCEPTS   = new Set([
+      'phenomenology','embodiment','perception','consciousness','intentionality',
+      'intersubjectivity','temporality','spatiality','materiality','ontology',
+      'epistemology','hermeneutics','dialectics','positionality','relationality',
+      'enactivism','autopoiesis','affordance','mediation','abstraction',
+      'metacognition','cognition','motivation','regulation','integration',
+      'constructivism','behaviourism','behaviorism','pragmatism','empiricism',
+      'rationalism','idealism','realism','nominalism','structuralism',
+      'poststructuralism','deconstruction','intersectionality',
+    ]);
+
+    const roseNames     = {};  // potential missing references
+    const roseConcepts  = {};  // potential missing tags/themes
+    const roseContextMap = {};
+
     const allResponseSentences = (responsesText + ' ' + synthesisText).split(/[.!?]+/);
     const tokens = (responsesText + ' ' + synthesisText).match(/\b[A-Z][a-z]{3,}(?:-[A-Z][a-z]{2,})?\b/g) || [];
+
     tokens.forEach(t => {
       const tl = t.toLowerCase();
       if (promptSurnames.has(tl)) return;
       if (surnameMap[tl]) return;
-      // Also check each part of hyphenated names against library
       if (t.includes('-') && t.split('-').some(p => surnameMap[p.toLowerCase()])) return;
-      // Skip common non-name capitalised words, model names, and known noise tokens
       const skip = new Set([
-        // Common words
         'this','that','they','their','there','these','those',
         'when','where','while','which','what','with','from','have','will','been',
         'also','into','over','than','then','each','more','most','such','both',
         'very','just','some','only','even','here','after','before','about',
         'through','between','during','however','although','therefore','furthermore',
-        // Known noise from synthesis output
         'consensus','divergence','unique','absent','voices','contributions',
         'survived','destabilized','unresolved','unasked','assumed','examiner',
         'survey','pressure','test','synthesis','model','research','study',
@@ -2334,34 +2362,39 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
         'therefore','specifically','particularly','essentially','generally',
         'bond','course','gauge','mortar','brick','bricks','masonry','mason',
         'simply','merely','directly','currently','recently','typically',
-        // Model names
         'gemini','deepseek','qwen','mistral','cohere','gemma','llama','claude',
         'openai','anthropic','chatgpt',
-        // Common academic words that capitalise mid-sentence
         'western','eastern','indigenous','canadian','english','french','latin',
         'january','february','march','april','june','july','august','september',
         'october','november','december','monday','tuesday','wednesday','thursday',
         'friday','saturday','sunday',
       ]);
       if (skip.has(tl)) return;
-      roseCandidates[tl] = (roseCandidates[tl] || 0) + 1;
-      // Capture the first sentence containing this token for search context
+
+      // Capture sentence context
       if (!roseContextMap[tl]) {
         const sentence = allResponseSentences.find(s => s.includes(t));
-        if (sentence) roseContextMap[tl] = sentence.trim().slice(0, 120);
+        if (sentence) roseContextMap[tl] = sentence.trim().slice(0, 150);
+      }
+
+      // Classify: concept or name?
+      if (CONCEPT_SUFFIXES.test(tl) || KNOWN_CONCEPTS.has(tl)) {
+        roseConcepts[tl] = (roseConcepts[tl] || 0) + 1;
+      } else {
+        roseNames[tl] = (roseNames[tl] || 0) + 1;
       }
     });
 
     // Sort library hits by count descending
     const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
 
-    // Sort rose candidates, threshold ≥ 2 mentions to reduce noise
-    const roseFiltered = Object.entries(roseCandidates)
-      .filter(([, n]) => n >= 2)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8);  // cap at 8 to avoid noise flood
+    // Filter and sort rose buckets — threshold ≥ 2, cap at 6 each
+    const roseNamesFiltered    = Object.entries(roseNames)
+      .filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    const roseConceptsFiltered = Object.entries(roseConcepts)
+      .filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
-    if (!sorted.length && !roseFiltered.length) {
+    if (!sorted.length && !roseNamesFiltered.length && !roseConceptsFiltered.length) {
       container.style.display = 'none';
       return;
     }
@@ -2393,29 +2426,81 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
       container.appendChild(row);
     });
 
-    // Rose candidates — model-surfaced, not in library
-    if (roseFiltered.length) {
+    // Rose names — potential missing references
+    if (roseNamesFiltered.length) {
       const divider = document.createElement('div');
       divider.style.cssText = 'font-family:monospace;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#c94262;margin:8px 0 4px';
-      divider.textContent = 'Not in library — verify before adding';
+      divider.textContent = 'Not in library — potential references';
       container.appendChild(divider);
 
-      roseFiltered.forEach(([tl, count]) => {
-        const display = tl.charAt(0).toUpperCase() + tl.slice(1);
+      roseNamesFiltered.forEach(([tl, count]) => {
+        const display = tl.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
         const context = roseContextMap[tl] || '';
         const row     = document.createElement('div');
         row.style.cssText = 'display:flex;align-items:baseline;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);cursor:pointer';
-        row.title = context ? 'Context: ' + context : 'Search for ' + display + ' in academic index';
+        row.title = context ? 'Context: ' + context : 'Search for ' + display;
         const left = document.createElement('span');
         left.style.cssText = 'font-size:11px;color:#c97a8a;font-family:monospace;text-decoration:underline dotted';
         left.textContent = display;
-        const right = document.createElement('span');
-        right.style.cssText = 'font-size:10px;color:var(--muted);font-family:monospace';
-        right.textContent = count + 'x';
+        const right = document.createElement('div');
+        right.style.cssText = 'display:flex;gap:6px;align-items:center';
+        const countEl = document.createElement('span');
+        countEl.style.cssText = 'font-size:10px;color:var(--muted);font-family:monospace';
+        countEl.textContent = count + 'x';
+        const searchBtn = document.createElement('span');
+        searchBtn.style.cssText = 'font-size:9px;color:#c97a8a;font-family:monospace;text-decoration:underline dotted;cursor:pointer';
+        searchBtn.textContent = 'search';
+        searchBtn.onclick = (e) => { e.stopPropagation(); openRoseAuthorSearch(display, context, row); };
+        right.appendChild(countEl);
+        right.appendChild(searchBtn);
         row.appendChild(left);
         row.appendChild(right);
-        // Route to Ingest tab academic search, pre-populated with sentence context not bare name
-        row.onclick = () => openRoseIngestSearch(display, context);
+        row.onclick = () => openRoseAuthorSearch(display, context, row);
+        container.appendChild(row);
+      });
+    }
+
+    // Rose concepts — potential missing tags/themes
+    if (roseConceptsFiltered.length) {
+      const divider2 = document.createElement('div');
+      divider2.style.cssText = 'font-family:monospace;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#6e56cf;margin:8px 0 4px';
+      divider2.textContent = 'Not in library — concepts & themes';
+      container.appendChild(divider2);
+
+      roseConceptsFiltered.forEach(([tl, count]) => {
+        const display = tl.charAt(0).toUpperCase() + tl.slice(1);
+        const context = roseContextMap[tl] || '';
+        const row     = document.createElement('div');
+        row.style.cssText = 'padding:3px 0;border-bottom:1px solid var(--border)';
+        const topRow = document.createElement('div');
+        topRow.style.cssText = 'display:flex;align-items:baseline;justify-content:space-between';
+        const left = document.createElement('span');
+        left.style.cssText = 'font-size:11px;color:#6e56cf;font-family:monospace';
+        left.textContent = display;
+        const right = document.createElement('div');
+        right.style.cssText = 'display:flex;gap:6px;align-items:center';
+        const countEl = document.createElement('span');
+        countEl.style.cssText = 'font-size:10px;color:var(--muted);font-family:monospace';
+        countEl.textContent = count + 'x';
+        const addTagBtn = document.createElement('span');
+        addTagBtn.style.cssText = 'font-size:9px;color:#6e56cf;font-family:monospace;text-decoration:underline dotted;cursor:pointer';
+        addTagBtn.textContent = '+ tag';
+        addTagBtn.onclick = () => addConceptToLibrary(tl, 'tag', addTagBtn);
+        const addThemeBtn = document.createElement('span');
+        addThemeBtn.style.cssText = 'font-size:9px;color:#6e56cf;font-family:monospace;text-decoration:underline dotted;cursor:pointer';
+        addThemeBtn.textContent = '+ theme';
+        addThemeBtn.onclick = () => addConceptToLibrary(tl, 'theme', addThemeBtn);
+        const searchBtn = document.createElement('span');
+        searchBtn.style.cssText = 'font-size:9px;color:var(--muted);font-family:monospace;text-decoration:underline dotted;cursor:pointer';
+        searchBtn.textContent = 'find sources';
+        searchBtn.onclick = () => openRoseConceptSearch(tl, context, row);
+        right.appendChild(countEl);
+        right.appendChild(addTagBtn);
+        right.appendChild(addThemeBtn);
+        right.appendChild(searchBtn);
+        topRow.appendChild(left);
+        topRow.appendChild(right);
+        row.appendChild(topRow);
         container.appendChild(row);
       });
     }
@@ -2425,19 +2510,136 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
   }
 }
 
-// Rose name search modal — pre-populate enrich query and open Add Reference flow
+// Rose name search — fires OpenAlex author search inline below the row
+async function openRoseAuthorSearch(name, context, rowEl) {
+  // Show inline results below the row rather than navigating away
+  let resultsEl = rowEl.nextSibling;
+  if (resultsEl && resultsEl.dataset.roseResults) {
+    resultsEl.remove(); return;  // toggle off
+  }
+  resultsEl = document.createElement('div');
+  resultsEl.dataset.roseResults = '1';
+  resultsEl.style.cssText = 'background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:6px 8px;margin:2px 0 4px;font-family:monospace;font-size:10px';
+  resultsEl.textContent = 'Searching\u2026';
+  rowEl.parentNode.insertBefore(resultsEl, rowEl.nextSibling);
+
+  try {
+    // Use existing academic fetch with the name as query
+    const res  = await fetch('/api/academic/fetch', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ query: name, doi: '', preferred_source: 'semantic_scholar' })
+    });
+    if (!res.ok) { resultsEl.textContent = 'No results found.'; return; }
+    const data = await res.json();
+    resultsEl.innerHTML = '';
+    // academic/fetch returns a single best match — surface it with a link to search more
+    if (data.title) {
+      const item = document.createElement('div');
+      item.style.cssText = 'padding:3px 0;cursor:pointer;color:var(--text)';
+      item.innerHTML = `<span>${data.title.slice(0,60)}</span> <span style="color:var(--muted)">${data.year||''} · ${(data.authors||'').slice(0,30)}</span>`;
+      item.onclick = () => {
+        showView('references', document.querySelector('.nav-btn[onclick*="references"]'));
+        setTimeout(() => {
+          const s = document.getElementById('academic-search-input');
+          if (s) { s.value = name; s.focus(); }
+        }, 300);
+      };
+      resultsEl.appendChild(item);
+      const more = document.createElement('div');
+      more.style.cssText = 'font-size:9px;color:var(--muted);margin-top:4px;cursor:pointer;text-decoration:underline dotted';
+      more.textContent = 'Search for more \u2192';
+      more.onclick = () => openRoseIngestSearch(name, context);
+      resultsEl.appendChild(more);
+    } else {
+      resultsEl.textContent = 'No results — try the academic search manually.';
+    }
+  } catch(e) {
+    resultsEl.textContent = 'Search failed — try the academic search manually.';
+  }
+}
+
+// Rose concept search — fires local model pass to get refined terms, then OpenAlex
+async function openRoseConceptSearch(concept, context, rowEl) {
+  let resultsEl = rowEl.nextSibling;
+  if (resultsEl && resultsEl.dataset.roseResults) {
+    resultsEl.remove(); return;  // toggle off
+  }
+  resultsEl = document.createElement('div');
+  resultsEl.dataset.roseResults = '1';
+  resultsEl.style.cssText = 'background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:6px 8px;margin:2px 0 4px;font-family:monospace;font-size:10px;color:var(--muted)';
+  resultsEl.textContent = 'Finding related sources\u2026';
+  rowEl.parentNode.insertBefore(resultsEl, rowEl.nextSibling);
+
+  try {
+    // Ask backend to run a model pass for refined search terms, then search
+    const res  = await fetch('/api/refs-chunk/concept-search', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ concept, context })
+    });
+    const data = await res.json();
+    const works = data.results || [];
+    const terms = data.search_terms || concept;
+    if (!works.length) {
+      resultsEl.textContent = `No results for "${terms}".`;
+      return;
+    }
+    resultsEl.innerHTML = `<div style="color:var(--muted);margin-bottom:4px">Searched: <em>${terms}</em></div>`;
+    works.forEach(w => {
+      const item = document.createElement('div');
+      item.style.cssText = 'padding:3px 0;border-bottom:1px solid var(--border);cursor:pointer';
+      item.innerHTML = `<span style="color:var(--text)">${(w.title||'').slice(0,60)}</span> <span style="color:var(--muted)">${w.year||''} · ${(w.authors||'').slice(0,30)}</span>`;
+      item.onclick = () => {
+        showView('references', document.querySelector('.nav-btn[onclick*="references"]'));
+        setTimeout(() => {
+          const s = document.getElementById('academic-search-input');
+          if (s) { s.value = w.title || terms; s.focus(); }
+        }, 300);
+      };
+      resultsEl.appendChild(item);
+    });
+  } catch(e) {
+    resultsEl.textContent = 'Search failed — try the academic search manually.';
+  }
+}
+
+// Add concept to library vocabulary as tag or theme
+// For now surfaces a nudge to add it to a ref's tags/themes manually
+// (Full vocabulary management comes in v1.7)
+function addConceptToLibrary(concept, type, btn) {
+  const original = btn.textContent;
+  btn.textContent = '\u2713 noted';
+  btn.style.color = '#3d8b37';
+  // Route to References search with concept pre-filled so researcher can add it to a ref
+  setTimeout(() => {
+    showView('references', document.querySelector('.nav-btn[onclick*="references"]'));
+    setTimeout(() => {
+      const s = document.getElementById('ref-search');
+      if (s) { s.value = concept; s.dispatchEvent(new Event('input')); }
+    }, 300);
+  }, 600);
+}
+
+// ── BibTeX export panel ───────────────────────────────────────────────────────
+function toggleBibTexPanel() {
+  const panel = document.getElementById('bibtex-panel');
+  if (!panel) return;
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+function copyBibTexUrl() {
+  const url = 'http://100.126.14.57:5001/api/export/bibtex';
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.querySelector('[onclick="copyBibTexUrl()"]');
+    if (btn) { const orig = btn.textContent; btn.textContent = '\u2713 Copied'; setTimeout(() => btn.textContent = orig, 2000); }
+  });
+}
+
+// ── Rose name search — legacy alias ──────────────────────────────────────────
 function openRoseIngestSearch(name, context) {
-  // Route to References view and pre-populate the academic search with sentence context
-  // (not bare name) so the researcher sees why the model surfaced this person.
-  // Academic search (academic-search-input) lives in the References view.
   const query = context || name;
   showView('references', document.querySelector('.nav-btn[onclick*="references"]'));
   setTimeout(() => {
     const searchInput = document.getElementById('academic-search-input');
-    if (searchInput) {
-      searchInput.value = query;
-      searchInput.focus();
-    }
+    if (searchInput) { searchInput.value = query; searchInput.focus(); }
   }, 300);
 }
 

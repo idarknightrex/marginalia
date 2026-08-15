@@ -320,6 +320,22 @@
         </select>
         <input id="ref-year-filter" type="text" placeholder="Year (e.g. 1952 or 1950-1960)" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;width:160px" oninput="filterRefs()">
         <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="document.getElementById('ref-search').value='';document.getElementById('ref-project-filter').value='';document.getElementById('ref-year-filter').value='';filterRefs()">Clear all</button>
+        <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="toggleBibTexPanel()" data-tooltip="Export library as BibTeX — live URL for Zettlr or one-time download">↓ BibTeX</button>
+      </div>
+      <div id="bibtex-panel" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:10px 12px;margin-bottom:10px;font-family:monospace;font-size:11px">
+        <div style="color:var(--muted);margin-bottom:6px;font-size:10px;text-transform:uppercase;letter-spacing:.06em">BibTeX Export</div>
+        <div style="margin-bottom:8px">
+          <div style="color:var(--text);margin-bottom:3px">Live URL <span style="color:var(--muted);font-size:10px">— point Zettlr at this in Preferences → Citations</span></div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <code id="bibtex-url" style="background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:3px 8px;color:var(--accent);flex:1;font-size:11px">http://100.126.14.57:5001/api/export/bibtex</code>
+            <button class="btn-secondary" style="font-size:10px;padding:3px 8px" onclick="copyBibTexUrl()">Copy</button>
+          </div>
+          <div style="color:var(--muted);font-size:10px;margin-top:3px">Updates live as your library grows. Zettlr resolves <code>[@slug]</code> citekeys against this feed.</div>
+        </div>
+        <div>
+          <a href="/api/export/bibtex" download="marginalia.bib" style="color:var(--accent);text-decoration:none;font-size:10px">↓ Download one-time .bib file</a>
+          <span style="color:var(--muted);font-size:10px"> — static snapshot for other citation managers</span>
+        </div>
       </div>
       <div class="filter-row" style="margin:0">
         <div style="font-size:10px;font-family:monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Filter by status</div>
@@ -441,6 +457,29 @@
     </div>
 
     </div><!-- /Capture zone -->
+
+    <!-- Zone 3: Export — take your library elsewhere -->
+    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface)">
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+        &#8599; Export — take your library elsewhere
+      </div>
+      <div class="import-section">
+        <div class="import-section-title">BibTeX — Zettlr &amp; citation managers</div>
+        <div style="font-family:monospace;font-size:11px;color:var(--muted);margin-bottom:10px">
+          Marginalia serves your library as a live BibTeX feed. Point Zettlr at the URL below in<br>
+          <strong>Preferences → Citations → Citation Database</strong>. Citekeys are your reference slugs.<br>
+          Updates automatically as your library grows — no manual export needed.
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+          <code style="background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:5px 10px;color:var(--accent);flex:1;font-size:11px">http://100.126.14.57:5001/api/export/bibtex</code>
+          <button class="btn-secondary" onclick="copyBibTexUrl()" style="font-size:10px;padding:4px 10px">Copy</button>
+          <a href="/api/export/bibtex" download="marginalia.bib" class="btn-secondary" style="font-size:10px;padding:4px 10px;text-decoration:none">↓ Download</a>
+        </div>
+        <div style="font-family:monospace;font-size:10px;color:var(--muted)">
+          Localhost URL (from Solaris only): <code style="background:var(--bg);padding:1px 5px;border-radius:2px">http://localhost:5001/api/export/bibtex</code>
+        </div>
+      </div>
+    </div><!-- /Export zone -->
 
   </div><!-- /view-ingest -->
 
@@ -743,7 +782,11 @@
     <h3>Edit Project</h3>
     <div class="edit-field"><label>Label</label><input id="proj-edit-label" type="text"></div>
     <div class="edit-field"><label>Slug</label><input id="proj-edit-slug" type="text"></div>
-    <div class="edit-field"><label>Framing</label><textarea id="proj-edit-framing" rows="4"></textarea></div>
+    <div class="edit-field"><label>Framing <span style="font-family:monospace;font-size:10px;color:var(--muted);font-weight:normal">research question or lens</span></label><textarea id="proj-edit-framing" rows="3"></textarea></div>
+    <div class="edit-field">
+      <label>Abstract <span style="font-family:monospace;font-size:10px;color:var(--muted);font-weight:normal">2–4 sentences — argument, scope, intended venue</span></label>
+      <textarea id="proj-edit-abstract" rows="4" placeholder="What this project argues, its scope, and where it's headed..."></textarea>
+    </div>
     <div class="edit-modal-actions">
       <button class="btn-secondary" onclick="closeProjectEdit()">Cancel</button>
       <button class="btn-primary" id="proj-edit-save-btn" onclick="saveProjectEdit()">Save</button>
@@ -775,6 +818,10 @@
       </div>
     </div>
     <div class="edit-field"><label>Project Connection</label><input id="writing-edit-project" type="text" placeholder="project-slug (optional)"></div>
+    <div class="edit-field">
+      <label>Abstract <span style="font-family:monospace;font-size:10px;color:var(--muted);font-weight:normal">2–4 sentences — argument, scope, intended venue</span></label>
+      <textarea id="writing-edit-abstract" rows="4" placeholder="What this piece argues, its scope, and where it's headed..."></textarea>
+    </div>
     <div class="edit-modal-actions">
       <button class="btn-secondary" onclick="closeWritingEdit()">Cancel</button>
       <button class="btn-primary" id="writing-edit-save-btn" onclick="saveWritingEdit()">Save</button>
