@@ -1602,12 +1602,13 @@ def sessions_list():
     """
     Return session metadata for Intelligence session list and related-sessions strip.
     Optional ?project=slug filter, ?show_hidden=true to include hidden sessions.
+    Optional ?limit=N to control how many sessions are returned (default 20, max 200).
     Hidden sessions (hidden: true in frontmatter) are excluded by default.
     Sessions are never deleted — hide is the only removal gesture.
-    Returns up to 20 most recent.
     """
     project_filter = request.args.get("project", "").strip()
     show_hidden    = request.args.get("show_hidden", "false").lower() == "true"
+    limit          = min(int(request.args.get("limit", 20)), 200)
     sessions = []
     if SESSIONS_DIR.exists():
         for f in sorted(SESSIONS_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
@@ -1639,7 +1640,7 @@ def sessions_list():
                     "created":  fm.get("created_at", ""),
                     "hidden":   is_hidden,
                 })
-                if len(sessions) >= 20:
+                if len(sessions) >= limit:
                     break
             except Exception:
                 continue

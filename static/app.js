@@ -1632,6 +1632,7 @@ async function createWriting() {
 
 // ── Intelligence ──────────────────────────────────────────────────────────
 let _intelMode     = 'library';
+let _allIntelSessions = [];  // full session list cached for client-side filtering
 // _lastSynthesis holds the raw text of the most recent synthesis output.
 // Used by saveSynthesis() and saveSynthesisToProject() to save to canonical
 // without re-reading the DOM (which now contains rendered cards, not text).
@@ -1870,124 +1871,103 @@ async function loadIntelSessionList() {
   } catch(e) {}
 
   try {
-    const url  = '/api/sessions/list' + (showHidden ? '?show_hidden=true' : '');
+    const url  = '/api/sessions/list?limit=200' + (showHidden ? '&show_hidden=true' : '');
     const res  = await fetch(url);
     const data = await res.json();
     const sessions = data.sessions || [];
     if (countEl) countEl.textContent = '— ' + sessions.length + (showHidden ? ' (incl. hidden)' : ' active');
 
-    if (!sessions.length) {
-      list.innerHTML = '<div style="font-family:monospace;font-size:11px;color:var(--muted);font-style:italic;padding:8px 0">No sessions yet</div>';
-      return;
+    // Cache all sessions for client-side filtering
+    _allIntelSessions = sessions;
+
+    // Populate project filter dropdown
+    const projFilter = document.getElementById('intel-session-project-filter');
+    if (projFilter) {
+      const currentProj = projFilter.value;
+      projFilter.innerHTML = '<option value="">All projects</option>';
+      const projSlugs = [...new Set(sessions.map(s => s.project).filter(Boolean))].sort();
+      projSlugs.forEach(slug => {
+        const o = document.createElement('option');
+        o.value = slug; o.textContent = slug;
+        if (slug === currentProj) o.selected = true;
+        projFilter.appendChild(o);
+      });
     }
 
-    list.innerHTML = '';
-    sessions.forEach(s => {
-      const isHidden = s.hidden === true || s.hidden === 'true';
-      const row = document.createElement('div');
-      row.style.cssText = 'display:grid;grid-template-columns:1fr auto auto auto auto;gap:6px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)' + (isHidden ? ';opacity:0.5' : '');
-
-      // Label + date
-      const labelCol = document.createElement('div');
-      const dateSpan = document.createElement('div');
-      dateSpan.style.cssText = 'font-family:monospace;font-size:9px;color:var(--muted);margin-bottom:2px';
-      dateSpan.textContent = (s.created || '').slice(0,16).replace('T',' ') + ' UTC';
-      const titleSpan = document.createElement('div');
-      titleSpan.style.cssText = 'font-family:Georgia,serif;font-size:12px;color:var(--text);line-height:1.4';
-      titleSpan.textContent = (s.title || s.filename || '').slice(0,80);
-      labelCol.appendChild(dateSpan);
-      labelCol.appendChild(titleSpan);
-
-      // Project select
-      const pSel = document.createElement('select');
-      pSel.style.cssText = 'font-family:monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 4px;max-width:110px';
-      pSel.innerHTML = '<option value="">no project</option>';
-      _intelSessionProjects.forEach(p => {
+    // Populate writing filter dropdown
+    const writFilter = document.getElementById('intel-session-writing-filter');
+    if (writFilter) {
+      const currentWrit = writFilter.value;
+      writFilter.innerHTML = '<option value="">All writing</option>';
+      const writSlugs = [...new Set(sessions.map(s => s.writing).filter(Boolean))].sort();
+      writSlugs.forEach(slug => {
         const o = document.createElement('option');
-        o.value = p.slug; o.textContent = p.label;
-        if (p.slug === (s.project||'').trim()) o.selected = true;
-        pSel.appendChild(o);
+        o.value = slug; o.textContent = slug;
+        if (slug === currentWrit) o.selected = true;
+        writFilter.appendChild(o);
       });
+    }
 
-      // Writing select
-      const wSel = document.createElement('select');
-      wSel.style.cssText = 'font-family:monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 4px;max-width:110px';
-      wSel.innerHTML = '<option value="">no writing</option>';
-      _intelSessionWriting.forEach(w => {
-        const o = document.createElement('option');
-        o.value = w.slug; o.textContent = w.label;
-        if (w.slug === (s.writing||'').trim()) o.selected = true;
-        wSel.appendChild(o);
-      });
+    filterIntelSessions();
 
-      // View button
-      const viewBtn = document.createElement('button');
-      viewBtn.textContent = '▾ View';
-      viewBtn.style.cssText = 'font-family:monospace;font-size:9px;padding:2px 6px;background:transparent;border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer;white-space:nowrap';
-
-      // Hide/unhide button
-      const hideBtn = document.createElement('button');
-      hideBtn.textContent = isHidden ? 'Unhide' : 'Hide';
-      hideBtn.style.cssText = 'font-family:monospace;font-size:9px;padding:2px 6px;background:transparent;border:1px solid var(--border);border-radius:3px;color:var(--muted);cursor:pointer;white-space:nowrap';
-
-      // Inline raw view panel
-      const viewPanel = document.createElement('div');
-      viewPanel.style.cssText = 'display:none;grid-column:1/-1;background:var(--surface);border:1px solid var(--border);border-radius:3px;padding:10px 12px;font-family:monospace;font-size:10px;color:var(--muted);white-space:pre-wrap;max-height:300px;overflow-y:auto;line-height:1.6;margin-top:4px';
-
-      const filename = s.filename;
-
-      viewBtn.onclick = async () => {
-        if (viewPanel.style.display !== 'none') {
-          viewPanel.style.display = 'none';
-          viewBtn.textContent = '▾ View';
-          return;
-        }
-        viewBtn.textContent = '▴ Close';
-        viewPanel.textContent = 'Loading…';
-        viewPanel.style.display = 'block';
-        try {
-          const r = await fetch('/api/sessions/' + encodeURIComponent(filename) + '/raw');
-          const d = await r.json();
-          viewPanel.textContent = d.content || 'Could not load session';
-        } catch(e) {
-          viewPanel.textContent = 'Error loading session';
-        }
-      };
-
-      async function patchSession() {
-        try {
-          await fetch('/api/sessions/' + encodeURIComponent(filename), {
-            method: 'PATCH', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ project: pSel.value, writing: wSel.value })
-          });
-          row.style.background = 'var(--verified)18';
-          setTimeout(() => { row.style.background = ''; }, 1200);
-        } catch(e) {}
-      }
-      pSel.onchange = patchSession;
-      wSel.onchange = patchSession;
-
-      hideBtn.onclick = async () => {
-        try {
-          await fetch('/api/sessions/' + encodeURIComponent(filename), {
-            method: 'PATCH', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ hidden: !isHidden })
-          });
-          loadIntelSessionList(); // Refresh the list
-        } catch(e) {}
-      };
-
-      row.appendChild(labelCol);
-      row.appendChild(pSel);
-      row.appendChild(wSel);
-      row.appendChild(viewBtn);
-      row.appendChild(hideBtn);
-      list.appendChild(row);
-      if (viewPanel) list.appendChild(viewPanel);
-    });
   } catch(e) {
-    list.innerHTML = '<div style="font-family:monospace;font-size:11px;color:#c94242">Error loading sessions: ' + e.message + '</div>';
+    const list = document.getElementById('intel-session-list');
+    if (list) list.innerHTML = '<div style="font-family:monospace;font-size:11px;color:#c94242">Error loading sessions: ' + e.message + '</div>';
   }
+}
+function filterIntelSessions() {
+  const q       = (document.getElementById('intel-session-search')?.value || '').toLowerCase().trim();
+  const proj    = document.getElementById('intel-session-project-filter')?.value || '';
+  const writ    = document.getElementById('intel-session-writing-filter')?.value || '';
+  const dateQ   = (document.getElementById('intel-session-date-filter')?.value || '').trim();
+  const countEl = document.getElementById('intel-session-count');
+  const list    = document.getElementById('intel-session-list');
+  if (!list) return;
+
+  const filtered = _allIntelSessions.filter(s => {
+    const matchQ    = !q || (s.title || s.filename || '').toLowerCase().includes(q);
+    const matchProj = !proj || (s.project || '') === proj;
+    const matchWrit = !writ || (s.writing || '') === writ;
+    const matchDate = !dateQ || (s.created || s.filename || '').includes(dateQ);
+    return matchQ && matchProj && matchWrit && matchDate;
+  });
+
+  if (countEl) countEl.textContent = '— ' + filtered.length + ' of ' + _allIntelSessions.length;
+
+  if (!filtered.length) {
+    list.innerHTML = '<div style="font-family:monospace;font-size:11px;color:var(--muted);font-style:italic;padding:8px 0">No sessions match filters</div>';
+    return;
+  }
+
+  // Re-render using existing row-building logic from loadIntelSessionList
+  // by calling it directly — simpler than duplicating the render logic
+  list.innerHTML = '';
+  filtered.forEach(s => {
+    const isHidden = s.hidden === true || s.hidden === 'true';
+    const row = document.createElement('div');
+    row.style.cssText = 'padding:6px 0;border-bottom:1px solid var(--border);font-family:monospace;font-size:11px' + (isHidden ? ';opacity:0.5' : '');
+    const dateEl = document.createElement('div');
+    dateEl.style.cssText = 'font-size:9px;color:var(--muted);margin-bottom:2px';
+    dateEl.textContent = (s.created || s.filename || '').slice(0,16).replace('T',' ') + ' UTC' +
+      (s.project ? ' · ' + s.project : '') +
+      (s.writing ? ' · ' + s.writing : '');
+    const titleEl = document.createElement('div');
+    titleEl.style.cssText = 'font-family:Georgia,serif;font-size:12px;color:var(--text);cursor:pointer';
+    titleEl.textContent = (s.title || s.filename || '').slice(0, 100);
+    titleEl.onclick = () => openSessionModal(s.filename, s.title || s.filename);
+    row.appendChild(dateEl);
+    row.appendChild(titleEl);
+    list.appendChild(row);
+  });
+}
+
+function clearIntelSessionFilters() {
+  const ids = ['intel-session-search','intel-session-date-filter'];
+  ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['intel-session-project-filter','intel-session-writing-filter'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  filterIntelSessions();
 }
 
 async function saveSynthesis() {
@@ -2155,7 +2135,7 @@ async function showRelatedSessions() {
 
   const projectSel = document.getElementById('synth-save-project');
   const project    = projectSel?.value?.trim() || '';
-  const url        = '/api/sessions/list' + (project ? '?project=' + encodeURIComponent(project) : '');
+  const url        = '/api/sessions/list?limit=5' + (project ? '&project=' + encodeURIComponent(project) : '');
 
   try {
     const res  = await fetch(url);

@@ -656,7 +656,28 @@
           <button class="btn-secondary" style="font-size:10px;padding:3px 8px" onclick="loadIntelSessionList()">&#8635; Refresh</button>
         </div>
       </div>
-      <div id="intel-session-list" style="font-size:12px;color:var(--muted)">
+      <!-- Filter row -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+        <input id="intel-session-search" type="text" placeholder="Search by keyword…"
+          style="font-family:monospace;font-size:10px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);flex:2;min-width:120px"
+          oninput="filterIntelSessions()">
+        <select id="intel-session-project-filter"
+          style="font-family:monospace;font-size:10px;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);flex:1;min-width:100px"
+          onchange="filterIntelSessions()">
+          <option value="">All projects</option>
+        </select>
+        <select id="intel-session-writing-filter"
+          style="font-family:monospace;font-size:10px;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);flex:1;min-width:100px"
+          onchange="filterIntelSessions()">
+          <option value="">All writing</option>
+        </select>
+        <input id="intel-session-date-filter" type="text" placeholder="Date (e.g. 2026-08)"
+          style="font-family:monospace;font-size:10px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);flex:1;min-width:90px"
+          oninput="filterIntelSessions()">
+        <button class="btn-secondary" style="font-size:10px;padding:3px 8px" onclick="clearIntelSessionFilters()">Clear</button>
+      </div>
+      <!-- Scrolling session list -->
+      <div id="intel-session-list" style="font-size:12px;color:var(--muted);max-height:420px;overflow-y:auto;padding-right:4px">
         <div style="font-family:monospace;font-size:11px;color:var(--muted);font-style:italic">Switch to Intelligence tab to load sessions</div>
       </div>
     </div>
