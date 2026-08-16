@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.17.0815-1635
+Marginalia — app.py  v1.6.17.0816-0247
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.17.0815-1635"
+APP_VERSION = "1.6.17.0816-0247"
 
 
 
@@ -201,9 +201,75 @@ def write_canonical_session(prompt: str, responses: dict, synthesis: str = "", p
 
     The `project` and `notes` fields in frontmatter enable the Intelligence tab
     to filter sessions by project scope and surface connections to deep read notes.
-    The `prompt_label` is the first 80 characters of the prompt — used as a
-    display label in the Intelligence tab without loading the full session body.
+    The `title` field is auto-generated from prompt keywords + synthesis concepts
+    so sessions are navigable without opening the full file.
     """
+    import re as _re
+
+    SESSION_STOP = {
+        "the","a","an","and","or","but","in","on","at","to","for","of","with",
+        "is","are","was","were","be","been","being","have","has","had","do","does",
+        "did","will","would","could","should","may","might","shall","can","this",
+        "that","these","those","it","its","they","their","there","what","how",
+        "why","when","where","which","who","if","as","by","from","into","through",
+        "about","after","before","between","during","without","within","across",
+        "please","provide","explain","describe","discuss","analyse","analyze",
+        "using","use","used","also","just","more","some","any","all","both",
+        "each","much","many","such","than","then","them","him","her","his","she",
+        "he","we","you","i","my","your","our","not","no","so","up","out","own",
+        "here","okay","others","whether","furthermore","provided","offered",
+        "regarding","points","medium","high","while","within","across","important",
+        "valuable","significant","relevant","interesting","useful","summarize",
+        "summary","following","prompts","responses","critical","critically",
+        "word","words","given","finally","briefly","comment","distill",
+    }
+    CONCEPT_STOP = {
+        "consensus","divergence","unique","contributions","absent","voices",
+        "survived","destabilized","unresolved","unasked","examiner","survey",
+        "pressure","synthesis","model","research","study","response","question",
+        "argument","approach","framework","perspective","analysis","evidence",
+        "context","section","overall","similarly","however","therefore",
+        "specifically","generally","simply","directly","currently","none",
+        "analytical","adds","gaps","notes","neither","explicitly","another",
+        "source","argues","elaborates","several","most","provides","bond",
+        "alignment","gauge","mortar","brick","masonry","course","standard",
+        "suggests","states","claims","shows","finds","okay","others","whether",
+        "furthermore","provided","offered","regarding","medium","high","here",
+        # Model names
+        "gemini","deepseek","qwen","mistral","cohere","gemma","llama","claude",
+        "openai","anthropic","chatgpt",
+    }
+
+    # Extract keywords from final prompt block (after last +++)
+    blocks = prompt.split("+++")
+    final_block = blocks[-1].strip() if blocks else prompt
+    kw_tokens = _re.findall(r'\b[a-zA-Z]{4,}\b', final_block.lower())
+    seen, keywords = set(), []
+    for w in kw_tokens:
+        if w not in SESSION_STOP and w not in seen:
+            seen.add(w); keywords.append(w)
+        if len(keywords) >= 5:
+            break
+
+    # Extract top concepts from synthesis by frequency
+    concepts = []
+    if synthesis:
+        c_tokens = _re.findall(r'\b[A-Z][a-z]{3,}\b', synthesis)
+        freq = {}
+        for t in c_tokens:
+            tl = t.lower()
+            if tl not in SESSION_STOP and tl not in CONCEPT_STOP:
+                freq[tl] = freq.get(tl, 0) + 1
+        concepts = [t for t, _ in sorted(freq.items(), key=lambda x: -x[1])[:3]]
+
+    # Build title
+    ts_short = datetime.now(timezone.utc).strftime("%Y%m%d")
+    kw_part  = " ".join(keywords[:4]) if keywords else "session"
+    title    = kw_part
+    if concepts:
+        title += " \u2014 " + ", ".join(concepts)
+    title += f" ({ts_short})"
+
     session_id    = str(uuid.uuid4())
     timestamp     = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M")
     filename      = f"session_{timestamp}.md"
@@ -214,6 +280,7 @@ def write_canonical_session(prompt: str, responses: dict, synthesis: str = "", p
     synth_block = synthesis if synthesis else "<!-- Add synthesis notes here -->"
     canonical = f"""---
 id: {session_id}
+title: {title}
 created_at: {datetime.now(timezone.utc).isoformat()}
 models: {list(responses.keys())}
 project: {project}

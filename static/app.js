@@ -348,9 +348,43 @@ function cancelPrompt() {
   document.getElementById('send-btn').disabled = false;
 }
 
+// ── Prompt state cleanup ──────────────────────────────────────────────────────
+// Clears all animation, loading, and timer state from the previous prompt run.
+// Called at the start of every sendPrompt to ensure a clean slate.
+function cleanupPromptState() {
+  // Stop all countdown timers
+  Object.keys(countdownTimers).forEach(model => {
+    clearTimeout(countdownTimers[model]);
+    delete countdownTimers[model];
+  });
+  // Stop all card timer intervals
+  Object.keys(cardTimerIntervals).forEach(model => {
+    clearInterval(cardTimerIntervals[model]);
+    delete cardTimerIntervals[model];
+  });
+  // Remove loading class from any lingering cards
+  document.querySelectorAll('.response-card.loading').forEach(card => {
+    card.classList.remove('loading');
+  });
+  // Remove pulsing from synthesis panel
+  const panel = document.getElementById('synthesis-panel');
+  if (panel) panel.classList.remove('pulsing');
+  // Clear cancel button
+  document.getElementById('cancel-btn')?.classList.remove('visible');
+  // Reset send button
+  document.getElementById('send-btn').disabled = false;
+  // Cancel active reader if somehow still alive
+  if (activeReader) { try { activeReader.cancel(); } catch(e) {} activeReader = null; }
+  // Clear no-project nudge from previous session
+  document.getElementById('no-project-nudge')?.remove();
+  // Clear pre-flight panel if it exists
+  document.getElementById('preflight-panel')?.remove();
+}
+
 async function sendPrompt() {
   const prompt = document.getElementById('prompt-input').value.trim();
   if (!prompt) return;
+  cleanupPromptState();
   const grid = document.getElementById('response-grid');
   grid.innerHTML = '';
   document.getElementById('synthesis-panel').style.display = 'none';
@@ -2116,9 +2150,9 @@ setInterval(() => {
 async function showRelatedSessions() {
   const strip    = document.getElementById('related-sessions-strip');
   const linksEl  = document.getElementById('related-sessions-links');
+  const basisEl  = document.getElementById('related-sessions-basis');
   if (!strip || !linksEl) return;
 
-  // Get active project slug if set
   const projectSel = document.getElementById('synth-save-project');
   const project    = projectSel?.value?.trim() || '';
   const url        = '/api/sessions/list' + (project ? '?project=' + encodeURIComponent(project) : '');
@@ -2129,17 +2163,128 @@ async function showRelatedSessions() {
     const sessions = (data.sessions || []).slice(0, 3);
     if (!sessions.length) { strip.style.display = 'none'; return; }
 
-    linksEl.innerHTML = sessions.map((s, i) =>
-      (i > 0 ? ' &nbsp;·&nbsp; ' : '') +
-      '<span style="cursor:pointer;text-decoration:underline" title="' +
-      (s.filename || '') + '">' + (s.title || s.filename) + '</span>'
-    ).join('');
+    // Update basis label for transparency — researcher needs to know why these surfaced
+    if (basisEl) {
+      basisEl.textContent = project
+        ? '— recent in project: ' + project
+        : '— most recent sessions';
+    }
+
+    linksEl.innerHTML = '';
+    sessions.forEach((s, i) => {
+      if (i > 0) {
+        const sep = document.createElement('span');
+        sep.innerHTML = ' &nbsp;&middot;&nbsp; ';
+        sep.style.color = 'var(--muted)';
+        linksEl.appendChild(sep);
+      }
+      const link = document.createElement('span');
+      link.style.cssText = 'cursor:pointer;text-decoration:underline dotted;color:var(--accent)';
+      link.title = s.filename || '';
+      link.textContent = s.title || s.filename;
+      link.onclick = () => openSessionModal(s.filename, s.title || s.filename);
+      linksEl.appendChild(link);
+    });
     strip.style.display = 'block';
   } catch(e) {
     strip.style.display = 'none';
   }
 }
 
+
+// ── Session modal — view related session content, inject or launch ────────────
+async function openSessionModal(filename, title) {
+  if (!filename) return;
+  // Create or reuse modal
+  let modal = document.getElementById('session-view-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'session-view-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+    document.body.appendChild(modal);
+  }
+  const project = document.getElementById('synth-save-project')?.value?.trim() || '';
+  const basisNote = project ? 'recent in project: ' + project : 'most recent sessions';
+  modal.innerHTML = '<div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;width:min(680px,92vw);max-height:80vh;display:flex;flex-direction:column;overflow:hidden">' +
+    '<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">' +
+    '<div><span style="font-family:monospace;font-size:12px;color:var(--text)">' + title + '</span>' +
+    '<span style="font-family:monospace;font-size:10px;color:var(--muted);margin-left:10px;font-style:italic">surfaced by: ' + basisNote + '</span></div>' +
+    '<span onclick="document.getElementById(\'session-view-modal\').remove()" style="cursor:pointer;color:var(--muted);font-size:18px;line-height:1">&times;</span>' +
+    '</div>' +
+    '<div id="session-modal-body" style="padding:14px 16px;overflow-y:auto;flex:1;font-family:monospace;font-size:11px;color:var(--muted)">Loading\u2026</div>' +
+    '<div style="padding:10px 16px;border-top:1px solid var(--border);display:flex;gap:8px">' +
+    '<button class="btn-secondary" style="font-size:10px" onclick="injectSessionIntoPrompt(\'' + filename + '\')">+++ Inject as context</button>' +
+    '<button class="btn-secondary" style="font-size:10px" onclick="launchFollowUpFromSession(\'' + filename + '\')">&#8618; Launch follow-up</button>' +
+    '<button class="btn-secondary" style="font-size:10px;margin-left:auto" onclick="document.getElementById(\'session-view-modal\').remove()">Close</button>' +
+    '</div></div>';
+  modal.style.display = 'flex';
+
+  try {
+    const res  = await fetch('/api/sessions/' + encodeURIComponent(filename) + '/raw');
+    const data = await res.json();
+    const body = document.getElementById('session-modal-body');
+    if (!body) return;
+    const content = data.content || '';
+    // Extract prompt and synthesis for readable display
+    const lines = content.split('\n');
+    let display = '';
+    let inSection = false;
+    lines.forEach(line => {
+      if (line.startsWith('## Prompt') || line.startsWith('## Synthesis') || line.startsWith('## Notes')) {
+        inSection = true;
+        display += '<div style="color:var(--accent);margin:8px 0 4px;text-transform:uppercase;font-size:10px;letter-spacing:.06em">' + line.replace('## ','') + '</div>';
+      } else if (line.startsWith('## ') && inSection) {
+        inSection = false;
+      } else if (inSection && line.trim()) {
+        display += '<div style="color:var(--text);line-height:1.6;margin-bottom:2px">' + line + '</div>';
+      }
+    });
+    body.innerHTML = display || '<div style="color:var(--muted)">No readable content found.</div>';
+  } catch(e) {
+    const body = document.getElementById('session-modal-body');
+    if (body) body.textContent = 'Could not load session.';
+  }
+}
+
+async function injectSessionIntoPrompt(filename) {
+  try {
+    const res  = await fetch('/api/sessions/' + encodeURIComponent(filename) + '/raw');
+    const data = await res.json();
+    const content = data.content || '';
+    // Extract just the prompt section for injection
+    const promptMatch = content.match(/## Prompt\n([\s\S]*?)(?:\n## |$)/);
+    const promptText  = promptMatch ? promptMatch[1].trim() : content.slice(0, 500);
+    const input = document.getElementById('prompt-input');
+    if (input) {
+      input.value = (input.value ? input.value + '\n\n+++\n\n' : '') + promptText;
+      input.dispatchEvent(new Event('input'));
+    }
+    document.getElementById('session-view-modal')?.remove();
+    showView('prompt', document.querySelector('.nav-btn[onclick*="prompt"]'));
+  } catch(e) {}
+}
+
+async function launchFollowUpFromSession(filename) {
+  try {
+    const res  = await fetch('/api/sessions/' + encodeURIComponent(filename) + '/raw');
+    const data = await res.json();
+    const content = data.content || '';
+    const synthMatch = content.match(/## Synthesis\n([\s\S]*?)(?:\n## |$)/);
+    const synthText  = synthMatch ? synthMatch[1].trim() : '';
+    const promptMatch = content.match(/## Prompt\n([\s\S]*?)(?:\n## |$)/);
+    const promptText  = promptMatch ? promptMatch[1].trim() : '';
+    const input = document.getElementById('prompt-input');
+    if (input) {
+      input.value = (promptText ? promptText + '\n\n+++\n\n' : '') +
+        (synthText ? synthText + '\n\n+++\n\n' : '') +
+        'Following up on this session — ';
+      input.dispatchEvent(new Event('input'));
+    }
+    document.getElementById('session-view-modal')?.remove();
+    showView('prompt', document.querySelector('.nav-btn[onclick*="prompt"]'));
+  } catch(e) {}
+}
 
 // ── Separator / prompt stacking ───────────────────────────────────────────────
 function getActivePrompt() {
