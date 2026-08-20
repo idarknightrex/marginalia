@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.17.0816-0247
+Marginalia — app.py  v1.6.18.0820-0929
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.17.0816-0247"
+APP_VERSION = "1.6.18.0820-0929"
 
 
 
@@ -354,18 +354,14 @@ def read_all_references() -> list:
     return refs
 
 
-def call_ollama(model_str: str, prompt: str, unload_after: bool = True) -> str:
+def call_ollama(model_str: str, prompt: str, unload_after: bool = True, num_predict: int = -1) -> str:
     import urllib.request as _ur
     payload = json.dumps({
         "model":      model_str,
         "prompt":     prompt,
         "stream":     False,
-        # keep_alive=0 — unloads model from RAM immediately after response.
-        # This is intentional: allows sequential local model firing without
-        # memory pressure on the Mini. Cold start cost (~15-20s from Vault,
-        # ~8-17s from internal NVMe) is accepted in exchange for not holding
-        # multiple 5-10GB models in RAM simultaneously.
-        "keep_alive": 0 if unload_after else "5m"
+        "keep_alive": 0 if unload_after else "5m",
+        "options":    {"num_predict": num_predict} if num_predict > 0 else {}
     }).encode()
     req = _ur.Request(f"{OLLAMA_BASE}/api/generate", data=payload, headers={"Content-Type": "application/json"})
     with _ur.urlopen(req, timeout=300) as r:
@@ -853,7 +849,18 @@ def key_status():
     })
 
 
-def call_model(model, prompt):
+def call_model(model, prompt, num_predict=-1):
+    # Style instruction prepended to every prompt — server-side, not visible to researcher.
+    # Addresses two persistent problems: markdown structure breaking response cards,
+    # and sycophantic openers ("What a fascinating question!") before substantive content.
+    STYLE_PREAMBLE = (
+        "Begin your response with substantive content. "
+        "Do not open with affirmations, compliments, or observations about the quality of the question. "
+        "Respond in plain prose. Do not use markdown headers (##, ###), bullet points, numbered lists, "
+        "or bold/italic formatting unless the content is genuinely a list or requires code blocks. "
+        "Write as if corresponding with a peer researcher, not tutoring a student.\n\n"
+    )
+    prompt = STYLE_PREAMBLE + prompt
     settings  = load_settings()
     local_cfg = settings.get("models", {}).get("local", {})
     try:
@@ -874,19 +881,19 @@ def call_model(model, prompt):
             r = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": prompt}])
             return (model, r.choices[0].message.content, None, 0, 0)
         elif model == "deepseek":
-            return (model, call_ollama(local_cfg.get("reasoning",  "deepseek-r1:8b"),    prompt), None, 0, 0)
+            return (model, call_ollama(local_cfg.get("reasoning",  "deepseek-r1:8b"),    prompt, num_predict=num_predict), None, 0, 0)
         elif model == "gemma":
-            return (model, call_ollama(local_cfg.get("multimodal", "gemma4:latest"),     prompt), None, 0, 0)
+            return (model, call_ollama(local_cfg.get("multimodal", "gemma4:latest"),     prompt, num_predict=num_predict), None, 0, 0)
         elif model == "llama":
-            return (model, call_ollama(local_cfg.get("general",    "llama3.1:8b"),       prompt), None, 0, 0)
+            return (model, call_ollama(local_cfg.get("general",    "llama3.1:8b"),       prompt, num_predict=num_predict), None, 0, 0)
         elif model == "qwen":
-            return (model, call_ollama(local_cfg.get("asia",       "qwen2.5:14b"),       prompt), None, 0, 0)
+            return (model, call_ollama(local_cfg.get("asia",       "qwen2.5:14b"),       prompt, num_predict=num_predict), None, 0, 0)
         elif model == "mistral":
-            return (model, call_ollama(local_cfg.get("europe",     "mistral:7b"),        prompt), None, 0, 0)
+            return (model, call_ollama(local_cfg.get("europe",     "mistral:7b"),        prompt, num_predict=num_predict), None, 0, 0)
         elif model == "cohere":
-            return (model, call_ollama(local_cfg.get("canadian",   "command-r7b:latest"),       prompt), None, 0, 0)
+            return (model, call_ollama(local_cfg.get("canadian",   "command-r7b:latest"),prompt, num_predict=num_predict), None, 0, 0)
         elif model.startswith("ollama:"):
-            return (model, call_ollama(model[len("ollama:"):], prompt), None, 0, 0)
+            return (model, call_ollama(model[len("ollama:"):], prompt, num_predict=num_predict), None, 0, 0)
         else:
             return (model, None, "No key configured", 0, 0)
     except Exception as e:
@@ -911,6 +918,9 @@ def handle_prompt():
     models          = data.get("models", [])
     synthesis_model = data.get("synthesis_model", "deepseek")
     synth_mode      = data.get("synth_mode", "survey")
+    # Output limiter: -1 = unlimited (Ollama default), otherwise token cap
+    # Maps from UI labels: short=256, medium=512, long=1024, unlimited=-1
+    num_predict     = int(data.get("num_predict", -1))
 
     dynamic_local = [m for m in models if m.startswith("ollama:")]
     cloud_ordered = [m for m in MODEL_ORDER if m in models and m in CLOUD_MODELS]
@@ -924,7 +934,7 @@ def handle_prompt():
             for m in cloud_ordered:
                 yield json.dumps({"event": "start", "model": m}) + "\n"
             with concurrent.futures.ThreadPoolExecutor() as ex:
-                futures = {ex.submit(call_model, m, prompt): m for m in cloud_ordered}
+                futures = {ex.submit(call_model, m, prompt, num_predict): m for m in cloud_ordered}
                 for future in concurrent.futures.as_completed(futures):
                     try:
                         model, result, error, in_tok, out_tok = future.result()
@@ -948,10 +958,15 @@ def handle_prompt():
                         yield json.dumps({"event": "error", "model": model, "error": err_msg}) + "\n"
 
         for model in local_ordered:
+            global _prompt_cancel_flag
+            if _prompt_cancel_flag:
+                _prompt_cancel_flag = False  # reset for next run
+                yield json.dumps({"event": "cancelled"}) + "\n"
+                break
             yield json.dumps({"event": "start", "model": model}) + "\n"
             import time; time.sleep(0.05)
             yield json.dumps({"event": "heartbeat"}) + "\n"
-            _, result, error, _, _ = call_model(model, prompt)
+            _, result, error, _, _ = call_model(model, prompt, num_predict)
             if result:
                 results[model] = result
                 yield json.dumps({"event": "result", "model": model, "text": result}) + "\n"
@@ -1081,7 +1096,9 @@ def update_reference(ref_filename):
         else:
             body = body.rstrip() + "\n\n" + log_marker + "\n" + edit_line + "\n"
 
-    fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v)
+    # Use "is not None and v != \"\"" rather than "if v" to preserve falsy values
+    # like needs_review: false and reading_status: unread which are meaningful
+    fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v is not None and v != "")
     new_file = f"---\n{fm_lines}\n---\n{body}"
     filepath.write_text(new_file, encoding="utf-8")
     return jsonify({"status": "updated", "filename": ref_filename})
@@ -1111,7 +1128,7 @@ def update_reference_status(ref_filename):
         return jsonify({"error": "Reference not found"}), 404
 
     new_status = (request.json or {}).get("status", "")
-    valid = {"surfaced", "located", "verified"}
+    valid = {"surfaced", "imported", "located", "verified"}
     if new_status not in valid:
         return jsonify({"error": f"Invalid status. Must be one of: {valid}"}), 400
 
@@ -1138,7 +1155,7 @@ def update_reference_status(ref_filename):
     else:
         body = body.rstrip() + "\n\n" + log_marker + "\n" + log_line + "\n"
 
-    fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v)
+    fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v is not None and v != "")
     filepath.write_text(f"---\n{fm_lines}\n---\n{body}", encoding="utf-8")
     return jsonify({"status": "updated", "verification_status": new_status})
 
@@ -1701,6 +1718,16 @@ def get_session_raw(session_filename):
     if not filepath.exists():
         return jsonify({"error": "Session not found"}), 404
     return jsonify({"content": filepath.read_text(encoding="utf-8"), "filename": session_filename})
+
+# Global cancel flag — set by /api/prompt/cancel, checked between model calls in SSE
+_prompt_cancel_flag = False
+
+@app.route("/api/prompt/cancel", methods=["POST"])
+def cancel_prompt():
+    global _prompt_cancel_flag
+    _prompt_cancel_flag = True
+    return jsonify({"status": "cancel_requested"})
+
 
 @app.route("/api/synthesise", methods=["POST"])
 def synthesise():

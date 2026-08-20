@@ -211,15 +211,64 @@ document.addEventListener('DOMContentLoaded', function() {
   const promptInput = document.getElementById('prompt-input');
   if (promptInput) {
     promptInput.addEventListener('input', function() {
-      document.getElementById('token-estimate').textContent =
-        '~' + Math.round(this.value.trim().split(/\s+/).length * 1.3) + ' tokens';
+      const text   = this.value;
+      const layers = text.split('+++');
+      const counts = layers.map(l => Math.round(l.trim().split(/\s+/).filter(Boolean).length * 1.3));
+      const total  = counts.reduce((a, b) => a + b, 0);
+      const estEl  = document.getElementById('token-estimate');
+
+      if (layers.length > 1) {
+        // Show per-layer breakdown
+        const parts   = counts.map((c, i) => (i === layers.length - 1 ? `<strong>${c}</strong>` : c));
+        const finalPct = total > 0 ? counts[counts.length - 1] / total : 1;
+        let label = `~${total} tokens (${parts.join(' + ')})`;
+        if (finalPct < 0.2 && total > 50) {
+          label += ' <span style="color:#c9a832" title="Final prompt is less than 20% of total context — models may weight the context layers more heavily than your question">⚠ final prompt light</span>';
+          // Show focus button
+          let focusBtn = document.getElementById('focus-prompt-btn');
+          if (!focusBtn) {
+            focusBtn = document.createElement('button');
+            focusBtn.id = 'focus-prompt-btn';
+            focusBtn.className = 'hide-inactive-btn';
+            focusBtn.textContent = '⊙ Focus final';
+            focusBtn.dataset.tooltip = 'Inject a focus instruction before the final prompt block so models weight it appropriately';
+            focusBtn.onclick = injectFocusInstruction;
+            estEl.parentNode.insertBefore(focusBtn, estEl.nextSibling);
+          }
+        } else {
+          document.getElementById('focus-prompt-btn')?.remove();
+        }
+        estEl.innerHTML = label;
+      } else {
+        document.getElementById('focus-prompt-btn')?.remove();
+        estEl.textContent = '~' + Math.round(text.trim().split(/\s+/).filter(Boolean).length * 1.3) + ' tokens';
+      }
     });
   }
   // Apply saved font size on load
   initFontSize();
 });
 
-// Countdown bar durations per model (milliseconds).
+// ── Focus instruction injection ───────────────────────────────────────────────
+// When the final prompt block is short relative to the context stack, models
+// may weight the context more than the actual question. This injects a focus
+// instruction before the final block to signal what the model should prioritise.
+// Invisible in the model's output — a server-side concern made visible to the
+// researcher as an optional one-click fix.
+function injectFocusInstruction() {
+  const input  = document.getElementById('prompt-input');
+  if (!input) return;
+  const FOCUS  = '[FOCUS: The following short prompt is the primary question. Use the context above as background only. Answer what is asked specifically, not what the context suggests.]';
+  const layers = input.value.split('+++');
+  if (layers.length < 2) return;
+  // Insert focus instruction before the final block
+  layers[layers.length - 1] = '\n' + FOCUS + '\n\n' + layers[layers.length - 1].trim();
+  input.value = layers.join('+++');
+  input.dispatchEvent(new Event('input'));
+  document.getElementById('focus-prompt-btn')?.remove();
+}
+
+// ── Countdown bar durations ───────────────────────────────────────────────────
 // Local models get 300s (5 min) because they cold-load from disk on every
 // call (keep_alive=0). Cloud models get 60s — network timeouts are handled
 // server-side. Dynamic ollama: models fall back to 300s.
@@ -410,7 +459,7 @@ async function sendPrompt() {
         full_prompt:      prompt,
         models,
         synthesis_model:  document.getElementById('synthesis-model-select')?.value || 'deepseek',
-        synth_mode:       document.getElementById('synthesis-mode-select')?.value || 'survey',
+        num_predict:      parseInt(document.getElementById('output-length-select')?.value || '-1'),
         project:          document.getElementById('session-project-select')?.value || '',
         writing:          document.getElementById('session-writing-select')?.value || '',
         synthesis_context: getSynthesisContext(),
@@ -2143,7 +2192,29 @@ async function showRelatedSessions() {
     const sessions = (data.sessions || []).slice(0, 3);
     if (!sessions.length) { strip.style.display = 'none'; return; }
 
-    // Update basis label for transparency — researcher needs to know why these surfaced
+    // Cluster sessions by date + keyword overlap
+    // Sessions from the same date with >40% shared keywords in title merge into one cluster
+    const clusters = [];
+    sessions.forEach(s => {
+      const sDate  = (s.created || s.filename || '').slice(0,10);
+      const sWords = new Set((s.title || s.filename || '').toLowerCase().split(/\W+/).filter(w => w.length > 3));
+      // Try to merge into existing cluster
+      let merged = false;
+      for (const cluster of clusters) {
+        if (cluster.date !== sDate) continue;
+        const overlap = [...sWords].filter(w => cluster.words.has(w)).length;
+        const unionSize = new Set([...sWords, ...cluster.words]).size;
+        if (unionSize > 0 && overlap / unionSize > 0.3) {
+          cluster.sessions.push(s);
+          cluster.words = new Set([...cluster.words, ...sWords]);
+          merged = true;
+          break;
+        }
+      }
+      if (!merged) clusters.push({ date: sDate, sessions: [s], words: sWords });
+    });
+
+    // Update basis label
     if (basisEl) {
       basisEl.textContent = project
         ? '— recent in project: ' + project
@@ -2151,18 +2222,23 @@ async function showRelatedSessions() {
     }
 
     linksEl.innerHTML = '';
-    sessions.forEach((s, i) => {
+    clusters.forEach((cluster, i) => {
       if (i > 0) {
         const sep = document.createElement('span');
         sep.innerHTML = ' &nbsp;&middot;&nbsp; ';
         sep.style.color = 'var(--muted)';
         linksEl.appendChild(sep);
       }
-      const link = document.createElement('span');
+      const s       = cluster.sessions[0];
+      const count   = cluster.sessions.length;
+      const display = (s.title || s.filename || '').slice(0, 50);
+      const link    = document.createElement('span');
       link.style.cssText = 'cursor:pointer;text-decoration:underline dotted;color:var(--accent)';
-      link.title = s.filename || '';
-      link.textContent = s.title || s.filename;
-      link.onclick = () => openSessionModal(s.filename, s.title || s.filename);
+      link.title = count > 1 ? count + ' sessions clustered — click to view' : (s.filename || '');
+      link.textContent   = display + (count > 1 ? ' (' + count + ')' : '');
+      link.onclick = count > 1
+        ? () => openClusterModal(cluster.sessions, display)
+        : () => openSessionModal(s.filename, s.title || s.filename);
       linksEl.appendChild(link);
     });
     strip.style.display = 'block';
@@ -2171,6 +2247,36 @@ async function showRelatedSessions() {
   }
 }
 
+
+// ── Cluster modal — view all sessions in a clustered thread ──────────────────
+function openClusterModal(sessions, clusterTitle) {
+  let modal = document.getElementById('session-view-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'session-view-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = '<div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;width:min(680px,92vw);max-height:80vh;display:flex;flex-direction:column;overflow:hidden">' +
+    '<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">' +
+    '<div><span style="font-family:monospace;font-size:12px;color:var(--text)">' + clusterTitle + '</span>' +
+    '<span style="font-family:monospace;font-size:10px;color:var(--muted);margin-left:10px">' + sessions.length + ' sessions in this thread</span></div>' +
+    '<span onclick="document.getElementById(\'session-view-modal\').remove()" style="cursor:pointer;color:var(--muted);font-size:18px;line-height:1">&times;</span>' +
+    '</div>' +
+    '<div style="padding:10px 16px;overflow-y:auto;flex:1">' +
+    sessions.map(s => '<div style="padding:8px 0;border-bottom:1px solid var(--border)">' +
+      '<div style="font-family:monospace;font-size:9px;color:var(--muted);margin-bottom:3px">' + (s.created || s.filename || '').slice(0,16).replace('T',' ') + ' UTC</div>' +
+      '<div style="font-family:Georgia,serif;font-size:12px;color:var(--accent);cursor:pointer;text-decoration:underline dotted" onclick="openSessionModal(\'' + s.filename + '\',\'' + (s.title || s.filename).replace(/'/g, "\\'") + '\')">' +
+      (s.title || s.filename) + '</div>' +
+      '</div>'
+    ).join('') +
+    '</div>' +
+    '<div style="padding:10px 16px;border-top:1px solid var(--border)">' +
+    '<button class="btn-secondary" style="font-size:10px" onclick="document.getElementById(\'session-view-modal\').remove()">Close</button>' +
+    '</div></div>';
+  modal.style.display = 'flex';
+}
 
 // ── Session modal — view related session content, inject or launch ────────────
 async function openSessionModal(filename, title) {
@@ -2548,6 +2654,9 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
         'therefore','specifically','particularly','essentially','generally',
         'bond','course','gauge','mortar','brick','bricks','masonry','mason',
         'simply','merely','directly','currently','recently','typically',
+        'your','none','their','these','those','other','which','where',
+        'buddhist','christian','islamic','western','eastern','ancient',
+        'intentional','traditional','conventional','philosophical','psychological',
         'gemini','deepseek','qwen','mistral','cohere','gemma','llama','claude',
         'openai','anthropic','chatgpt',
         'western','eastern','indigenous','canadian','english','french','latin',
@@ -3506,6 +3615,28 @@ updateLocalWarning();
 checkKeyStatus();
 checkSetupStatus();
 checkLocalModels();
+// Check for recently saved session — models may still be running if page was refreshed
+(async () => {
+  try {
+    const res  = await fetch('/api/sessions/list?limit=1');
+    const data = await res.json();
+    const sessions = data.sessions || data || [];
+    if (sessions.length) {
+      const latest = sessions[0];
+      const created = new Date(latest.created || latest.created_at || 0);
+      const ageMs  = Date.now() - created.getTime();
+      if (ageMs < 90000) {  // within 90 seconds
+        const banner = document.createElement('div');
+        banner.id = 'recent-session-banner';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999;background:#c9a832;color:#1a1a1a;font-family:monospace;font-size:11px;padding:6px 16px;display:flex;align-items:center;justify-content:space-between';
+        banner.innerHTML = '<span>&#9711; A session was saved recently — models may still be running. <a href="#" onclick="showView(\'intelligence\',document.querySelector(\'.nav-btn[onclick*=intelligence]\'));document.getElementById(\'recent-session-banner\').remove();return false;" style="color:#1a1a1a;text-decoration:underline">Check Intelligence tab</a></span>' +
+          '<span style="cursor:pointer;padding:0 8px" onclick="document.getElementById(\'recent-session-banner\').remove()">&#215;</span>';
+        document.body.prepend(banner);
+        setTimeout(() => banner.remove(), 15000);
+      }
+    }
+  } catch(e) {}
+})();
 // Pre-populate session scope selectors and synth save dropdown on load
 (async () => {
   try {

@@ -171,6 +171,15 @@
       <button class="hide-inactive-btn" onclick="promptPressureTest()" data-tooltip="Examine this prompt before firing — what are you assuming? what are you not asking?" style="color:var(--accent);border-color:var(--accent)">&#9670; Test prompt</button>
       <button class="hide-inactive-btn" onclick="setLocalOnly()" data-tooltip="Deactivate all cloud chips — activate installed local models only">Local only</button>
       <button class="hide-inactive-btn" id="hide-inactive-btn" onclick="toggleHideInactive(this)" data-tooltip="Hide chips for models not currently selected">Hide inactive</button>
+      <div style="display:flex;align-items:center;gap:6px;font-family:monospace;font-size:10px;color:var(--muted)" data-tooltip="Maximum response length — Short 256 tokens, Medium 512, Long 1024, Unlimited">
+        <span>&#9636;</span>
+        <select id="output-length-select" style="font-family:monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 4px">
+          <option value="-1">Unlimited</option>
+          <option value="256">Short</option>
+          <option value="512">Medium</option>
+          <option value="1024">Long</option>
+        </select>
+      </div>
       <button class="btn-primary" id="send-btn" onclick="sendPrompt()" data-tooltip="Send prompt to all active model chips">Send to Active Models &#8594;</button>
     </div>
 
