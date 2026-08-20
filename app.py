@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.18.0820-1329
+Marginalia — app.py  v1.6.18.0820-1939
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.18.0820-1329"
+APP_VERSION = "1.6.18.0820-1939"
 
 
 
@@ -1080,6 +1080,12 @@ def update_reference(ref_filename):
         body = replace_section(body, "Connections", data["connections"])
     if "tags" in data:
         meta["tags"] = data["tags"]
+
+    # Write all tracked frontmatter fields from data into meta
+    for field in ["title","authors","year","source_type","url_doi","physical_holding",
+                  "holding_location","verification_status","reading_status","needs_review"]:
+        if field in data:
+            meta[field] = str(data[field]).strip() if data[field] is not None else ""
 
     meta["updated_at"] = datetime.now(timezone.utc).isoformat()
 
