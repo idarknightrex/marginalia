@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.18.0820-0929
+Marginalia — app.py  v1.6.18.0820-1329
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.18.0820-0929"
+APP_VERSION = "1.6.18.0820-1329"
 
 
 
@@ -151,7 +151,7 @@ reading_status: {data.get("reading_status", "unread")}
 physical_holding: {data.get("physical_holding", "none")}
 holding_location: {data.get("holding_location", "")}
 tags: {tags}
-needs_review: {str(data.get("needs_review", False)).lower()}
+needs_review: {str(data.get("needs_review", True)).lower()}
 created_at: {datetime.now(timezone.utc).isoformat()}
 updated_at: {datetime.now(timezone.utc).isoformat()}
 ---
