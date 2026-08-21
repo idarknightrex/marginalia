@@ -3609,6 +3609,22 @@ async function loadWritingForScope(sel, preserve) {
 // { "broadcast": { "active": true, "expires": "ISO", "title": "v1.4.0 live",
 //   "body": "Session lock, read-only phone mode, what's changed detail in broadcast" } }
 
+// ── UTC clock — updates every minute, visible in status bar ──────────────────
+function updateUTCClock() {
+  const now = new Date();
+  const hh  = String(now.getUTCHours()).padStart(2,'0');
+  const mm  = String(now.getUTCMinutes()).padStart(2,'0');
+  const dd  = String(now.getUTCDate()).padStart(2,'0');
+  const mo  = String(now.getUTCMonth()+1).padStart(2,'0');
+  const el  = document.getElementById('utc-clock');
+  if (el) el.textContent = `UTC ${hh}:${mm}`;
+  // Also store as stamp format for build reference
+  const stamp = mo + dd + '-' + hh + mm;
+  if (el) el.dataset.stamp = stamp;
+}
+updateUTCClock();
+setInterval(updateUTCClock, 60000);
+
 // ── Init ──────────────────────────────────────────────────────────────────
 checkBroadcast();
 updateLocalWarning();
