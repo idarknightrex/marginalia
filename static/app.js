@@ -526,8 +526,17 @@ async function sendPrompt() {
             'Weaving argument threads\u2026',
             'Identifying epistemic gaps\u2026',
             'Conbobulating obfusticators\u2026',
+            'Surfacing what the council missed\u2026',
+            'Finding where the outliers sit\u2026',
+            'Reading the shape of disagreement\u2026',
           ];
-          text.textContent = splineMessages[Math.floor(Math.random() * splineMessages.length)];
+          let msgIdx = Math.floor(Math.random() * splineMessages.length);
+          text.textContent = splineMessages[msgIdx];
+          const msgInterval = setInterval(() => {
+            if (!panel.classList.contains('pulsing')) { clearInterval(msgInterval); return; }
+            msgIdx = (msgIdx + 1) % splineMessages.length;
+            text.textContent = splineMessages[msgIdx];
+          }, 4000);
         } else if (evt.event === 'synthesis') {
           const panel = document.getElementById('synthesis-panel');
           const text  = document.getElementById('synthesis-text');
@@ -2231,11 +2240,15 @@ async function showRelatedSessions() {
       }
       const s       = cluster.sessions[0];
       const count   = cluster.sessions.length;
-      const display = (s.title || s.filename || '').slice(0, 50);
+      const display = (s.title || s.filename || '').slice(0, 70);
+      // Truncate at word boundary if mid-word
+      const trimmed = display.length < (s.title || '').length
+        ? display.slice(0, display.lastIndexOf(' ')) || display
+        : display;
       const link    = document.createElement('span');
       link.style.cssText = 'cursor:pointer;text-decoration:underline dotted;color:var(--accent)';
       link.title = count > 1 ? count + ' sessions clustered — click to view' : (s.filename || '');
-      link.textContent   = display + (count > 1 ? ' (' + count + ')' : '');
+      link.textContent   = trimmed + (count > 1 ? ' (' + count + ')' : '');
       link.onclick = count > 1
         ? () => openClusterModal(cluster.sessions, display)
         : () => openSessionModal(s.filename, s.title || s.filename);
@@ -2657,6 +2670,11 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
         'your','none','their','these','those','other','which','where',
         'buddhist','christian','islamic','western','eastern','ancient',
         'intentional','traditional','conventional','philosophical','psychological',
+        'viewed','defined','without','regarding','stated','argued','noted',
+        'proposed','suggested','described','explained','discussed','presented',
+        // Common first names that appear without surnames
+        'francisco','rene','immanuel','gottfried','baruch','george','thomas',
+        'william','john','david','michael','james','robert','richard','charles',
         'gemini','deepseek','qwen','mistral','cohere','gemma','llama','claude',
         'openai','anthropic','chatgpt',
         'western','eastern','indigenous','canadian','english','french','latin',
