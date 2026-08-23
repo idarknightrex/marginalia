@@ -634,6 +634,23 @@ function setReadingFilter(btn) {
   activeReadingFilter = btn.dataset.reading;
   renderRefs();
 }
+function resetAllRefFilters() {
+  // Hard reset all filter state — recovers from any stuck/corrupt filter combination
+  activeFilter = 'all';
+  activeReadingFilter = 'all';
+  document.querySelectorAll('.filter-btn[data-filter]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.filter-btn[data-reading]').forEach(b => b.classList.remove('active'));
+  const allBtn = document.getElementById('filter-all');
+  const readingAllBtn = document.getElementById('reading-all');
+  if (allBtn) allBtn.classList.add('active');
+  if (readingAllBtn) readingAllBtn.classList.add('active');
+  document.getElementById('ref-search').value = '';
+  const projFilter = document.getElementById('ref-project-filter');
+  if (projFilter) projFilter.value = '';
+  const yearFilter = document.getElementById('ref-year-filter');
+  if (yearFilter) yearFilter.value = '';
+  renderRefs();
+}
 function setReadingStatus(btn) {
   document.querySelectorAll('.reading-status-btn').forEach(b => {
     b.classList.remove('active');
@@ -711,8 +728,10 @@ function renderRefs() {
 
   const filtered = allRefs.filter(r => {
     const matchFilter  = activeFilter === 'all' || r.verification_status === activeFilter;
-    const matchSearch  = !q || [r.title, r.authors, r.themes].some(f => f && f.toLowerCase().includes(q));
-    const matchProject = !slug || (r.conn_list || []).some(line => line.split('|')[0].trim() === slug);
+    const matchSearch  = !q || [r.title, r.authors, r.themes, r.tags, r.themes_body, r.annotation, r.user_notes].some(f => f && f.toLowerCase().includes(q));
+    const matchProject = !slug ? true
+      : slug === '__none__' ? !(r.conn_list || []).some(line => line.trim().length > 0)
+      : (r.conn_list || []).some(line => line.split('|')[0].trim() === slug);
     const refYear      = parseInt(r.year);
     const matchYear    = yearMin === null || (!isNaN(refYear) && refYear >= yearMin && refYear <= yearMax);
     // Reading filter: 'needs-review' matches needs_review=true OR (unread AND imported)
@@ -1144,7 +1163,7 @@ async function saveEdit() {
       method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
     });
     const data = await res.json();
-    if (data.status === 'updated') { closeEditModal(); await loadRefs(); }
+    if (data.status === 'updated') { closeEditModal(); await loadRefs(); resetAllRefFilters(); }
     else { alert(data.error || 'Save failed'); }
   } catch(e) { alert('Save failed: ' + e.message); }
   btn.textContent = 'Save'; btn.disabled = false;

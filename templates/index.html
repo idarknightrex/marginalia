@@ -347,9 +347,10 @@
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
         <select id="ref-project-filter" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;flex:1" onchange="filterRefs()">
           <option value="">All projects</option>
+          <option value="__none__">No project</option>
         </select>
         <input id="ref-year-filter" type="text" placeholder="Year (e.g. 1952 or 1950-1960)" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;width:160px" oninput="filterRefs()">
-        <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="document.getElementById('ref-search').value='';document.getElementById('ref-project-filter').value='';document.getElementById('ref-year-filter').value='';filterRefs()">Clear all</button>
+        <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="resetAllRefFilters()">Clear all</button>
       </div>
       <div class="filter-row" style="margin:0">
         <div style="font-size:10px;font-family:monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Filter by status</div>

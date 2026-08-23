@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.18.0820-0122
+Marginalia — app.py  v1.6.18.0823-0100
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.18.0820-0122"
+APP_VERSION = "1.6.18.0823-0100"
 
 
 
@@ -190,7 +190,21 @@ updated_at: {datetime.now(timezone.utc).isoformat()}
     return filepath
 
 
-def write_canonical_session(prompt: str, responses: dict, synthesis: str = "", project: str = "", notes: str = "", writing: str = "") -> Path:
+def strip_jats(text: str) -> str:
+    """Strip JATS XML tags from abstract text returned by academic APIs.
+    Publishers wrap abstracts in <jats:p>, <jats:italic> etc. which come
+    through raw from Semantic Scholar and OpenAlex."""
+    import re
+    # Remove all <jats:*> and </jats:*> tags
+    text = re.sub(r'</?jats:[^>]+>', '', text)
+    # Remove any other XML/HTML tags that slip through
+    text = re.sub(r'<[^>]+>', '', text)
+    # Collapse multiple spaces/newlines
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+
     """
     Write a session as a plain markdown file.
 
@@ -537,7 +551,7 @@ def parse_bibtex_import(text: str) -> list:
     for entry in db.entries:
         authors_raw = entry.get("author", "")
         authors = "; ".join(a.strip() for a in authors_raw.split(" and ")) if authors_raw else ""
-        abstract = entry.get("abstract", "").strip()
+        abstract = strip_jats(entry.get("abstract", "").strip())
         note     = (entry.get("note", "") or entry.get("annote", "")).strip()
         if note:
             note = f"<!-- [import] BibTeX note field — review and edit -->\n\n{note}"
@@ -580,7 +594,7 @@ def _parse_bibtex_minimal(text: str) -> list:
             return re.sub(r'\s+', ' ', m2.group(1).strip()) if m2 else ""
         authors_raw = field("author")
         authors = "; ".join(a.strip() for a in authors_raw.split(" and ")) if authors_raw else ""
-        abstract = field("abstract").strip()
+        abstract = strip_jats(field("abstract").strip())
         note     = (field("note") or field("annote")).strip()
         if note:
             note = f"<!-- [import] BibTeX note field — review and edit -->\n\n{note}"
@@ -2101,7 +2115,7 @@ def annotate_reference(ref_filename):
     if "## Abstract" in existing_body:
         raw_abstract = existing_body.split("## Abstract")[1].split("\n## ")[0].strip()
         if raw_abstract and not raw_abstract.startswith("<!--"):
-            abstract_block = f"\nAbstract: {raw_abstract[:800]}"
+            abstract_block = f"\nAbstract: {strip_jats(raw_abstract)[:800]}"
 
     annotation_prompt = f"""Write an annotated bibliography entry for the following academic source. The annotation must be 3-5 sentences of plain prose — no headers, no bullet points, no bold labels, no preamble.
 
@@ -2388,7 +2402,7 @@ def enrich_confirm(ref_filename):
             k, v = line.split(": ", 1)
             meta[k.strip()] = v.strip()
 
-    abstract_section = build_tldr_section(candidate["abstract"], candidate.get("tldr_source", ""))
+    abstract_section = build_tldr_section(strip_jats(candidate["abstract"]), candidate.get("tldr_source", ""))
 
     # Cleanly replace JUST the Abstract section. Properly bounded this time:
     # find the Abstract marker, find the NEXT "## " heading after it
