@@ -728,7 +728,9 @@ function renderRefs() {
 
   const filtered = allRefs.filter(r => {
     const matchFilter  = activeFilter === 'all' || r.verification_status === activeFilter;
-    const matchSearch  = !q || [r.title, r.authors, r.themes, r.tags, r.themes_body, r.annotation, r.user_notes].some(f => f && f.toLowerCase().includes(q));
+    const searchFields = [r.title, r.authors, r.keywords, r.annotation, r.user_notes,
+      (r.keywords_list || []).join(' ')];
+    const matchSearch  = !q || searchFields.some(f => f && f.toLowerCase().includes(q));
     const matchProject = !slug ? true
       : slug === '__none__' ? !(r.conn_list || []).some(line => line.trim().length > 0)
       : (r.conn_list || []).some(line => line.split('|')[0].trim() === slug);
@@ -800,7 +802,7 @@ function renderRefs() {
     card.appendChild(topRow);
 
     // Tags + connections
-    const tagsList = (ref.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+    const tagsList = (ref.keywords || '').split(',').map(t => t.trim()).filter(Boolean);
     const connList = ref.conn_list || [];
     if (tagsList.length || connList.length) {
       const tagRow = document.createElement('div');
@@ -850,23 +852,23 @@ function renderRefs() {
     card.appendChild(actions);
 
     // Details
-    const hasDetails = (ref.theme_list && ref.theme_list.length) ||
+    const hasDetails = (ref.keywords_list && ref.keywords_list.length) ||
                        ref.annotation || ref.user_notes || ref.argument_connection;
     if (hasDetails) {
       const sep = document.createElement('hr');
       sep.style.cssText = 'border:none;border-top:1px solid var(--border);margin:10px 0 8px';
       card.appendChild(sep);
     }
-    if (ref.theme_list && ref.theme_list.length) {
+    if (ref.keywords_list && ref.keywords_list.length) {
       const label = document.createElement('div');
       label.style.cssText = 'font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px';
       label.textContent = 'Themes';
       const el = document.createElement('div');
       el.style.cssText = 'font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:6px';
-      const visible = ref.theme_list.slice(0, 2);
-      const rest    = ref.theme_list.slice(2);
+      const visible = ref.keywords_list.slice(0, 2);
+      const rest    = ref.keywords_list.slice(2);
       el.textContent = visible.join(' · ') + (rest.length ? ' +' + rest.length + ' more' : '');
-      el.title = ref.theme_list.join('\n');
+      el.title = ref.keywords_list.join('\n');
       card.appendChild(label); card.appendChild(el);
     }
     if (ref.annotation) {
@@ -1104,11 +1106,11 @@ function openEditModal(ref, runAnnotate) {
   document.getElementById('edit-year').value               = ref.year || '';
   document.getElementById('edit-type').value               = ref.source_type || 'journal';
   document.getElementById('edit-doi').value                = ref.url_doi || '';
-  document.getElementById('edit-tags').value               = ref.tags || '';
+  document.getElementById('edit-keywords').value           = ref.keywords || '';
   document.getElementById('edit-status').value             = ref.verification_status || 'surfaced';
   document.getElementById('edit-holding').value            = ref.physical_holding || 'none';
   document.getElementById('edit-holding-location').value   = ref.holding_location || '';
-  document.getElementById('edit-themes-body').value        = ref.themes_body || (ref.themes ? ref.themes.split(',').map(t => '- ' + t.trim()).join('\n') : '');
+
   document.getElementById('edit-connections').value        = ref.connections || '';
   document.getElementById('edit-abstract').value            = ref.abstract || '';
   document.getElementById('edit-annotation').value         = ref.annotation || '';
@@ -1145,13 +1147,12 @@ async function saveEdit() {
     year:                document.getElementById('edit-year').value.trim(),
     source_type:         document.getElementById('edit-type').value,
     url_doi:             document.getElementById('edit-doi').value.trim(),
-    tags:                document.getElementById('edit-tags').value.trim(),
+    keywords:            document.getElementById('edit-keywords').value.trim(),
     verification_status: document.getElementById('edit-status').value,
     reading_status:      document.querySelector('.reading-status-btn.active')?.dataset.value || 'unread',
     needs_review:        false,  // clearing needs_review on save is intentional — researcher has reviewed
     physical_holding:    document.getElementById('edit-holding').value,
     holding_location:    document.getElementById('edit-holding-location').value.trim(),
-    themes_body:         document.getElementById('edit-themes-body').value.trim(),
     connections:         document.getElementById('edit-connections').value.trim(),
     abstract:            document.getElementById('edit-abstract').value.trim(),
     annotation:          document.getElementById('edit-annotation').value.trim(),
@@ -1354,7 +1355,7 @@ function runLibrarySynthesis() { runIntelSynthesis(); }
 let _allTags = [], _allConns = [];
 async function loadAutocomplete() {
   try {
-    const [tr, cr] = await Promise.all([fetch('/api/tags'), fetch('/api/connections')]);
+    const [tr, cr] = await Promise.all([fetch('/api/keywords'), fetch('/api/connections')]);
     _allTags  = await tr.json();
     _allConns = await cr.json();
   } catch(e) {}
@@ -1425,7 +1426,7 @@ async function launchPromptFromRef(filename) {
 
   const activeProjectSlug = document.getElementById('session-project-select')?.value?.trim() || '';
   const refCitation = ref.authors + ' (' + ref.year + '). ' + ref.title + '.';
-  const refTags     = (ref.tags || '').split(',').map(t => t.trim()).filter(Boolean).join(', ');
+  const refTags     = (ref.keywords || '').split(',').map(t => t.trim()).filter(Boolean).join(', ');
   const tagsLine    = refTags ? '\nTags: ' + refTags : '';
 
   if (activeProjectSlug) {
@@ -2502,11 +2503,11 @@ async function highlightAuthorsInResponses() {
   try {
     const [refsRes, tagsRes] = await Promise.all([
       fetch('/api/references?limit=200'),
-      fetch('/api/tags'),
+      fetch('/api/keywords'),
     ]);
     const refsData = await refsRes.json();
     const refs     = refsData.references || [];
-    const allTags  = await tagsRes.json();  // array of tag strings
+    const allTags  = await tagsRes.json();  // array of keyword strings
 
     // Build surname set using robust extraction helper
     const surnames = new Set();
@@ -2524,7 +2525,7 @@ async function highlightAuthorsInResponses() {
       t.split('-').forEach(w => { if (w.length > 4) libraryConceptsSet.add(w.toLowerCase()); });
     });
     refs.forEach(r => {
-      (r.themes || '').split(',').forEach(th => {
+      (r.keywords || '').split(',').forEach(th => {
         const clean = th.trim().toLowerCase();
         if (clean.length > 3) libraryConceptsSet.add(clean);
       });

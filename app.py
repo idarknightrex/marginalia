@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.18.0823-0100
+Marginalia — app.py  v1.6.19.0824-1219
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.18.0823-0100"
+APP_VERSION = "1.6.19.0824-1219"
 
 
 
@@ -117,27 +117,16 @@ def write_canonical_reference(data: dict) -> Path:
     user_notes   = data.get("user_notes") or "<!-- Your own critical reading of this source -->"
     argument     = data.get("argument_connection") or "<!-- How does this source support, complicate, or challenge your research argument? -->"
 
-    tags = data.get("tags", "")
-    if not tags and data.get("themes", ""):
-        raw = data.get("themes", "")
-        parts = [p.strip() for p in raw.split(",") if p.strip()]
-        if all(len(p.split()) <= 4 for p in parts):
-            tags = raw
-
-    themes_raw = data.get("themes", "")
-    if themes_raw and themes_raw != tags:
-        theme_lines = "\n".join(
-            ("- " + t.strip()) if not t.strip().startswith("-") else t.strip()
-            for t in themes_raw.split(",") if t.strip()
-        )
-    else:
-        theme_lines = "<!-- Conceptual themes — full phrases, one per line as: - theme -->"
+    # Single keywords field — replaces separate tags + themes.
+    # Plain comma-separated: enactment, polyvagal theory, embodied cognition
+    # Merges from any legacy tags or themes fields on import
+    keywords = data.get("keywords", "") or data.get("tags", "") or data.get("themes", "")
 
     connections_raw = data.get("connections", "")
     if connections_raw:
         conn_lines = connections_raw
     else:
-        conn_lines = "<!-- Connections to writing/projects: name | note -->"
+        conn_lines = "<!-- Connections to writing/projects: slug | note -->"
 
     canonical = f"""---
 id: {ref_id}
@@ -150,14 +139,11 @@ verification_status: {data.get("verification_status", "surfaced")}
 reading_status: {data.get("reading_status", "unread")}
 physical_holding: {data.get("physical_holding", "none")}
 holding_location: {data.get("holding_location", "")}
-tags: {tags}
+keywords: {keywords}
 needs_review: {str(data.get("needs_review", True)).lower()}
 created_at: {datetime.now(timezone.utc).isoformat()}
 updated_at: {datetime.now(timezone.utc).isoformat()}
 ---
-
-## Themes
-{theme_lines}
 
 ## Connections
 {conn_lines}
@@ -342,13 +328,15 @@ def read_all_references() -> list:
                     meta["annotation"]          = extract_section(body, "Annotation")
                     meta["argument_connection"] = extract_section(body, "Argument Connection")
                     meta["user_notes"]           = extract_section(body, "Your Notes")
-                    meta["themes_body"]          = extract_section(body, "Themes")
                     meta["connections"]          = extract_section(body, "Connections")
 
-                    if not meta["themes_body"] and meta.get("themes"):
-                        meta["themes_body"] = meta["themes"]
-                    meta["tags_list"]  = [t.strip() for t in meta.get("tags","").split(",") if t.strip()]
-                    meta["theme_list"] = [ln.lstrip("- ").strip() for ln in (meta["themes_body"] or "").splitlines() if ln.strip() and not ln.strip().startswith("<!--")]
+                    # Collapse legacy tags/themes into single keywords field
+                    # Priority: keywords > tags > themes (body section)
+                    if not meta.get("keywords"):
+                        legacy_tags   = meta.get("tags", "")
+                        legacy_themes = meta.get("themes", "") or extract_section(body, "Themes") or ""
+                        meta["keywords"] = legacy_tags or legacy_themes
+                    meta["keywords_list"] = [k.strip() for k in meta.get("keywords","").split(",") if k.strip()]
                     meta["conn_list"]  = [ln.strip() for ln in (meta["connections"] or "").splitlines() if ln.strip() and not ln.strip().startswith("<!--")]
                     status_hist = extract_section(body, "Status History")
                     if status_hist:
@@ -564,7 +552,7 @@ def parse_bibtex_import(text: str) -> list:
             "url_doi":      entry.get("doi", "") or entry.get("url", ""),
             "abstract":     abstract,
             "user_notes":   note,
-            "themes":       entry.get("keywords", ""),
+            "keywords":     entry.get("keywords", ""),
             "needs_review": truncated,
         }
         if rec["title"]:
@@ -606,7 +594,7 @@ def _parse_bibtex_minimal(text: str) -> list:
             "url_doi":      field("doi") or field("url"),
             "abstract":     abstract,
             "user_notes":   note,
-            "themes":       field("keywords"),
+            "keywords":       field("keywords"),
             "needs_review": truncated,
         }
         if rec["title"]:
@@ -636,7 +624,7 @@ def parse_ris_import(text: str) -> list:
         elif tag == "DO": current["url_doi"] = val
         elif tag == "UR": current.setdefault("url_doi", val)
         elif tag == "AB": current["annotation"] = val
-        elif tag == "KW": current["themes"] = (current.get("themes","") + ", " + val).strip(", ")
+        elif tag == "KW": current["keywords"] = (current.get("keywords","") + ", " + val).strip(", ")
         elif tag == "N1": current["argument_connection"] = val
     return records
 
@@ -1104,25 +1092,23 @@ def update_reference(ref_filename):
     if "user_notes" in data and data["user_notes"]:
         body = replace_section(body, "Your Notes", data["user_notes"])
         meta.pop("user_notes", None)
-    if "themes_body" in data and data["themes_body"]:
-        body = replace_section(body, "Themes", data["themes_body"])
-        meta.pop("themes", None)
     if "connections" in data:
         body = replace_section(body, "Connections", data["connections"])
-    if "tags" in data:
-        meta["tags"] = data["tags"]
-
     # Write all tracked frontmatter fields from data into meta
     for field in ["title","authors","year","source_type","url_doi","physical_holding",
-                  "holding_location","verification_status","reading_status","needs_review"]:
+                  "holding_location","verification_status","reading_status","needs_review","keywords"]:
         if field in data:
             meta[field] = str(data[field]).strip() if data[field] is not None else ""
 
+    # Remove legacy fields from frontmatter on save
+    meta.pop("tags", None)
+    meta.pop("themes", None)
+
     meta["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-    tracked = ["title","authors","year","source_type","url_doi","tags","physical_holding","holding_location","verification_status","reading_status","needs_review"]
+    tracked = ["title","authors","year","source_type","url_doi","keywords","physical_holding","holding_location","verification_status","reading_status","needs_review"]
     changed = [f for f in tracked if f in data and str(data[f]).strip() != str(meta.get(f,"")).strip()]
-    body_changed = [s for s in ["annotation","themes_body","connections","argument_connection","user_notes"] if s in data and data[s]]
+    body_changed = [s for s in ["annotation","connections","argument_connection","user_notes"] if s in data and data[s]]
     all_changed = changed + body_changed
     if all_changed:
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -1531,14 +1517,15 @@ def export_bibtex():
                     headers={"Content-Disposition": "inline; filename=marginalia.bib"})
 
 
+@app.route("/api/keywords", methods=["GET"])
 @app.route("/api/tags", methods=["GET"])
-def get_all_tags():
-    tags = set()
+def get_all_keywords():
+    keywords = set()
     for ref in read_all_references():
-        for t in ref.get("tags_list", []):
-            if t:
-                tags.add(t.lower().strip())
-    return jsonify(sorted(tags))
+        for k in ref.get("keywords_list", []):
+            if k:
+                keywords.add(k.lower().strip())
+    return jsonify(sorted(keywords))
 
 
 @app.route("/api/connections", methods=["GET"])
@@ -1576,8 +1563,8 @@ def library_synthesis():
     for ref in refs:
         if ref.get("title"):
             entry = f"[{ref.get('authors','Unknown')} {ref.get('year','')}] {ref.get('title','')}"
-            if ref.get("themes"):
-                entry += f" — themes: {ref.get('themes')}"
+            if ref.get("keywords"):
+                entry += f" — keywords: {ref.get('keywords')}"
             filepath = REFERENCES_DIR / ref.get("_filename", "")
             if filepath.exists():
                 text = filepath.read_text(encoding="utf-8")
@@ -2081,7 +2068,7 @@ def annotate_reference(ref_filename):
     title   = meta.get("title", "Unknown")
     authors = meta.get("authors", "Unknown")
     year    = meta.get("year", "")
-    themes  = meta.get("themes", "")
+    themes  = meta.get("keywords", "") or meta.get("themes", "")
 
     # Gate: refuse to annotate references still at 'surfaced' status.
     # Surfaced means the researcher hasn't yet confirmed this reference is
@@ -2245,7 +2232,7 @@ def academic_save_to_references():
         "source_type":         data.get("source_type", "journal-article"),
         "verification_status": "surfaced",
         "tags":                data.get("tags", ""),
-        "themes":              data.get("themes", ""),
+        "keywords":            data.get("keywords", "") or data.get("themes", ""),
         "annotation":          tldr_section,   # machine layer: abstract from index
         "user_notes":          "",             # human layer: waiting
         "argument_connection": "",
