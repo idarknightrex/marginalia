@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.7.1.0825-1701
+Marginalia — app.py  v1.7.1.0825-2201
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.7.1.0825-1701"
+APP_VERSION = "1.7.1.0825-2201"
 
 
 
@@ -176,7 +176,37 @@ updated_at: {datetime.now(timezone.utc).isoformat()}
     return filepath
 
 
-def strip_jats(text: str) -> str:
+def normalise_slug_project(raw: str) -> str:
+    """Lowercase, replace spaces and hyphens with underscores. For project slugs."""
+    import re
+    s = raw.strip().lower()
+    s = re.sub(r'[\s\-]+', '_', s)
+    s = re.sub(r'[^a-z0-9_]', '', s)
+    return s
+
+def normalise_slug_writing(raw: str) -> str:
+    """Lowercase, replace spaces and underscores with hyphens. For writing slugs."""
+    import re
+    s = raw.strip().lower()
+    s = re.sub(r'[\s_]+', '-', s)
+    s = re.sub(r'[^a-z0-9\-]', '', s)
+    return s
+
+def normalise_keywords(raw: str) -> str:
+    """Lowercase, trim each keyword, replace spaces within keyword with hyphens."""
+    import re
+    parts = [k.strip() for k in raw.split(',') if k.strip()]
+    cleaned = []
+    for p in parts:
+        p = p.lower()
+        p = re.sub(r'\s+', '-', p)
+        p = re.sub(r'[^a-z0-9\-]', '', p)
+        if p:
+            cleaned.append(p)
+    return ', '.join(cleaned)
+
+
+
     """Strip JATS XML tags from abstract text returned by academic APIs.
     Publishers wrap abstracts in <jats:p>, <jats:italic> etc. which come
     through raw from Semantic Scholar and OpenAlex."""
@@ -559,7 +589,7 @@ def parse_bibtex_import(text: str) -> list:
             "url_doi":      entry.get("doi", "") or entry.get("url", ""),
             "abstract":     abstract,
             "user_notes":   note,
-            "keywords":     entry.get("keywords", ""),
+            "keywords":     normalise_keywords(entry.get("keywords", "")),
             "needs_review": truncated,
         }
         if rec["title"]:
@@ -1147,7 +1177,10 @@ def update_reference(ref_filename):
     for field in ["title","authors","year","source_type","url_doi","physical_holding",
                   "holding_location","verification_status","reading_status","needs_review","keywords"]:
         if field in data:
-            meta[field] = str(data[field]).strip() if data[field] is not None else ""
+            val = str(data[field]).strip() if data[field] is not None else ""
+            if field == "keywords" and val:
+                val = normalise_keywords(val)
+            meta[field] = val
 
     # Remove legacy fields from frontmatter on save
     meta.pop("tags", None)
@@ -1292,7 +1325,7 @@ def update_project(project_slug):
     for field in ["label", "status", "abstract"]:
         if field in data:
             meta[field] = data[field]
-    new_slug = data.get("slug", "").strip().lower().replace(" ", "-")
+    new_slug = normalise_slug_project(data.get("slug", "").strip()) if data.get("slug") else ""
     if new_slug and new_slug != safe:
         meta["slug"] = new_slug
         new_filepath = PROJECTS_DIR / (new_slug + ".md")
@@ -1319,8 +1352,8 @@ def update_project(project_slug):
 def create_project():
     data = request.json or {}
     label = data.get("label", "").strip()
-    slug  = data.get("slug", "").strip().lower().replace(" ", "-") or \
-            "-".join(label.lower().split()[:4])
+    raw_slug = data.get("slug", "").strip() or "_".join(label.lower().split()[:4])
+    slug = normalise_slug_project(raw_slug)
     if not slug:
         return jsonify({"error": "Project slug required"}), 400
     filename = slug + ".md"
@@ -1405,7 +1438,7 @@ def update_writing(writing_slug):
     for field in ["title", "type", "project", "status", "abstract"]:
         if field in data:
             meta[field] = data[field]
-    new_slug = data.get("slug", "").strip().lower().replace(" ", "-")
+    new_slug = normalise_slug_writing(data.get("slug", "").strip()) if data.get("slug") else ""
     if new_slug and new_slug != safe:
         meta["slug"] = new_slug
         new_filepath = WRITING_DIR / (new_slug + ".md")
@@ -1423,8 +1456,8 @@ def update_writing(writing_slug):
 def create_writing():
     data = request.json or {}
     title = data.get("title", "").strip()
-    slug  = data.get("slug", "").strip().lower().replace(" ", "-") or \
-            "-".join(title.lower().split()[:4])
+    raw_slug = data.get("slug", "").strip() or "-".join(title.lower().split()[:4])
+    slug = normalise_slug_writing(raw_slug)
     if not title:
         return jsonify({"error": "Title required"}), 400
     filename = slug + ".md"

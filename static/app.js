@@ -39,7 +39,7 @@ function showView(name, btn) {
   initFontSize();
   if (name === 'writing')      loadWriting();
   if (name === 'notes')        loadNotes();
-  if (name === 'intelligence') loadIntelligenceProjects();
+  if (name === 'intelligence') { loadIntelligenceProjects(); populateIntelWritingFilter(); }
   if (name === 'ingest')       loadResearcherContext();
   if (name === 'prompt')       loadResearcherContext();
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -2102,6 +2102,25 @@ async function runIntelSynthesis() {
   populateNetworkMap(textEl.textContent || '');
 }
 
+async function populateIntelWritingFilter() {
+  const wSel = document.getElementById('intelligence-writing-filter');
+  if (!wSel) return;
+  try {
+    const res  = await fetch('/api/writing');
+    const data = await res.json();
+    wSel.innerHTML = '<option value="">All writing</option>';
+    if (Array.isArray(data)) {
+      data.forEach(w => {
+        const slug = w.slug || (w._filename || '').replace('.md','');
+        const opt  = document.createElement('option');
+        opt.value       = slug;
+        opt.textContent = w.title || slug;
+        wSel.appendChild(opt);
+      });
+    }
+  } catch(e) {}
+}
+
 async function loadIntelligenceProjects() {
   const [projRes, writRes] = await Promise.all([
     fetch('/api/projects'),
@@ -2123,7 +2142,7 @@ async function loadIntelligenceProjects() {
   }
 
   const wSel = document.getElementById('intelligence-writing-filter');
-  if (wSel) {
+  if (wSel && Array.isArray(writings)) {
     wSel.innerHTML = '<option value="">All writing</option>';
     writings.forEach(w => {
       const opt  = document.createElement('option');
