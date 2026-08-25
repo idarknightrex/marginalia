@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.7.1.0825-1601
+Marginalia — app.py  v1.7.1.0825-1620
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.7.1.0825-1601"
+APP_VERSION = "1.7.1.0825-1620"
 
 
 
@@ -204,7 +204,6 @@ def strip_jats(text: str) -> str:
     The `title` field is auto-generated from prompt keywords + synthesis concepts
     so sessions are navigable without opening the full file.
     """
-    import re as _re
 
     SESSION_STOP = {
         "the","a","an","and","or","but","in","on","at","to","for","of","with",
@@ -240,35 +239,37 @@ def strip_jats(text: str) -> str:
         "openai","anthropic","chatgpt",
     }
 
-    # Extract keywords from final prompt block (after last +++)
-    blocks = prompt.split("+++")
-    final_block = blocks[-1].strip() if blocks else prompt
-    kw_tokens = _re.findall(r'\b[a-zA-Z]{4,}\b', final_block.lower())
-    seen, keywords = set(), []
-    for w in kw_tokens:
-        if w not in SESSION_STOP and w not in seen:
-            seen.add(w); keywords.append(w)
-        if len(keywords) >= 5:
-            break
-
-    # Extract top concepts from synthesis by frequency
-    concepts = []
-    if synthesis:
-        c_tokens = _re.findall(r'\b[A-Z][a-z]{3,}\b', synthesis)
-        freq = {}
-        for t in c_tokens:
-            tl = t.lower()
-            if tl not in SESSION_STOP and tl not in CONCEPT_STOP:
-                freq[tl] = freq.get(tl, 0) + 1
-        concepts = [t for t, _ in sorted(freq.items(), key=lambda x: -x[1])[:3]]
-
-    # Build title
-    ts_short = datetime.now(timezone.utc).strftime("%Y%m%d")
-    kw_part  = " ".join(keywords[:4]) if keywords else "session"
-    title    = kw_part
-    if concepts:
-        title += " \u2014 " + ", ".join(concepts)
-    title += f" ({ts_short})"
+    # Build title from prompt keywords and synthesis concepts
+    # Wrapped in try/except — extraction failure must never prevent session save
+    title = ""
+    try:
+        import re as _re
+        blocks = prompt.split("+++")
+        final_block = blocks[-1].strip() if blocks else prompt
+        kw_tokens = _re.findall(r'\b[a-zA-Z]{4,}\b', final_block.lower())
+        seen, keywords = set(), []
+        for w in kw_tokens:
+            if w not in SESSION_STOP and w not in seen:
+                seen.add(w); keywords.append(w)
+            if len(keywords) >= 5:
+                break
+        concepts = []
+        if synthesis:
+            c_tokens = _re.findall(r'\b[A-Z][a-z]{3,}\b', synthesis)
+            freq = {}
+            for t in c_tokens:
+                tl = t.lower()
+                if tl not in SESSION_STOP and tl not in CONCEPT_STOP:
+                    freq[tl] = freq.get(tl, 0) + 1
+            concepts = [t for t, _ in sorted(freq.items(), key=lambda x: -x[1])[:3]]
+        ts_short = datetime.now(timezone.utc).strftime("%Y%m%d")
+        kw_part  = " ".join(keywords[:4]) if keywords else "session"
+        title    = kw_part
+        if concepts:
+            title += " \u2014 " + ", ".join(concepts)
+        title += f" ({ts_short})"
+    except Exception:
+        title = datetime.now(timezone.utc).strftime("session-%Y%m%d-%H%M")
 
     session_id    = str(uuid.uuid4())
     timestamp     = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M")
@@ -1186,8 +1187,9 @@ def update_reference_status(ref_filename):
 
 @app.route("/api/projects", methods=["GET"])
 def get_projects():
-    projects = []
-    all_refs = read_all_references()
+    projects  = []
+    seen_slugs = set()
+    all_refs  = read_all_references()
     for filepath in sorted(PROJECTS_DIR.glob("*.md")):
         try:
             text = filepath.read_text(encoding="utf-8")
@@ -1214,7 +1216,9 @@ def get_projects():
                                         for line in (r.get("conn_list") or []))]
                     meta["ref_count"] = len(connected)
                     meta["ref_titles"] = [r.get("title","")[:60] for r in connected[:5]]
-                    projects.append(meta)
+                    if meta["slug"] not in seen_slugs:
+                        seen_slugs.add(meta["slug"])
+                        projects.append(meta)
         except Exception:
             pass
     return jsonify(projects)
