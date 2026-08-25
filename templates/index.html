@@ -342,10 +342,10 @@
     <!-- Unified filter panel -- find-by-text, project, year, status all in one visual block -->
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:14px">
       <div class="search-row" style="margin-bottom:8px">
-        <input class="search-input" id="ref-search" placeholder="Search title, author, keyword, annotation..." oninput="filterRefs()">
+        <input class="search-input" id="ref-search" placeholder="Search title, author, keyword, annotation..." oninput="filterRefs();recordFilterHistory()">
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-        <select id="ref-project-filter" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;flex:1" onchange="filterRefs()">
+        <select id="ref-project-filter" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;flex:1" onchange="filterRefs();recordFilterHistory()">
           <option value="">All projects</option>
           <option value="__none__">No project</option>
         </select>
@@ -368,6 +368,7 @@
         <button class="filter-btn" data-reading="read" id="reading-read" onclick="setReadingFilter(this)">read</button>
         <button class="filter-btn" data-reading="deeply-read" id="reading-deeply" onclick="setReadingFilter(this)">deeply read</button>
         <button class="filter-btn" data-reading="needs-review" id="reading-needs-review" onclick="setReadingFilter(this)" style="color:#c9a832;border-color:#c9a832">⚠ needs review</button>
+        <button class="filter-btn" data-reading="has-link" id="reading-has-link" onclick="setReadingFilter(this)" style="color:#4285f4;border-color:#4285f4">🔗 has link</button>
       </div>
     </div>
 
@@ -794,7 +795,10 @@
     <div class="edit-field"><label>Holding Location</label><input id="edit-holding-location" type="text" placeholder="e.g. Office shelf, Zotero, Downloads"></div>
     <div class="edit-field">
       <label>Keywords <span style="font-family:monospace;font-size:10px;color:var(--muted);font-weight:normal">comma separated — used for search, filtering, and concept highlighting</span></label>
-      <input id="edit-keywords" type="text" placeholder="enactment, polyvagal theory, embodied cognition, felt sense">
+      <div style="position:relative">
+        <input id="edit-keywords" type="text" oninput="tagAutocomplete(this)" autocomplete="off" placeholder="enactment, polyvagal theory, embodied cognition, felt sense">
+        <div id="tag-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:4px;z-index:100;max-height:160px;overflow-y:auto"></div>
+      </div>
     </div>
     <div class="edit-field"><label>Connections (slug | note, one per line)</label>
       <div style="position:relative">

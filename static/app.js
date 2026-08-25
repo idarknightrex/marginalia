@@ -620,6 +620,69 @@ async function loadReferences() {
   document.getElementById('ref-count').textContent = allRefs.length + ' sources';
   renderRefs();
 }
+// ── Filter history ────────────────────────────────────────────────────────────
+// Stores last 3 filter combinations for quick reapply
+let _filterHistory = [];
+function recordFilterHistory() {
+  const q    = document.getElementById('ref-search')?.value?.trim() || '';
+  const proj = document.getElementById('ref-project-filter')?.value || '';
+  const state = { status: activeFilter, reading: activeReadingFilter, project: proj, search: q };
+  // Don't record if it's just "all" with no search
+  if (state.status === 'all' && state.reading === 'all' && !state.project && !state.search) return;
+  // Don't duplicate last entry
+  const last = _filterHistory[0];
+  if (last && last.status === state.status && last.reading === state.reading &&
+      last.project === state.project && last.search === state.search) return;
+  _filterHistory.unshift(state);
+  if (_filterHistory.length > 3) _filterHistory.pop();
+  renderFilterHistory();
+}
+function renderFilterHistory() {
+  let el = document.getElementById('filter-history');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'filter-history';
+    el.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px';
+    const filterPanel = document.querySelector('.filter-row[style*="margin:0"]');
+    if (filterPanel) filterPanel.parentNode.insertBefore(el, filterPanel);
+  }
+  el.innerHTML = '';
+  if (!_filterHistory.length) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  const label = document.createElement('span');
+  label.style.cssText = 'font-family:monospace;font-size:9px;color:var(--muted);align-self:center;text-transform:uppercase;letter-spacing:.06em';
+  label.textContent = 'Recent:';
+  el.appendChild(label);
+  _filterHistory.forEach(h => {
+    const parts = [];
+    if (h.status !== 'all') parts.push(h.status);
+    if (h.reading !== 'all') parts.push(h.reading.replace('-', ' '));
+    if (h.project) parts.push(h.project);
+    if (h.search) parts.push(`"${h.search}"`);
+    const chip = document.createElement('button');
+    chip.className = 'filter-btn';
+    chip.style.cssText = 'font-size:9px;padding:2px 7px;border-style:dashed';
+    chip.textContent = parts.join(' · ') || 'all';
+    chip.onclick = () => applyFilterHistory(h);
+    el.appendChild(chip);
+  });
+}
+function applyFilterHistory(h) {
+  activeFilter = h.status;
+  activeReadingFilter = h.reading;
+  document.querySelectorAll('.filter-btn[data-filter]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.filter-btn[data-reading]').forEach(b => b.classList.remove('active'));
+  const sf = document.querySelector(`.filter-btn[data-filter="${h.status}"]`);
+  if (sf) sf.classList.add('active');
+  const rf = document.querySelector(`.filter-btn[data-reading="${h.reading}"]`);
+  if (rf) rf.classList.add('active');
+  const proj = document.getElementById('ref-project-filter');
+  if (proj) proj.value = h.project;
+  const search = document.getElementById('ref-search');
+  if (search) search.value = h.search;
+  renderRefs();
+}
+
 function filterRefs() { renderRefs(); }
 let activeReadingFilter = 'all';
 function setFilter(btn) {
@@ -627,12 +690,14 @@ function setFilter(btn) {
   btn.classList.add('active');
   activeFilter = btn.dataset.filter;
   renderRefs();
+  recordFilterHistory();
 }
 function setReadingFilter(btn) {
   document.querySelectorAll('.filter-btn[data-reading]').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   activeReadingFilter = btn.dataset.reading;
   renderRefs();
+  recordFilterHistory();
 }
 function resetAllRefFilters() {
   // Hard reset all filter state — recovers from any stuck/corrupt filter combination
@@ -679,13 +744,14 @@ function populateRefProjectFilter(projects) {
 
 function updateFilterLabels() {
   const counts = { all: allRefs.length, verified: 0, located: 0, surfaced: 0, imported: 0 };
-  const readingCounts = { unread: 0, skimmed: 0, read: 0, 'deeply-read': 0, 'needs-review': 0 };
+  const readingCounts = { unread: 0, skimmed: 0, read: 0, 'deeply-read': 0, 'needs-review': 0, 'has-link': 0 };
   allRefs.forEach(r => {
     const s = r.verification_status || 'surfaced';
     if (counts[s] !== undefined) counts[s]++;
     const rs = r.reading_status || 'unread';
     if (readingCounts[rs] !== undefined) readingCounts[rs]++;
     if (r.needs_review === 'true' || r.needs_review === true) readingCounts['needs-review']++;
+    if (r.url_doi && r.url_doi.trim()) readingCounts['has-link']++;
   });
   const btn_all = document.getElementById('filter-all');
   if (btn_all) btn_all.textContent = 'all (' + counts.all + ')';
@@ -695,11 +761,11 @@ function updateFilterLabels() {
     btn.textContent = s + (counts[s] ? ' (' + counts[s] + ')' : '');
   });
   // Reading filter counts
-  const readingMap = { 'unread': 'reading-unread', 'skimmed': 'reading-skimmed', 'read': 'reading-read', 'deeply-read': 'reading-deeply', 'needs-review': 'reading-needs-review' };
+  const readingMap = { 'unread': 'reading-unread', 'skimmed': 'reading-skimmed', 'read': 'reading-read', 'deeply-read': 'reading-deeply', 'needs-review': 'reading-needs-review', 'has-link': 'reading-has-link' };
   Object.entries(readingMap).forEach(([key, id]) => {
     const btn = document.getElementById(id);
     if (!btn) return;
-    const label = key === 'needs-review' ? '⚠ needs review' : key === 'deeply-read' ? 'deeply read' : key;
+    const label = key === 'needs-review' ? '⚠ needs review' : key === 'deeply-read' ? 'deeply read' : key === 'has-link' ? '🔗 has link' : key;
     btn.textContent = label + (readingCounts[key] ? ' (' + readingCounts[key] + ')' : '');
   });
 }
@@ -742,6 +808,8 @@ function renderRefs() {
       if (activeReadingFilter === 'needs-review') {
         matchReading = r.needs_review === 'true' || r.needs_review === true ||
           ((r.reading_status === 'unread' || !r.reading_status) && r.verification_status === 'imported');
+      } else if (activeReadingFilter === 'has-link') {
+        matchReading = !!(r.url_doi && r.url_doi.trim());
       } else {
         matchReading = (r.reading_status || 'unread') === activeReadingFilter;
       }
@@ -847,6 +915,19 @@ function renderRefs() {
     deleteBtn.onclick = () => deleteRef(ref._filename || '', deleteBtn);
     actions.appendChild(launchBtn);
     actions.appendChild(annotateBtn);
+    // DOI/URL button — only shown when url_doi is populated
+    if (ref.url_doi && ref.url_doi.trim()) {
+      const doi = ref.url_doi.trim();
+      const isDoi = doi.startsWith('10.') || doi.includes('doi.org');
+      const linkBtn = document.createElement('a');
+      linkBtn.className = 'ref-action';
+      linkBtn.textContent = isDoi ? 'DOI' : 'URL';
+      linkBtn.href = isDoi && !doi.startsWith('http') ? 'https://doi.org/' + doi : doi;
+      linkBtn.target = '_blank';
+      linkBtn.rel = 'noopener noreferrer';
+      linkBtn.style.cssText = 'text-decoration:none;color:var(--accent)';
+      actions.appendChild(linkBtn);
+    }
     actions.appendChild(editBtn);
     actions.appendChild(deleteBtn);
     card.appendChild(actions);
@@ -862,7 +943,7 @@ function renderRefs() {
     if (ref.keywords_list && ref.keywords_list.length) {
       const label = document.createElement('div');
       label.style.cssText = 'font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px';
-      label.textContent = 'Themes';
+      label.textContent = 'Keywords';
       const el = document.createElement('div');
       el.style.cssText = 'font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:6px';
       const visible = ref.keywords_list.slice(0, 2);
@@ -1164,7 +1245,7 @@ async function saveEdit() {
       method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
     });
     const data = await res.json();
-    if (data.status === 'updated') { closeEditModal(); await loadRefs(); resetAllRefFilters(); }
+    if (data.status === 'updated') { closeEditModal(); await loadRefs(); }
     else { alert(data.error || 'Save failed'); }
   } catch(e) { alert('Save failed: ' + e.message); }
   btn.textContent = 'Save'; btn.disabled = false;
