@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.20.0825-1001
+Marginalia — app.py  v1.7.0.0825-1101
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.20.0825-1001"
+APP_VERSION = "1.7.0.0825-1101"
 
 
 
@@ -286,6 +286,7 @@ models: {list(responses.keys())}
 project: {project}
 writing: {writing}
 notes: {notes}
+tags:
 prompt_label: {prompt_label}
 ---
 
@@ -852,9 +853,12 @@ def key_status():
 
 
 def call_model(model, prompt, num_predict=-1):
-    # Word count instruction — injected into style preamble based on num_predict value
-    # which maps from the UI word count selector. Prompt instruction is more reliable
-    # than token caps which silently kill reasoning models mid-think.
+    # Researcher context block — loaded from settings, set once by the researcher.
+    # Tells the council who they're talking to and what kind of response is useful.
+    # Without this block the council defaults to assistant mode regardless of synthesis mode.
+    settings = load_settings()
+    researcher_context = settings.get("researcher_context", "").strip()
+
     word_count_map = {
         75:  "Respond in approximately 50 words or less.",
         300: "Respond in approximately 200 words or less.",
@@ -870,6 +874,7 @@ def call_model(model, prompt, num_predict=-1):
         "Write as if corresponding with a peer researcher, not tutoring a student."
         + (f" {word_limit}" if word_limit else "")
         + "\n\n"
+        + (f"RESEARCHER CONTEXT: {researcher_context}\n\n" if researcher_context else "")
     )
     prompt = STYLE_PREAMBLE + prompt
     settings  = load_settings()
@@ -1537,19 +1542,26 @@ def get_all_connections():
 def library_synthesis():
     data    = request.json or {}
     project = data.get("project", "").strip()
+    writing = data.get("writing", "").strip()
     req_model = data.get("model", "").strip()
 
     all_refs = read_all_references()
     if not all_refs:
         return jsonify({"error": "No references found in library"}), 400
 
-    # Filter by project slug when set — match against conn_list
+    # Filter by project or writing slug when set — match against conn_list
     if project:
         refs = [r for r in all_refs
                 if any(project in line.split("|")[0].strip()
                        for line in (r.get("conn_list") or []))]
         if not refs:
             return jsonify({"error": f"No references connected to project '{project}'"}), 400
+    elif writing:
+        refs = [r for r in all_refs
+                if any(writing in line.split("|")[0].strip()
+                       for line in (r.get("conn_list") or []))]
+        if not refs:
+            return jsonify({"error": f"No references connected to writing piece '{writing}'"}), 400
     else:
         refs = all_refs
 
@@ -1565,10 +1577,21 @@ def library_synthesis():
                 parts = text.split("---", 2)
                 if len(parts) >= 3:
                     body = parts[2].strip()
+                    # Annotation — the researcher's interpretive reading
                     if "## Annotation" in body:
-                        ann = body.split("## Annotation")[1].split("##")[0].strip()
+                        ann = body.split("## Annotation")[1].split("\n## ")[0].strip()
                         if ann and not ann.startswith("<!--"):
-                            entry += f"\nAnnotation: {ann[:200]}"
+                            entry += f"\nAnnotation: {ann[:300]}"
+                    # Your Notes — the researcher's voice, thinking in progress
+                    if "## Your Notes" in body:
+                        notes = body.split("## Your Notes")[1].split("\n## ")[0].strip()
+                        if notes and not notes.startswith("<!--"):
+                            entry += f"\nResearcher notes: {notes[:200]}"
+                    # Argument Connection — how it plugs into the argument
+                    if "## Argument Connection" in body:
+                        arg = body.split("## Argument Connection")[1].split("\n## ")[0].strip()
+                        if arg and not arg.startswith("<!--"):
+                            entry += f"\nArgument connection: {arg[:200]}"
             ref_summaries.append(entry)
 
     library_text = "\n\n".join(ref_summaries)
@@ -1672,6 +1695,7 @@ def sessions_list():
                     "title":    fm.get("title") or fm.get("prompt", "")[:60] or f.stem,
                     "project":  proj,
                     "writing":  fm.get("writing", ""),
+                    "tags":     fm.get("tags", ""),
                     "created":  fm.get("created_at", ""),
                     "hidden":   is_hidden,
                 })
@@ -1717,6 +1741,10 @@ def patch_session(session_filename):
         meta["writing"] = data["writing"].strip()
     if "hidden" in data:
         meta["hidden"] = "true" if data["hidden"] else "false"
+    if "tags" in data:
+        meta["tags"] = data["tags"].strip()
+    if "title" in data:
+        meta["title"] = data["title"].strip()
 
     fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items())
     filepath.write_text(f"---\n{fm_lines}\n---\n{parts[2]}", encoding="utf-8")
@@ -1773,6 +1801,7 @@ def synthesise():
 def sessions_synthesis():
     data    = request.json or {}
     project = data.get("project", "").strip()
+    writing = data.get("writing", "").strip()
     req_model = data.get("model", "").strip()
 
     session_files = sorted(SESSIONS_DIR.glob("session_*.md"), reverse=True)
@@ -1795,15 +1824,22 @@ def sessions_synthesis():
                     meta[k.strip()] = v.strip()
             body = parts[2]
 
-            # Filter logic: frontmatter project field first, text match fallback
+            # Filter logic: frontmatter project/writing field first, text match fallback
             if project:
                 fm_project = meta.get("project", "").strip()
                 if fm_project:
                     if fm_project != project:
-                        continue  # frontmatter present, doesn't match — skip
+                        continue
                 else:
-                    # Old session — fall back to text match on prompt + responses
                     if project.lower() not in body.lower():
+                        continue
+            elif writing:
+                fm_writing = meta.get("writing", "").strip()
+                if fm_writing:
+                    if fm_writing != writing:
+                        continue
+                else:
+                    if writing.lower() not in body.lower():
                         continue
 
             # Extract prompt
@@ -1818,6 +1854,13 @@ def sessions_synthesis():
                 if raw and not raw.startswith("<!--"):
                     synth_text = raw[:300]
 
+            # Extract notes if present
+            notes_text = ""
+            if "## Notes" in body:
+                raw = body.split("## Notes")[1].split("\n## ")[0].strip()
+                if raw and not raw.startswith("<!--"):
+                    notes_text = raw[:150]
+
             label    = meta.get("prompt_label", "") or prompt_text[:80]
             created  = meta.get("created_at", "")[:16].replace("T", " ")
             models   = meta.get("models", "")
@@ -1826,6 +1869,8 @@ def sessions_synthesis():
                 entry += f"\nSynthesis: {synth_text}"
             elif prompt_text:
                 entry += f"\nPrompt: {prompt_text}"
+            if notes_text:
+                entry += f"\nNotes: {notes_text}"
             summaries.append(entry)
             matched += 1
             if matched >= 20:  # cap at 20 sessions to avoid context overflow

@@ -153,13 +153,14 @@
     <!-- Session scope — set before firing, writes to canonical on save -->
     <div class="session-scope-row" id="session-scope-row">
       <div class="session-scope-label" data-tooltip="Set your working context before firing — this labels the session in your canonical record">Working on</div>
-      <select id="session-project-select" class="session-scope-select" title="Project scope for this session" data-tooltip="Which project is this session for? Saved to session frontmatter on every run">
+      <select id="session-project-select" class="session-scope-select" title="Project scope for this session" data-tooltip="Which project is this session for? Saved to session frontmatter on every run" onchange="updateFramingPreview()">
         <option value="">No project</option>
       </select>
-      <select id="session-writing-select" class="session-scope-select" title="Writing element for this session" data-tooltip="Which writing piece is this session feeding? Helps Intelligence scope later">
+      <select id="session-writing-select" class="session-scope-select" title="Writing element for this session" data-tooltip="Which writing piece is this session feeding? Helps Intelligence scope later" onchange="updateFramingPreview()">
         <option value="">No writing element</option>
       </select>
     </div>
+    <div id="framing-preview" style="display:none;font-family:monospace;font-size:10px;color:var(--muted);padding:5px 8px;background:var(--surface);border-left:2px solid var(--accent);border-radius:0 3px 3px 0;margin-bottom:6px;cursor:pointer;line-height:1.5" onclick="toggleFramingPreview()" title="Click to expand/collapse"></div>
 
     <textarea id="prompt-input" placeholder="Enter your research question or prompt..."></textarea>
     <div style="font-family:monospace;font-size:10px;color:var(--muted);margin:3px 0 4px;padding-left:2px">
@@ -507,6 +508,23 @@
       </div>
     </div><!-- /Export zone -->
 
+    <!-- Zone 4: Researcher context — tells the council who it's talking to -->
+    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface)">
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+        &#9670; Researcher context
+      </div>
+      <div style="font-family:monospace;font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+        Tell the council who you are and what kind of response is useful. Without this block the council defaults to assistant mode — helpful, affirming, structured — regardless of synthesis mode. Set it once; it injects into every prompt.
+      </div>
+      <div class="import-section">
+        <textarea id="researcher-context-input" rows="4" placeholder="e.g. I am a PhD candidate in SoTL at the University of Saskatchewan researching embodied learning, intentional epistemic friction, and intellectual risk-taking in first-year undergraduates. I am not looking for validation — I need the council to pressure-test my thinking, surface what I haven't asked, and push back where the argument is weakest." style="width:100%;font-family:monospace;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:8px;box-sizing:border-box;resize:vertical"></textarea>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+          <span id="researcher-context-status" style="font-family:monospace;font-size:10px;color:var(--muted)"></span>
+          <button class="btn-primary" style="font-size:11px;padding:5px 14px" onclick="saveResearcherContext()">Save context</button>
+        </div>
+      </div>
+    </div><!-- /Researcher context zone -->
+
   </div><!-- /view-ingest -->
 
 
@@ -603,12 +621,18 @@
     <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface)">
       <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Synthesis</div>
 
-      <!-- Step 1: Project scope -->
+      <!-- Step 1: Project/Writing scope -->
       <div style="margin-bottom:10px">
         <div style="font-size:11px;font-family:monospace;color:var(--muted);margin-bottom:4px">Scope</div>
-        <select id="intelligence-project-filter" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;width:100%">
-          <option value="">All projects — full library &amp; all sessions</option>
-        </select>
+        <div style="display:flex;gap:6px">
+          <select id="intelligence-project-filter" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;flex:1">
+            <option value="">All projects</option>
+          </select>
+          <select id="intelligence-writing-filter" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;flex:1">
+            <option value="">All writing</option>
+          </select>
+        </div>
+        <div id="intel-scope-note" style="font-size:10px;font-family:monospace;color:var(--muted);margin-top:4px"></div>
       </div>
 
       <!-- Step 2: Mode -->
@@ -800,13 +824,17 @@
         <div id="tag-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:4px;z-index:100;max-height:160px;overflow-y:auto"></div>
       </div>
     </div>
-    <div class="edit-field"><label>Connections (slug | note, one per line)</label>
+    <div class="edit-field">
+      <label>Connections <span style="font-weight:normal;color:var(--muted);font-size:10px">slug | note, one per line — links this ref to projects and writing pieces</span></label>
       <div style="position:relative">
         <textarea id="edit-connections" rows="3" oninput="connAutocomplete(this)" autocomplete="off"></textarea>
         <div id="conn-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:4px;z-index:100;max-height:160px;overflow-y:auto"></div>
       </div>
     </div>
-    <div class="edit-field"><label>Your Notes</label><textarea id="edit-user-notes" rows="3" placeholder="Your own reading notes and thoughts -- this is the layer that matters most"></textarea></div>
+    <div class="edit-field">
+      <label>Your Notes <span style="font-weight:normal;color:var(--muted);font-size:10px">researcher voice only — thinking in progress, your words not the model's</span></label>
+      <textarea id="edit-user-notes" rows="3" placeholder="Your own critical reading, questions, and connections — this is the layer that matters most"></textarea>
+    </div>
 
     <div class="edit-field">
       <label>Abstract <span style="font-weight:normal;color:var(--muted);font-size:10px">(machine-fetched, source-stamped -- the most trustworthy machine content)</span></label>
@@ -824,7 +852,14 @@
       <textarea id="edit-annotation" rows="4"></textarea>
       <button class="btn-secondary" id="edit-annotate-btn" style="margin-top:6px;font-size:10px" onclick="annotateInModal(editingFilename)">&#9670; Generate</button>
     </div>
-    <div class="edit-field"><label>Argument Connection</label><textarea id="edit-argument" rows="3" placeholder="How does this source connect to your argument?"></textarea></div>
+    <div class="edit-field">
+      <label>Argument Connection</label>
+      <div style="position:relative">
+        <textarea id="edit-argument" rows="3" placeholder="How does this source connect to your argument? Use // to add project-specific framings: core argument // project-slug: framing for this project" oninput="argConnectionAutocomplete(this)"></textarea>
+        <div id="arg-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:4px;z-index:100;max-height:160px;overflow-y:auto"></div>
+      </div>
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);margin-top:3px">Use <code>//</code> to add project-specific framings: <em>core argument // project-slug: how it serves that project</em></div>
+    </div>
     <div class="edit-modal-actions">
       <button class="btn-secondary" onclick="closeEditModal()">Cancel</button>
       <button class="btn-primary" id="edit-save-btn" onclick="saveEdit()">Save</button>

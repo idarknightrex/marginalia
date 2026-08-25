@@ -40,6 +40,7 @@ function showView(name, btn) {
   if (name === 'writing')      loadWriting();
   if (name === 'notes')        loadNotes();
   if (name === 'intelligence') loadIntelligenceProjects();
+  if (name === 'ingest')       loadResearcherContext();
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
@@ -1433,6 +1434,87 @@ function runLibrarySynthesis() { runIntelSynthesis(); }
 
 
 // ── Tag and connection autocomplete ──────────────────────────────────────
+// ── Active framing preview ────────────────────────────────────────────────────
+// Shows the active project's framing below the scope row so the researcher
+// can see what context will be injected without leaving the prompt view.
+let _framingPreviewExpanded = false;
+let _framingCache = {};  // slug → framing text
+
+async function updateFramingPreview() {
+  const slug = document.getElementById('session-project-select')?.value?.trim();
+  const el   = document.getElementById('framing-preview');
+  if (!el) return;
+  if (!slug) { el.style.display = 'none'; return; }
+
+  // Use cache if available
+  let framing = _framingCache[slug];
+  if (!framing) {
+    try {
+      const res  = await fetch('/api/projects');
+      const data = await res.json();
+      const proj = data.find(p => (p.slug || (p._filename||'').replace('.md','')) === slug);
+      framing = proj?.framing || '';
+      _framingCache[slug] = framing;
+    } catch(e) { framing = ''; }
+  }
+
+  if (!framing) { el.style.display = 'none'; return; }
+
+  el.style.display = 'block';
+  if (_framingPreviewExpanded) {
+    el.textContent = framing;
+  } else {
+    el.textContent = framing.slice(0, 100) + (framing.length > 100 ? '\u2026 (click to expand)' : '');
+  }
+}
+
+function toggleFramingPreview() {
+  _framingPreviewExpanded = !_framingPreviewExpanded;
+  updateFramingPreview();
+}
+
+// ── Argument Connection // autocomplete ──────────────────────────────────────
+async function argConnectionAutocomplete(textarea) {
+  const val  = textarea.value;
+  const pos  = textarea.selectionStart;
+  const suggestions = document.getElementById('arg-suggestions');
+  if (!suggestions) return;
+  const before  = val.slice(0, pos);
+  const lastSep = before.lastIndexOf('//');
+  if (lastSep === -1) { suggestions.style.display = 'none'; return; }
+  const afterSep = before.slice(lastSep + 2).trimStart();
+  if (before.slice(lastSep + 2).includes(':')) { suggestions.style.display = 'none'; return; }
+  try {
+    const res  = await fetch('/api/projects');
+    const data = await res.json();
+    const slugs = data.map(p => p.slug || (p._filename || '').replace('.md','')).filter(Boolean);
+    const matches = slugs.filter(s => s.toLowerCase().startsWith(afterSep.toLowerCase()));
+    if (!matches.length) { suggestions.style.display = 'none'; return; }
+    suggestions.innerHTML = '';
+    suggestions.style.display = 'block';
+    matches.forEach(slug => {
+      const item = document.createElement('div');
+      item.style.cssText = 'padding:6px 10px;cursor:pointer;font-family:monospace;font-size:11px;color:var(--text)';
+      item.textContent = slug + ': ';
+      item.onmousedown = (e) => {
+        e.preventDefault();
+        const insertAt = lastSep + 2;
+        const newVal = val.slice(0, insertAt) + slug + ': ' + val.slice(pos);
+        textarea.value = newVal;
+        textarea.selectionStart = textarea.selectionEnd = insertAt + slug.length + 2;
+        suggestions.style.display = 'none';
+      };
+      item.onmouseover = () => item.style.background = 'var(--border)';
+      item.onmouseout  = () => item.style.background = '';
+      suggestions.appendChild(item);
+    });
+  } catch(e) { suggestions.style.display = 'none'; }
+}
+document.addEventListener('click', e => {
+  const s = document.getElementById('arg-suggestions');
+  if (s && !s.contains(e.target) && e.target.id !== 'edit-argument') s.style.display = 'none';
+});
+
 let _allTags = [], _allConns = [];
 async function loadAutocomplete() {
   try {
@@ -1892,6 +1974,7 @@ function renderSynthesisSections(raw, container) {
 
 async function runIntelSynthesis() {
   const project   = (document.getElementById('intelligence-project-filter')?.value || '').trim();
+  const writing   = (document.getElementById('intelligence-writing-filter')?.value || '').trim();
   const panel     = document.getElementById('library-synthesis-panel');
   const textEl    = document.getElementById('library-synthesis-text');
   const label     = document.getElementById('library-synthesis-label');
@@ -1928,7 +2011,7 @@ async function runIntelSynthesis() {
     if (_intelMode === 'library' || _intelMode === 'both') {
       const res  = await fetch('/api/references/library-synthesis', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ project, model: document.getElementById('intel-model-select')?.value || 'deepseek' }), signal
+        body: JSON.stringify({ project, writing, model: document.getElementById('intel-model-select')?.value || 'deepseek' }), signal
       });
       const data = await res.json();
       if (data.error) results.library = '\u26a0 References: ' + data.error;
@@ -1937,7 +2020,7 @@ async function runIntelSynthesis() {
     if (_intelMode === 'sessions' || _intelMode === 'both') {
       const res  = await fetch('/api/sessions/synthesis', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ project, model: document.getElementById('intel-model-select')?.value || 'deepseek' }), signal
+        body: JSON.stringify({ project, writing, model: document.getElementById('intel-model-select')?.value || 'deepseek' }), signal
       });
       const data = await res.json();
       if (data.error) results.sessions = '\u26a0 Sessions: ' + data.error;
@@ -1947,7 +2030,7 @@ async function runIntelSynthesis() {
     if (_intelMode === 'predict') {
       const res  = await fetch('/api/sessions/predict', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ project, model: document.getElementById('intel-model-select')?.value || 'deepseek' }), signal
+        body: JSON.stringify({ project, writing, model: document.getElementById('intel-model-select')?.value || 'deepseek' }), signal
       });
       const data = await res.json();
       if (data.error) results.predict = '\u26a0 ' + data.error;
@@ -1992,18 +2075,37 @@ async function runIntelSynthesis() {
 }
 
 async function loadIntelligenceProjects() {
-  const res  = await fetch('/api/projects');
-  const data = await res.json();
+  const [projRes, writRes] = await Promise.all([
+    fetch('/api/projects'),
+    fetch('/api/writing'),
+  ]);
+  const projects = await projRes.json();
+  const writings = await writRes.json();
+
   const sel  = document.getElementById('intelligence-project-filter');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">All projects \u2014 full library &amp; all sessions</option>';
-  data.forEach(p => {
-    const opt  = document.createElement('option');
-    const slug = p.slug || p.name || (p._filename || '').replace('.md','');
-    opt.value       = slug;
-    opt.textContent = (p.label || slug) + ' \u2014 ' + slug;
-    sel.appendChild(opt);
-  });
+  if (sel) {
+    sel.innerHTML = '<option value="">All projects</option>';
+    projects.forEach(p => {
+      const opt  = document.createElement('option');
+      const slug = p.slug || p.name || (p._filename || '').replace('.md','');
+      opt.value       = slug;
+      opt.textContent = (p.label || slug);
+      sel.appendChild(opt);
+    });
+  }
+
+  const wSel = document.getElementById('intelligence-writing-filter');
+  if (wSel) {
+    wSel.innerHTML = '<option value="">All writing</option>';
+    writings.forEach(w => {
+      const opt  = document.createElement('option');
+      const slug = w.slug || (w._filename || '').replace('.md','');
+      opt.value       = slug;
+      opt.textContent = w.title || slug;
+      wSel.appendChild(opt);
+    });
+  }
+
   loadIntelSessionList();
 }
 
@@ -2111,11 +2213,33 @@ function filterIntelSessions() {
       (s.project ? ' · ' + s.project : '') +
       (s.writing ? ' · ' + s.writing : '');
     const titleEl = document.createElement('div');
-    titleEl.style.cssText = 'font-family:Georgia,serif;font-size:12px;color:var(--text);cursor:pointer';
+    titleEl.style.cssText = 'font-family:Georgia,serif;font-size:12px;color:var(--text);cursor:pointer;margin-bottom:3px';
     titleEl.textContent = (s.title || s.filename || '').slice(0, 100);
     titleEl.onclick = () => openSessionModal(s.filename, s.title || s.filename);
+    // Tags input — saves on blur
+    const tagsRow = document.createElement('div');
+    tagsRow.style.cssText = 'display:flex;align-items:center;gap:4px';
+    const tagsLabel = document.createElement('span');
+    tagsLabel.style.cssText = 'font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em';
+    tagsLabel.textContent = 'tags';
+    const tagsInput = document.createElement('input');
+    tagsInput.type = 'text';
+    tagsInput.placeholder = 'comma separated…';
+    tagsInput.value = s.tags || '';
+    tagsInput.style.cssText = 'font-family:monospace;font-size:9px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 6px;flex:1';
+    tagsInput.onblur = async () => {
+      try {
+        await fetch('/api/sessions/' + encodeURIComponent(s.filename), {
+          method: 'PATCH', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ tags: tagsInput.value.trim() })
+        });
+      } catch(e) {}
+    };
+    tagsRow.appendChild(tagsLabel);
+    tagsRow.appendChild(tagsInput);
     row.appendChild(dateEl);
     row.appendChild(titleEl);
+    row.appendChild(tagsRow);
     list.appendChild(row);
   });
 }
@@ -3033,6 +3157,36 @@ function addConceptToLibrary(concept, type, btn) {
   }, 600);
 }
 
+// ── Researcher context block ──────────────────────────────────────────────────
+// Stored in settings.json, injected into every model call via call_model().
+// Without it the council defaults to assistant mode.
+async function loadResearcherContext() {
+  try {
+    const res  = await fetch('/api/settings');
+    const data = await res.json();
+    const el   = document.getElementById('researcher-context-input');
+    if (el && data.researcher_context) el.value = data.researcher_context;
+  } catch(e) {}
+}
+async function saveResearcherContext() {
+  const el  = document.getElementById('researcher-context-input');
+  const ctx = el ? el.value.trim() : '';
+  const statusEl = document.getElementById('researcher-context-status');
+  try {
+    const res  = await fetch('/api/settings');
+    const data = await res.json();
+    data.researcher_context = ctx;
+    await fetch('/api/settings', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(data)
+    });
+    if (statusEl) { statusEl.textContent = ctx ? '\u2713 Context saved — active on next prompt' : '\u2713 Context cleared'; }
+    setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+  } catch(e) {
+    if (statusEl) statusEl.textContent = '\u26a0 Save failed';
+  }
+}
+
 // ── BibTeX export panel ───────────────────────────────────────────────────────
 function toggleBibTexPanel() {
   const panel = document.getElementById('bibtex-panel');
@@ -3785,6 +3939,7 @@ checkLocalModels();
       populateSessionScopeSelectors(projects);
       populateSynthProjectDropdown(projects);
       populateNoteProjectFilter(projects);
+      updateFramingPreview();
     }
     // Writing selector loads independently — not gated on projects existing
     const wSel = document.getElementById('session-writing-select');
