@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.6.20.0825-0001
+Marginalia — app.py  v1.6.20.0825-1001
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.6.20.0825-0001"
+APP_VERSION = "1.6.20.0825-1001"
 
 
 
@@ -1044,12 +1044,6 @@ def update_reference(ref_filename):
         if ": " in line:
             k, v = line.split(": ", 1)
             meta[k.strip()] = v.strip()
-
-    for field in ["title","authors","year","source_type","url_doi","themes",
-                  "annotation","argument_connection","verification_status",
-                  "physical_holding","holding_location"]:
-        if field in data:
-            meta[field] = str(data[field]).strip()
 
     body = parts[2]
     def replace_section(body, heading, new_content):
