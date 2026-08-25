@@ -13,9 +13,13 @@ Marginalia is a thinking tool for researchers — not an answer machine. It fire
 
 ## Philosophy
 
-A single model is an answer machine. Two models provide a balance. Three or more models is a topology — a space of ideas the researcher can move inside, pull against, and mark with the trace of their own judgment.
+Marginalia is margin notes. Not a CLI, not an answer machine, not a replacement for paper-based research — the digital equivalent of the annotation in the margin of a text, except the margin can respond, pressure-test, and connect across your whole library.
 
-Marginalia occupies the middle space between the environment of the mind and the body of the text. The marginal note that answers back. Intentional friction in the UI (manual slugs, hand-cycled status, Save & Break as deliberate gesture) is epistemological commitment made visible.
+The paper-based research paradigm is the origin, not something being replaced. Marginalia extends it into a space where the margin has memory, annotations connect to each other, and a council of models with genuinely different epistemic provenances can read what you've written in other margins. The boulder rolls through the same territory the pen traced.
+
+A single model is an answer machine. Two models provide a balance. Three or more models is a topology — a space of ideas the researcher can move inside, pull against, and mark with the trace of their own judgment. If you don't end a work window with a few dangling threads, something is missing. Productive incompletion is the point, not a failure state.
+
+Intentional friction in the UI (manual slugs, hand-cycled status, Save & Break as deliberate gesture) is epistemological commitment made visible.
 
 ---
 

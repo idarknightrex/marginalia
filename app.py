@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.7.0.0825-1101
+Marginalia — app.py  v1.7.1.0825-1601
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.7.0.0825-1101"
+APP_VERSION = "1.7.1.0825-1601"
 
 
 
@@ -1064,7 +1064,7 @@ def update_reference(ref_filename):
             return body.rstrip() + "\n\n" + marker + "\n" + new_content + "\n"
 
     def ensure_sections(body):
-        for section in ["Themes", "Connections", "Abstract", "Annotation", "Argument Connection", "Your Notes", "Edit History", "Status History"]:
+        for section in ["Connections", "Abstract", "Annotation", "Argument Connection", "Your Notes", "Edit History", "Status History"]:
             if "## " + section not in body:
                 placeholder = {
                     "Themes": "<!-- Conceptual themes — full phrases, one per line as: - theme -->",
@@ -1091,7 +1091,7 @@ def update_reference(ref_filename):
     if "user_notes" in data and data["user_notes"]:
         body = replace_section(body, "Your Notes", data["user_notes"])
         meta.pop("user_notes", None)
-    if "connections" in data:
+    if "connections" in data and data["connections"]:
         body = replace_section(body, "Connections", data["connections"])
     # Write all tracked frontmatter fields from data into meta
     for field in ["title","authors","year","source_type","url_doi","physical_holding",
@@ -1210,7 +1210,7 @@ def get_projects():
                         meta["framing"] = raw if not raw.startswith("<!--") else ""
                     slug = meta["slug"]
                     connected = [r for r in all_refs
-                                 if any(slug in line.split("|")[0].strip()
+                                 if any(slug == line.split("|")[0].strip()
                                         for line in (r.get("conn_list") or []))]
                     meta["ref_count"] = len(connected)
                     meta["ref_titles"] = [r.get("title","")[:60] for r in connected[:5]]
@@ -1323,6 +1323,10 @@ def get_writing():
                             k, v = line.split(": ", 1)
                             meta[k.strip()] = v.strip()
                     meta["_filename"] = filepath.name
+                    if not meta.get("slug"):
+                        meta["slug"] = filepath.stem
+                    if not meta.get("title"):
+                        meta["title"] = meta["slug"]
                     items.append(meta)
         except Exception:
             pass
@@ -1552,13 +1556,13 @@ def library_synthesis():
     # Filter by project or writing slug when set — match against conn_list
     if project:
         refs = [r for r in all_refs
-                if any(project in line.split("|")[0].strip()
+                if any(project == line.split("|")[0].strip()
                        for line in (r.get("conn_list") or []))]
         if not refs:
             return jsonify({"error": f"No references connected to project '{project}'"}), 400
     elif writing:
         refs = [r for r in all_refs
-                if any(writing in line.split("|")[0].strip()
+                if any(writing == line.split("|")[0].strip()
                        for line in (r.get("conn_list") or []))]
         if not refs:
             return jsonify({"error": f"No references connected to writing piece '{writing}'"}), 400
@@ -2008,7 +2012,7 @@ def sessions_predict():
     if project:
         all_refs = read_all_references()
         connected = [r for r in all_refs
-                     if any(project in line.split("|")[0].strip()
+                     if any(project == line.split("|")[0].strip()
                             for line in (r.get("conn_list") or []))]
         if connected:
             ref_context = "\n\nCONNECTED REFERENCES:\n" + "\n".join(

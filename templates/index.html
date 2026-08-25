@@ -161,6 +161,26 @@
       </select>
     </div>
     <div id="framing-preview" style="display:none;font-family:monospace;font-size:10px;color:var(--muted);padding:5px 8px;background:var(--surface);border-left:2px solid var(--accent);border-radius:0 3px 3px 0;margin-bottom:6px;cursor:pointer;line-height:1.5" onclick="toggleFramingPreview()" title="Click to expand/collapse"></div>
+    <div id="researcher-context-preview" style="display:none;font-family:monospace;font-size:10px;color:var(--muted);padding:5px 8px;background:var(--surface);border-left:2px solid var(--border);border-radius:0 3px 3px 0;margin-bottom:6px;line-height:1.5">
+      <span style="color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:9px">Researcher context active</span>
+      <span id="researcher-context-preview-text" style="margin-left:8px"></span>
+    </div>
+
+    <!-- Researcher context — collapsible, above prompt -->
+    <div id="researcher-context-bar" style="margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:6px;cursor:pointer" onclick="toggleResearcherContextEdit()">
+        <span style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">&#9670; Researcher context</span>
+        <span id="researcher-context-preview" style="font-family:monospace;font-size:10px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        <span style="font-family:monospace;font-size:10px;color:var(--muted)">&#9662;</span>
+      </div>
+      <div id="researcher-context-edit" style="display:none;margin-top:6px">
+        <textarea id="researcher-context-input" rows="3" placeholder="Tell the council who you are — PhD candidate in SoTL researching embodied learning. Set once, injects into every prompt as Layer 1 context." style="width:100%;font-family:monospace;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:6px 8px;box-sizing:border-box;resize:vertical"></textarea>
+        <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:4px">
+          <span id="researcher-context-status" style="font-family:monospace;font-size:10px;color:var(--muted);align-self:center"></span>
+          <button class="btn-secondary" style="font-size:10px;padding:3px 10px" onclick="saveResearcherContext()">Save</button>
+        </div>
+      </div>
+    </div>
 
     <textarea id="prompt-input" placeholder="Enter your research question or prompt..."></textarea>
     <div style="font-family:monospace;font-size:10px;color:var(--muted);margin:3px 0 4px;padding-left:2px">
@@ -507,23 +527,6 @@
         </div>
       </div>
     </div><!-- /Export zone -->
-
-    <!-- Zone 4: Researcher context — tells the council who it's talking to -->
-    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface)">
-      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">
-        &#9670; Researcher context
-      </div>
-      <div style="font-family:monospace;font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">
-        Tell the council who you are and what kind of response is useful. Without this block the council defaults to assistant mode — helpful, affirming, structured — regardless of synthesis mode. Set it once; it injects into every prompt.
-      </div>
-      <div class="import-section">
-        <textarea id="researcher-context-input" rows="4" placeholder="e.g. I am a PhD candidate in SoTL at the University of Saskatchewan researching embodied learning, intentional epistemic friction, and intellectual risk-taking in first-year undergraduates. I am not looking for validation — I need the council to pressure-test my thinking, surface what I haven't asked, and push back where the argument is weakest." style="width:100%;font-family:monospace;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:8px;box-sizing:border-box;resize:vertical"></textarea>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
-          <span id="researcher-context-status" style="font-family:monospace;font-size:10px;color:var(--muted)"></span>
-          <button class="btn-primary" style="font-size:11px;padding:5px 14px" onclick="saveResearcherContext()">Save context</button>
-        </div>
-      </div>
-    </div><!-- /Researcher context zone -->
 
   </div><!-- /view-ingest -->
 

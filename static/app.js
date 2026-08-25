@@ -41,6 +41,7 @@ function showView(name, btn) {
   if (name === 'notes')        loadNotes();
   if (name === 'intelligence') loadIntelligenceProjects();
   if (name === 'ingest')       loadResearcherContext();
+  if (name === 'prompt')       loadResearcherContext();
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
@@ -601,10 +602,25 @@ async function sendPrompt() {
     }
   } catch(e) {
     if (e.name !== 'AbortError') {
-      const msg = e.message === 'Load failed' || e.message === 'Failed to fetch'
-        ? 'Connection lost — check that Marginalia is still running (tail /tmp/marginalia.log on the server)'
-        : e.message;
-      grid.innerHTML = '<div style="color:#c94242;font-family:monospace;font-size:12px">Error: ' + msg + '</div>';
+      let msg = e.message;
+      if (e.message === 'Load failed' || e.message === 'Failed to fetch') {
+        msg = 'Connection lost — Marginalia may have stopped. Check the server.';
+      } else if (e.message?.includes('timeout') || e.message?.includes('TimeoutError')) {
+        msg = 'A model timed out — other responses may still be available above.';
+      } else if (e.message?.includes('NetworkError') || e.message?.includes('network')) {
+        msg = 'Network error — check your connection to Solaris via Tailscale.';
+      }
+      // Only show error if no responses have already rendered
+      const hasResponses = document.querySelectorAll('.response-card:not(.loading)').length > 0;
+      if (!hasResponses) {
+        grid.innerHTML = '<div style="color:#c94242;font-family:monospace;font-size:12px">Error: ' + msg + '</div>';
+      } else {
+        // Append a small note rather than wiping existing responses
+        const errNote = document.createElement('div');
+        errNote.style.cssText = 'color:#c9a832;font-family:monospace;font-size:11px;margin-top:8px;padding:6px;background:var(--surface);border-radius:3px';
+        errNote.textContent = 'Note: ' + msg;
+        grid.appendChild(errNote);
+      }
     }
     document.getElementById('cancel-btn').classList.remove('visible');
     document.getElementById('send-btn').disabled = false;
@@ -1193,7 +1209,8 @@ function openEditModal(ref, runAnnotate) {
   document.getElementById('edit-holding').value            = ref.physical_holding || 'none';
   document.getElementById('edit-holding-location').value   = ref.holding_location || '';
 
-  document.getElementById('edit-connections').value        = ref.connections || '';
+  const connVal = ref.connections || '';
+  document.getElementById('edit-connections').value = connVal.startsWith('<!--') ? '' : connVal;
   document.getElementById('edit-abstract').value            = ref.abstract || '';
   document.getElementById('edit-annotation').value         = ref.annotation || '';
   document.getElementById('edit-user-notes').value         = ref.user_notes || '';
@@ -1685,8 +1702,19 @@ async function loadProjects() {
     abstractEl.style.display = p.abstract ? 'block' : 'none';
     const refsEl = document.createElement('div');
     refsEl.style.cssText = 'font-size:11px;font-family:monospace;color:var(--muted)';
+    const projSlug = p.slug || (p._filename || '').replace('.md','');
     if (p.ref_count) {
-      refsEl.textContent = p.ref_count + ' connected reference' + (p.ref_count !== 1 ? 's' : '');
+      const refLink = document.createElement('span');
+      refLink.style.cssText = 'color:var(--accent);cursor:pointer;text-decoration:underline dotted';
+      refLink.textContent = p.ref_count + ' connected reference' + (p.ref_count !== 1 ? 's' : '');
+      refLink.onclick = () => {
+        showView('references', document.querySelector('.nav-btn[onclick*="references"]'));
+        setTimeout(() => {
+          const projFilter = document.getElementById('ref-project-filter');
+          if (projFilter) { projFilter.value = projSlug; filterRefs(); }
+        }, 300);
+      };
+      refsEl.appendChild(refLink);
       if (p.ref_titles && p.ref_titles.length) {
         const titlesEl = document.createElement('div');
         titlesEl.style.cssText = 'font-size:10px;color:var(--muted);margin-top:3px';
@@ -3164,14 +3192,30 @@ async function loadResearcherContext() {
   try {
     const res  = await fetch('/api/settings');
     const data = await res.json();
+    const ctx  = data.researcher_context || '';
     const el   = document.getElementById('researcher-context-input');
-    if (el && data.researcher_context) el.value = data.researcher_context;
+    if (el) el.value = ctx;
+    // Preview in prompt view
+    const preview     = document.getElementById('researcher-context-preview');
+    const previewText = document.getElementById('researcher-context-preview-text');
+    if (preview) {
+      preview.style.display = ctx ? 'block' : 'none';
+    }
+    if (previewText && ctx) {
+      previewText.textContent = ctx.slice(0, 80) + (ctx.length > 80 ? '\u2026' : '');
+    }
   } catch(e) {}
+}
+function toggleResearcherContextEdit() {
+  const edit = document.getElementById('researcher-context-edit');
+  if (!edit) return;
+  edit.style.display = edit.style.display === 'none' ? 'block' : 'none';
 }
 async function saveResearcherContext() {
   const el  = document.getElementById('researcher-context-input');
   const ctx = el ? el.value.trim() : '';
-  const statusEl = document.getElementById('researcher-context-status');
+  const statusEl  = document.getElementById('researcher-context-status');
+  const preview   = document.getElementById('researcher-context-preview');
   try {
     const res  = await fetch('/api/settings');
     const data = await res.json();
@@ -3180,8 +3224,10 @@ async function saveResearcherContext() {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify(data)
     });
-    if (statusEl) { statusEl.textContent = ctx ? '\u2713 Context saved — active on next prompt' : '\u2713 Context cleared'; }
-    setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+    if (preview) preview.textContent = ctx ? ctx.slice(0, 80) + (ctx.length > 80 ? '\u2026' : '') : '(not set)';
+    if (statusEl) { statusEl.textContent = '\u2713 Saved'; setTimeout(() => { statusEl.textContent = ''; }, 2000); }
+    const edit = document.getElementById('researcher-context-edit');
+    if (edit) setTimeout(() => { edit.style.display = 'none'; }, 1500);
   } catch(e) {
     if (statusEl) statusEl.textContent = '\u26a0 Save failed';
   }
@@ -3904,6 +3950,7 @@ updateLocalWarning();
 checkKeyStatus();
 checkSetupStatus();
 checkLocalModels();
+loadResearcherContext();
 // Check for recently saved session — models may still be running if page was refreshed
 (async () => {
   try {
