@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.7.1.0826-0101
+Marginalia — app.py  v1.7.1.0826-0247
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.7.1.0826-0101"
+APP_VERSION = "1.7.1.0826-0247"
 
 
 
@@ -895,6 +895,14 @@ def call_model(model, prompt, num_predict=-1):
     settings = load_settings()
     researcher_context = settings.get("researcher_context", "").strip()
 
+    disposition = settings.get("disposition", "balance")
+    disposition_instructions = {
+        "build":     "Your role is generative — build on the researcher's ideas, extend connections, find supporting threads, surface what fits and why. Be constructive and expansive.",
+        "balance":   "Your role is balanced — engage honestly with the argument, note both where it holds and where it needs work. Neither validate nor attack.",
+        "challenge": "Your role is adversarial — find the weakest point in the argument and press it. Surface what's missing, what's assumed without justification, what an examiner would flag. Do not validate.",
+    }
+    disposition_text = disposition_instructions.get(disposition, disposition_instructions["balance"])
+
     word_count_map = {
         75:  "Respond in approximately 50 words or less.",
         300: "Respond in approximately 200 words or less.",
@@ -909,6 +917,7 @@ def call_model(model, prompt, num_predict=-1):
         "or bold/italic formatting unless the content is genuinely a list or requires code blocks. "
         "Write as if corresponding with a peer researcher, not tutoring a student."
         + (f" {word_limit}" if word_limit else "")
+        + f"\n\nDISPOSITION: {disposition_text}"
         + "\n\n"
         + (f"RESEARCHER CONTEXT: {researcher_context}\n\n" if researcher_context else "")
     )
@@ -993,6 +1002,12 @@ def handle_prompt():
     project_tag     = data.get("project", "")
     writing_tag     = data.get("writing", "")
     full_prompt     = data.get("full_prompt", prompt)
+    # Override settings disposition with per-request disposition if sent
+    request_disposition = data.get("disposition", "").strip()
+    if request_disposition in ("build", "balance", "challenge"):
+        settings = load_settings()
+        settings["disposition"] = request_disposition
+        save_settings(settings)
 
     # ── Minimal session save — fires immediately before any model calls ────────
     # The prompt is the research gesture. If the stream dies (timeout, disconnect,
@@ -1751,12 +1766,14 @@ def sessions_list():
     Return session metadata for Intelligence session list and related-sessions strip.
     Optional ?project=slug filter, ?show_hidden=true to include hidden sessions.
     Optional ?limit=N to control how many sessions are returned (default 20, max 200).
+    Optional ?sort=date|name|tags (default: date, most recent first).
     Hidden sessions (hidden: true in frontmatter) are excluded by default.
     Sessions are never deleted — hide is the only removal gesture.
     """
     project_filter = request.args.get("project", "").strip()
     show_hidden    = request.args.get("show_hidden", "false").lower() == "true"
     limit          = min(int(request.args.get("limit", 20)), 200)
+    sort_by        = request.args.get("sort", "date")
     sessions = []
     if SESSIONS_DIR.exists():
         for f in sorted(SESSIONS_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
@@ -1793,6 +1810,13 @@ def sessions_list():
                     break
             except Exception:
                 continue
+    # Apply sort
+    if sort_by == 'name':
+        sessions.sort(key=lambda s: (s.get('title') or s.get('filename') or '').lower())
+    elif sort_by == 'tags':
+        sessions.sort(key=lambda s: (s.get('tags') or '').lower())
+    # default: date order preserved from directory listing (most recent first)
+
     return jsonify({"sessions": sessions})
 
 
@@ -2166,6 +2190,116 @@ SESSIONS:
     try:
         synthesis = call_ollama(model_str, lens_prompt)
         return jsonify({"synthesis": synthesis, "session_count": matched, "project": project})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sessions/stack-analysis", methods=["POST"])
+def sessions_stack_analysis():
+    """
+    +++ Stack mode — dissects the prompt stacking layers across recent sessions.
+    For each session: how many +++ layers, what each layer contributed,
+    where the final question sat relative to the context weight.
+    Surfaces which context layers dominated model responses and where
+    the final question may have been absorbed (context collapse risk).
+    """
+    data      = request.json or {}
+    project   = data.get("project", "").strip()
+    writing   = data.get("writing", "").strip()
+    req_model = data.get("model", "deepseek").strip()
+    limit     = 20  # analyse most recent sessions
+
+    sessions_data = []
+    if SESSIONS_DIR.exists():
+        files = sorted(SESSIONS_DIR.glob("*.md"),
+                       key=lambda f: f.stat().st_mtime, reverse=True)
+        for f in files[:limit * 2]:  # read more to account for filtering
+            try:
+                text  = f.read_text(encoding="utf-8")
+                parts = text.split("---", 2)
+                if len(parts) < 3:
+                    continue
+                meta  = {}
+                for line in parts[1].strip().splitlines():
+                    if ": " in line:
+                        k, v = line.split(": ", 1)
+                        meta[k.strip()] = v.strip()
+                # Filter by project/writing
+                if project and meta.get("project", "").strip() != project:
+                    continue
+                if writing and meta.get("writing", "").strip() != writing:
+                    continue
+                body = parts[2]
+                # Extract prompt section
+                prompt_text = ""
+                if "## Prompt" in body:
+                    prompt_text = body.split("## Prompt")[1].split("\n## ")[0].strip()
+                if not prompt_text:
+                    continue
+                # Analyse +++ layers
+                layers = [l.strip() for l in prompt_text.split("+++") if l.strip()]
+                layer_tokens = [len(l.split()) for l in layers]
+                total_tokens = sum(layer_tokens)
+                final_pct = (layer_tokens[-1] / total_tokens * 100) if total_tokens > 0 else 100
+                sessions_data.append({
+                    "title":       meta.get("title", f.stem),
+                    "created":     meta.get("created_at", "")[:10],
+                    "layer_count": len(layers),
+                    "layer_tokens": layer_tokens,
+                    "total_tokens": total_tokens,
+                    "final_pct":   round(final_pct),
+                    "final_block": layers[-1][:150] if layers else "",
+                    "context_blocks": layers[:-1] if len(layers) > 1 else [],
+                })
+                if len(sessions_data) >= limit:
+                    break
+            except Exception:
+                continue
+
+    if not sessions_data:
+        return jsonify({"error": "No sessions with +++ stacking found"}), 400
+
+    # Build prompt for stack dissection
+    stack_summary = []
+    at_risk = []
+    for s in sessions_data:
+        entry = f"[{s['created']}] {s['title']}\n"
+        entry += f"  Layers: {s['layer_count']} (+++ blocks), Total: ~{s['total_tokens']} words\n"
+        if s['layer_count'] > 1:
+            entry += f"  Context: {', '.join(str(t) + 'w' for t in s['layer_tokens'][:-1])}"
+            entry += f" → Final question: {s['layer_tokens'][-1]}w ({s['final_pct']}% of total)\n"
+            if s['final_pct'] < 25:
+                entry += f"  ⚠ CONTEXT COLLAPSE RISK — final question is only {s['final_pct']}% of stack\n"
+                at_risk.append(s['title'])
+            entry += f"  Final: {s['final_block'][:100]}...\n"
+        else:
+            entry += f"  Single-layer prompt (~{s['total_tokens']} words)\n"
+        stack_summary.append(entry)
+
+    synthesis_prompt = f"""You are analysing the +++ prompt stacking patterns across {len(sessions_data)} research sessions.
+
+For each session below, you can see how many context layers the researcher used, how much of the stack weight was in the context vs the final question, and the content of the final block.
+
+SESSIONS:
+{"".join(stack_summary)}
+
+{'CONTEXT COLLAPSE RISK — these sessions had final questions under 25% of stack weight: ' + ', '.join(at_risk) if at_risk else 'No immediate context collapse risks detected.'}
+
+Analyse:
+1. What intellectual threads run through the final questions across sessions? What is the researcher actually asking, stripped of context?
+2. Where did context stacking help (rich background enabling a precise question) vs where did it likely overwhelm (final question absorbed)?
+3. What does the stacking pattern reveal about how this researcher thinks — what do they reach for as context? What do they leave out?
+4. What question hasn't been asked yet that the stacking pattern suggests the researcher is circling around?
+
+Be specific and direct. Name the sessions. This is a structural reading, not a summary."""
+
+    try:
+        _, synthesis, _, _, _ = call_model(req_model, synthesis_prompt)
+        return jsonify({
+            "synthesis":     synthesis or "No synthesis generated",
+            "session_count": len(sessions_data),
+            "at_risk_count": len(at_risk),
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

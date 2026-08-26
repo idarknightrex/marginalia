@@ -165,6 +165,15 @@
       <span style="color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:9px">Researcher context active</span>
       <span id="researcher-context-preview-text" style="margin-left:8px"></span>
     </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;font-family:monospace;font-size:10px;color:var(--muted)">
+      <span>Build</span>
+      <input type="range" id="disposition-slider" min="0" max="2" step="1" value="1"
+        style="flex:1;accent-color:var(--accent)"
+        oninput="updateDisposition(this.value)"
+        title="Council disposition: Build (generative), Balance (honest), Challenge (adversarial)">
+      <span>Challenge</span>
+      <span id="disposition-label" style="color:var(--accent);min-width:60px;text-align:right">Balance</span>
+    </div>
 
     <!-- Researcher context — collapsible, above prompt -->
     <div id="researcher-context-bar" style="margin-bottom:6px">
@@ -646,6 +655,7 @@
           <button class="format-btn" id="intel-mode-sessions" onclick="setIntelMode('sessions', this)">&#9672; Sessions</button>
           <button class="format-btn" id="intel-mode-both" onclick="setIntelMode('both', this)">&#9670; Both</button>
           <button class="format-btn" id="intel-mode-predict" onclick="setIntelMode('predict', this)" style="color:#6e56cf;border-color:#6e56cf44">&#9650; What am I missing?</button>
+          <button class="format-btn" id="intel-mode-stack" onclick="setIntelMode('stack', this)" style="color:#c9a832;border-color:#c9a83244">&#43;&#43;&#43; Stack</button>
         </div>
         <div style="font-size:11px;font-family:monospace;color:var(--muted);margin-top:6px" id="intel-mode-desc">
           Themes, tensions, absent voices, and conversations across your connected sources
@@ -669,6 +679,11 @@
 
       <!-- Output -->
       <div class="library-synthesis-panel" id="library-synthesis-panel" style="margin-top:14px">
+        <!-- Council arriving strip — shows first sentences as models return during synthesis -->
+        <div id="council-arriving-strip" style="display:none;margin-bottom:12px;border:1px solid var(--border);border-radius:4px;padding:8px 12px;background:var(--surface)">
+          <div style="font-family:monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Council arriving</div>
+          <div id="council-arriving-entries" style="font-family:monospace;font-size:11px;line-height:1.6"></div>
+        </div>
         <div class="library-synthesis-label" id="library-synthesis-label">&#9670; Synthesis
           <span id="intel-pulse" style="display:none;font-family:monospace;font-size:10px;color:var(--muted);margin-left:8px">
             <span id="intel-elapsed" style="color:var(--accent)">0s</span> · mapping
@@ -712,6 +727,13 @@
         <input id="intel-session-date-filter" type="text" placeholder="Date (e.g. 2026-08)"
           style="font-family:monospace;font-size:10px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);flex:1;min-width:90px"
           oninput="filterIntelSessions()">
+        <select id="intel-session-sort"
+          style="font-family:monospace;font-size:10px;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text)"
+          onchange="sortIntelSessions()">
+          <option value="date">Date ↓</option>
+          <option value="name">Name A-Z</option>
+          <option value="tags">Tags</option>
+        </select>
         <button class="btn-secondary" style="font-size:10px;padding:3px 8px" onclick="clearIntelSessionFilters()">Clear</button>
       </div>
       <!-- Scrolling session list -->

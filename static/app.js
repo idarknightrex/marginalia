@@ -462,6 +462,7 @@ async function sendPrompt() {
         models,
         synthesis_model:  document.getElementById('synthesis-model-select')?.value || 'deepseek',
         num_predict:      parseInt(document.getElementById('output-length-select')?.value || '-1'),
+        disposition:      DISPOSITION_LABELS[parseInt(document.getElementById('disposition-slider')?.value || '1')] || 'balance',
         project:          document.getElementById('session-project-select')?.value || '',
         writing:          document.getElementById('session-writing-select')?.value || '',
         synthesis_context: getSynthesisContext(),
@@ -1451,6 +1452,30 @@ function runLibrarySynthesis() { runIntelSynthesis(); }
 
 
 // ── Tag and connection autocomplete ──────────────────────────────────────
+// ── Disposition slider ────────────────────────────────────────────────────────
+const DISPOSITION_LABELS  = ['build', 'balance', 'challenge'];
+const DISPOSITION_DISPLAY = ['Build', 'Balance', 'Challenge'];
+function updateDisposition(val) {
+  const label = document.getElementById('disposition-label');
+  if (label) label.textContent = DISPOSITION_DISPLAY[parseInt(val)] || 'Balance';
+  fetch('/api/settings').then(r => r.json()).then(data => {
+    data.disposition = DISPOSITION_LABELS[parseInt(val)] || 'balance';
+    fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+  }).catch(() => {});
+}
+(async () => {
+  try {
+    const res  = await fetch('/api/settings');
+    const data = await res.json();
+    const disp = data.disposition || 'balance';
+    const idx  = DISPOSITION_LABELS.indexOf(disp);
+    const slider = document.getElementById('disposition-slider');
+    const label  = document.getElementById('disposition-label');
+    if (slider) slider.value = idx >= 0 ? idx : 1;
+    if (label)  label.textContent = DISPOSITION_DISPLAY[idx >= 0 ? idx : 1];
+  } catch(e) {}
+})();
+
 // ── Active framing preview ────────────────────────────────────────────────────
 // Shows the active project's framing below the scope row so the researcher
 // can see what context will be injected without leaving the prompt view.
@@ -1910,17 +1935,18 @@ let _intelAbort    = null;
 
 function setIntelMode(mode, btn) {
   _intelMode = mode;
-  document.querySelectorAll('#intel-mode-library, #intel-mode-sessions, #intel-mode-both, #intel-mode-predict')
+  document.querySelectorAll('#intel-mode-library, #intel-mode-sessions, #intel-mode-both, #intel-mode-predict, #intel-mode-stack')
     .forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   const descs = {
     library:  'Themes, tensions, absent voices, and conversations across your connected sources',
     sessions: 'Recurring questions, evolution of thinking, and unresolved threads across your sessions',
     both:     'Full picture — references and sessions synthesised together',
-    predict:  'What am I missing? Argument weaknesses, unasked questions, examiner challenges'
+    predict:  'What am I missing? Argument weaknesses, unasked questions, examiner challenges',
+    stack:    '+++ Stack — dissects your prompt layers: what each +++ block contributed, where the final question got absorbed, which context layer dominated the council responses',
   };
   const descEl = document.getElementById('intel-mode-desc');
-  if (descEl) descEl.textContent = descs[mode];
+  if (descEl) descEl.textContent = descs[mode] || '';
 }
 
 function cancelIntelSynthesis() {
@@ -2011,6 +2037,14 @@ async function runIntelSynthesis() {
   const cancelBtn = document.getElementById('intel-cancel-btn');
   const runBtn    = document.getElementById('intel-run-btn');
 
+  // Show council arriving strip
+  const arrivingStrip   = document.getElementById('council-arriving-strip');
+  const arrivingEntries = document.getElementById('council-arriving-entries');
+  if (arrivingStrip && arrivingEntries) {
+    arrivingStrip.style.display = 'block';
+    arrivingEntries.innerHTML = '<span style="color:var(--muted);font-style:italic">Assembling context\u2026</span>';
+  }
+
   panel.classList.add('visible');
   textEl.innerHTML = '';
   textEl.style.color = 'var(--muted)';
@@ -2063,6 +2097,16 @@ async function runIntelSynthesis() {
       const data = await res.json();
       if (data.error) results.predict = '\u26a0 ' + data.error;
       else { results.predict = data.synthesis; results.sessionCount = data.session_count; }
+    }
+
+    if (_intelMode === 'stack') {
+      const res  = await fetch('/api/sessions/stack-analysis', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ project, writing, model: document.getElementById('intel-model-select')?.value || 'deepseek' }), signal
+      });
+      const data = await res.json();
+      if (data.error) results.stack = '\u26a0 ' + data.error;
+      else { results.stack = data.synthesis; results.sessionCount = data.session_count; }
     }
   } catch(e) {
     if (e.name === 'AbortError') return;
@@ -2289,6 +2333,24 @@ function filterIntelSessions() {
     row.appendChild(tagsRow);
     list.appendChild(row);
   });
+}
+
+function sortIntelSessions() {
+  const sort = document.getElementById('intel-session-sort')?.value || 'date';
+  if (sort === 'date') {
+    // Default order from API (most recent first) — just re-filter
+    filterIntelSessions();
+  } else if (sort === 'name') {
+    _allIntelSessions.sort((a, b) =>
+      (a.title || a.filename || '').toLowerCase().localeCompare((b.title || b.filename || '').toLowerCase())
+    );
+    filterIntelSessions();
+  } else if (sort === 'tags') {
+    _allIntelSessions.sort((a, b) =>
+      (a.tags || '').toLowerCase().localeCompare((b.tags || '').toLowerCase())
+    );
+    filterIntelSessions();
+  }
 }
 
 function clearIntelSessionFilters() {
