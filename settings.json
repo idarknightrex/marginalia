@@ -1,32 +1,20 @@
 {
   "_comment": "Marginalia settings \u2014 human readable, travels with your repo, committed to git",
   "_docs": "All values editable here or via Settings panel in the UI",
-  "workflow": {
-    "break_reminder_minutes": 120,
-    "dwell_threshold_seconds": 30,
-    "default_verification_status": "located",
-    "upgrade_check_days": 30,
-    "auto_save_canonical": true
-  },
+  "disposition": "balance",
   "models": {
-    "local": {
-      "reasoning": "deepseek-r1:8b",
-      "multimodal": "gemma4:latest",
-      "general": "llama3.1:8b",
-      "asia": "qwen2.5:14b",
-      "europe": "mistral:7b"
-    },
     "cloud": {
-      "gemini": "gemini-2.5-flash",
       "anthropic": "claude-haiku-4-5",
+      "gemini": "gemini-2.5-flash",
       "openai": "gpt-4o"
+    },
+    "local": {
+      "asia": "qwen2.5:14b",
+      "europe": "mistral:7b",
+      "general": "llama3.1:8b",
+      "multimodal": "gemma4:latest",
+      "reasoning": "deepseek-r1:8b"
     }
-  },
-  "storage": {
-    "pdf_folder": "~/Documents/Research/PDFs",
-    "canonical_folder": "canonical",
-    "exports_folder": "exports",
-    "captures_folder": "canonical/captures"
   },
   "projects": {
     "types": [
@@ -38,9 +26,22 @@
       "Other"
     ]
   },
+  "storage": {
+    "canonical_folder": "canonical",
+    "captures_folder": "canonical/captures",
+    "exports_folder": "exports",
+    "pdf_folder": "~/Documents/Research/PDFs"
+  },
   "ui": {
-    "theme": "default",
+    "port": 5000,
     "reading_assistant_enabled": false,
-    "port": 5000
+    "theme": "default"
+  },
+  "workflow": {
+    "auto_save_canonical": true,
+    "break_reminder_minutes": 120,
+    "default_verification_status": "located",
+    "dwell_threshold_seconds": 30,
+    "upgrade_check_days": 30
   }
 }

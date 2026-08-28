@@ -1455,11 +1455,19 @@ function runLibrarySynthesis() { runIntelSynthesis(); }
 // ── Disposition slider ────────────────────────────────────────────────────────
 const DISPOSITION_LABELS  = ['build', 'balance', 'challenge'];
 const DISPOSITION_DISPLAY = ['Build', 'Balance', 'Challenge'];
+const DISPOSITION_DESCS   = [
+  'Generative — extend connections, find supporting threads, surface what fits.',
+  'Honest — engage with both where the argument holds and where it needs work.',
+  'Adversarial — find the weakest point and press it. Do not validate.',
+];
 function updateDisposition(val) {
-  const label = document.getElementById('disposition-label');
-  if (label) label.textContent = DISPOSITION_DISPLAY[parseInt(val)] || 'Balance';
+  const idx    = parseInt(val);
+  const label  = document.getElementById('disposition-label');
+  const desc   = document.getElementById('disposition-desc');
+  if (label) label.textContent = DISPOSITION_DISPLAY[idx] || 'Balance';
+  if (desc)  desc.textContent  = DISPOSITION_DESCS[idx]   || '';
   fetch('/api/settings').then(r => r.json()).then(data => {
-    data.disposition = DISPOSITION_LABELS[parseInt(val)] || 'balance';
+    data.disposition = DISPOSITION_LABELS[idx] || 'balance';
     fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
   }).catch(() => {});
 }
@@ -1471,8 +1479,10 @@ function updateDisposition(val) {
     const idx  = DISPOSITION_LABELS.indexOf(disp);
     const slider = document.getElementById('disposition-slider');
     const label  = document.getElementById('disposition-label');
+    const desc   = document.getElementById('disposition-desc');
     if (slider) slider.value = idx >= 0 ? idx : 1;
     if (label)  label.textContent = DISPOSITION_DISPLAY[idx >= 0 ? idx : 1];
+    if (desc)   desc.textContent  = DISPOSITION_DESCS[idx >= 0 ? idx : 1];
   } catch(e) {}
 })();
 
@@ -1943,7 +1953,7 @@ function setIntelMode(mode, btn) {
     sessions: 'Recurring questions, evolution of thinking, and unresolved threads across your sessions',
     both:     'Full picture — references and sessions synthesised together',
     predict:  'What am I missing? Argument weaknesses, unasked questions, examiner challenges',
-    stack:    '+++ Stack — dissects your prompt layers: what each +++ block contributed, where the final question got absorbed, which context layer dominated the council responses',
+    stack:    '+++ Stack — dissects your prompt layers: what each +++ block contributed, where the final question got absorbed, which context layer dominated',
   };
   const descEl = document.getElementById('intel-mode-desc');
   if (descEl) descEl.textContent = descs[mode] || '';
@@ -2037,14 +2047,6 @@ async function runIntelSynthesis() {
   const cancelBtn = document.getElementById('intel-cancel-btn');
   const runBtn    = document.getElementById('intel-run-btn');
 
-  // Show council arriving strip
-  const arrivingStrip   = document.getElementById('council-arriving-strip');
-  const arrivingEntries = document.getElementById('council-arriving-entries');
-  if (arrivingStrip && arrivingEntries) {
-    arrivingStrip.style.display = 'block';
-    arrivingEntries.innerHTML = '<span style="color:var(--muted);font-style:italic">Assembling context\u2026</span>';
-  }
-
   panel.classList.add('visible');
   textEl.innerHTML = '';
   textEl.style.color = 'var(--muted)';
@@ -2100,11 +2102,15 @@ async function runIntelSynthesis() {
     }
 
     if (_intelMode === 'stack') {
+      const strip   = document.getElementById('council-arriving-strip');
+      const entries = document.getElementById('council-arriving-entries');
+      if (strip && entries) { strip.style.display = 'block'; entries.textContent = 'Analysing +++ stack patterns\u2026'; }
       const res  = await fetch('/api/sessions/stack-analysis', {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ project, writing, model: document.getElementById('intel-model-select')?.value || 'deepseek' }), signal
       });
       const data = await res.json();
+      if (strip) strip.style.display = 'none';
       if (data.error) results.stack = '\u26a0 ' + data.error;
       else { results.stack = data.synthesis; results.sessionCount = data.session_count; }
     }
@@ -2126,6 +2132,8 @@ async function runIntelSynthesis() {
     raw = results.library + '\n\n## SESSIONS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n' + results.sessions;
   } else if (_intelMode === 'predict') {
     raw = results.predict || '\u26a0 No results returned.';
+  } else if (_intelMode === 'stack') {
+    raw = results.stack || '\u26a0 No stack analysis returned.';
   } else {
     raw = results.library || results.sessions || '\u26a0 No results returned.';
   }
@@ -2337,20 +2345,17 @@ function filterIntelSessions() {
 
 function sortIntelSessions() {
   const sort = document.getElementById('intel-session-sort')?.value || 'date';
-  if (sort === 'date') {
-    // Default order from API (most recent first) — just re-filter
-    filterIntelSessions();
-  } else if (sort === 'name') {
+  if (sort === 'name') {
     _allIntelSessions.sort((a, b) =>
       (a.title || a.filename || '').toLowerCase().localeCompare((b.title || b.filename || '').toLowerCase())
     );
-    filterIntelSessions();
   } else if (sort === 'tags') {
     _allIntelSessions.sort((a, b) =>
       (a.tags || '').toLowerCase().localeCompare((b.tags || '').toLowerCase())
     );
-    filterIntelSessions();
   }
+  // date: keep existing order (most recent first from API)
+  filterIntelSessions();
 }
 
 function clearIntelSessionFilters() {
@@ -2958,7 +2963,7 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
     // Heuristic: concept suffixes (-tion, -ism, -ity, -ment, -ence, -ogy, -ness, -ing)
     // or known philosophical/academic vocabulary → concept bucket.
     // Single capitalised word or hyphenated name pattern → name bucket.
-    const CONCEPT_SUFFIXES = /(?:tion|ism|ity|ment|ence|ogy|ness|ing|ics|phy|sis|ism)$/i;
+    const CONCEPT_SUFFIXES = /(?:tion|ism|ity|ment|ence|ogy|ness|ing|ics|phy|sis|centric|esque|ward|esque)$/i;
     const KNOWN_CONCEPTS   = new Set([
       'phenomenology','embodiment','perception','consciousness','intentionality',
       'intersubjectivity','temporality','spatiality','materiality','ontology',
@@ -2968,7 +2973,55 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
       'constructivism','behaviourism','behaviorism','pragmatism','empiricism',
       'rationalism','idealism','realism','nominalism','structuralism',
       'poststructuralism','deconstruction','intersectionality',
+      // Geographic/cultural adjectives that are concepts not surnames
+      'eurocentric','eurocentric','anglocentric','anthropocentric','androcentric',
+      'enlightenment','cartesianism','kantianism','hegelianism','marxism',
     ]);
+
+    // Weighted contextual signals — terms appearing after these patterns
+    // get higher confidence regardless of frequency count
+    const AUTHOR_SIGNAL_PATTERNS = [
+      /\blike\s+([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)/g,
+      /\bsuch as\s+([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)/g,
+      /\bdrawing on\s+([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)/g,
+      /\bbuilding on\s+([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)/g,
+      /\bfollowing\s+([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)/g,
+      /\baccording to\s+([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)/g,
+      /\bwork of\s+([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)/g,
+      /([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)\s+(?:argues|contends|suggests|proposes|notes|shows|demonstrates|claims)\b/g,
+      /\bas\s+([A-Z][a-z]{2,})\s+(?:notes|argues|shows|suggests)\b/g,
+      /([A-Z][a-z]{2,})'s\s+(?:concept|framework|account|theory|notion|work)\b/g,
+    ];
+    const CONCEPT_SIGNAL_PATTERNS = [
+      /\bconcept of\s+([a-z][a-z\-]{3,})/g,
+      /\bnotion of\s+([a-z][a-z\-]{3,})/g,
+      /\bwhat\s+\w+\s+calls\s+([a-z][a-z\-]{3,})/g,
+      /\btermed\s+([a-z][a-z\-]{3,})/g,
+      /\bknown as\s+([a-z][a-z\-]{3,})/g,
+      /\btheory of\s+([a-z][a-z\-]{3,})/g,
+      /\bpractice of\s+([a-z][a-z\-]{3,})/g,
+      /\bframework of\s+([a-z][a-z\-]{3,})/g,
+    ];
+
+    // Build signal-weighted maps
+    const authorSignalWeight  = {};  // tl → bonus weight from signal detection
+    const conceptSignalWeight = {};
+    const fullText = responsesText + ' ' + synthesisText;
+
+    AUTHOR_SIGNAL_PATTERNS.forEach(pattern => {
+      let m;
+      while ((m = pattern.exec(fullText)) !== null) {
+        const name = m[1].trim().toLowerCase();
+        if (name.length > 3) authorSignalWeight[name] = (authorSignalWeight[name] || 0) + 2;
+      }
+    });
+    CONCEPT_SIGNAL_PATTERNS.forEach(pattern => {
+      let m;
+      while ((m = pattern.exec(fullText)) !== null) {
+        const term = m[1].trim().toLowerCase();
+        if (term.length > 3) conceptSignalWeight[term] = (conceptSignalWeight[term] || 0) + 2;
+      }
+    });
 
     const roseNames     = {};  // potential missing references
     const roseConcepts  = {};  // potential missing tags/themes
@@ -3006,12 +3059,19 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
         'intentional','traditional','conventional','philosophical','psychological',
         'viewed','defined','without','regarding','stated','argued','noted',
         'proposed','suggested','described','explained','discussed','presented',
-        // Common first names that appear without surnames
+        // Geographic/cultural adjectives — concepts not surnames
+        'european','american','african','asian','australian','canadian',
+        'eurocentric','anglocentric','anthropocentric','androcentric',
+        'enlightenment','medieval','colonial','postcolonial','imperial',
+        'victorian','cartesian','platonic','aristotelian','socratic',
+        // Common first names
         'francisco','rene','immanuel','gottfried','baruch','george','thomas',
         'william','john','david','michael','james','robert','richard','charles',
+        'enrique','henri','marie','pierre','jean','hans','karl','heinrich',
+        // Model names
         'gemini','deepseek','qwen','mistral','cohere','gemma','llama','claude',
         'openai','anthropic','chatgpt',
-        'western','eastern','indigenous','canadian','english','french','latin',
+        // Calendar
         'january','february','march','april','june','july','august','september',
         'october','november','december','monday','tuesday','wednesday','thursday',
         'friday','saturday','sunday',
@@ -3025,10 +3085,27 @@ async function renderSynthesisRefsChunk(promptText, responsesText, synthesisText
       }
 
       // Classify: concept or name?
-      if (CONCEPT_SUFFIXES.test(tl) || KNOWN_CONCEPTS.has(tl)) {
-        roseConcepts[tl] = (roseConcepts[tl] || 0) + 1;
+      // Signal weight boosts confidence regardless of frequency
+      const isConceptBySignal = !!conceptSignalWeight[tl];
+      const isAuthorBySignal  = !!authorSignalWeight[tl];
+
+      if (CONCEPT_SUFFIXES.test(tl) || KNOWN_CONCEPTS.has(tl) || (isConceptBySignal && !isAuthorBySignal)) {
+        roseConcepts[tl] = (roseConcepts[tl] || 0) + 1 + (conceptSignalWeight[tl] || 0);
       } else {
-        roseNames[tl] = (roseNames[tl] || 0) + 1;
+        // Apply author signal boost
+        roseNames[tl] = (roseNames[tl] || 0) + 1 + (authorSignalWeight[tl] || 0);
+      }
+    });
+
+    // Also surface any signal-detected authors/concepts that didn't appear as capitalised tokens
+    Object.entries(authorSignalWeight).forEach(([name, weight]) => {
+      if (!surnameMap[name] && !promptSurnames.has(name) && weight >= 2) {
+        roseNames[name] = Math.max(roseNames[name] || 0, weight);
+      }
+    });
+    Object.entries(conceptSignalWeight).forEach(([term, weight]) => {
+      if (weight >= 2 && term.length > 4) {
+        roseConcepts[term] = Math.max(roseConcepts[term] || 0, weight);
       }
     });
 

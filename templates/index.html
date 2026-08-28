@@ -165,15 +165,15 @@
       <span style="color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:9px">Researcher context active</span>
       <span id="researcher-context-preview-text" style="margin-left:8px"></span>
     </div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;font-family:monospace;font-size:10px;color:var(--muted)">
-      <span>Build</span>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-family:monospace;font-size:10px;color:var(--muted)">
+      <span style="min-width:30px">Build</span>
       <input type="range" id="disposition-slider" min="0" max="2" step="1" value="1"
         style="flex:1;accent-color:var(--accent)"
-        oninput="updateDisposition(this.value)"
-        title="Council disposition: Build (generative), Balance (honest), Challenge (adversarial)">
-      <span>Challenge</span>
+        oninput="updateDisposition(this.value)">
+      <span style="min-width:50px">Challenge</span>
       <span id="disposition-label" style="color:var(--accent);min-width:60px;text-align:right">Balance</span>
     </div>
+    <div id="disposition-desc" style="font-family:monospace;font-size:10px;color:var(--muted);margin-bottom:8px;font-style:italic"></div>
 
     <!-- Researcher context — collapsible, above prompt -->
     <div id="researcher-context-bar" style="margin-bottom:6px">
@@ -679,10 +679,9 @@
 
       <!-- Output -->
       <div class="library-synthesis-panel" id="library-synthesis-panel" style="margin-top:14px">
-        <!-- Council arriving strip — shows first sentences as models return during synthesis -->
-        <div id="council-arriving-strip" style="display:none;margin-bottom:12px;border:1px solid var(--border);border-radius:4px;padding:8px 12px;background:var(--surface)">
-          <div style="font-family:monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Council arriving</div>
-          <div id="council-arriving-entries" style="font-family:monospace;font-size:11px;line-height:1.6"></div>
+        <div id="council-arriving-strip" style="display:none;margin-bottom:10px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-family:monospace;font-size:10px">
+          <div style="color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-size:9px;margin-bottom:4px">Council arriving</div>
+          <div id="council-arriving-entries" style="line-height:1.7"></div>
         </div>
         <div class="library-synthesis-label" id="library-synthesis-label">&#9670; Synthesis
           <span id="intel-pulse" style="display:none;font-family:monospace;font-size:10px;color:var(--muted);margin-left:8px">
