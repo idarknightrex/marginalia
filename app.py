@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.7.2.0828-0311
+Marginalia — app.py  v1.7.2.0829-0009
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.7.2.0828-0311"
+APP_VERSION = "1.7.2.0829-0009"
 
 
 
@@ -206,7 +206,7 @@ def normalise_keywords(raw: str) -> str:
     return ', '.join(cleaned)
 
 
-
+def strip_jats(text: str) -> str:
     """Strip JATS XML tags from abstract text returned by academic APIs.
     Publishers wrap abstracts in <jats:p>, <jats:italic> etc. which come
     through raw from Semantic Scholar and OpenAlex."""
@@ -220,7 +220,7 @@ def normalise_keywords(raw: str) -> str:
     return text
 
 
-
+def write_canonical_session(prompt: str, responses: dict, synthesis: str = "", project: str = "", notes: str = "", writing: str = "") -> Path:
     """
     Write a session as a plain markdown file.
 

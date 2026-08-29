@@ -223,22 +223,23 @@ document.addEventListener('DOMContentLoaded', function() {
         // Show per-layer breakdown
         const parts   = counts.map((c, i) => (i === layers.length - 1 ? `<strong>${c}</strong>` : c));
         const finalPct = total > 0 ? counts[counts.length - 1] / total : 1;
+        const firstPct = total > 0 ? counts[0] / total : 1;
         let label = `~${total} tokens (${parts.join(' + ')})`;
-        if (finalPct < 0.2 && total > 50) {
-          label += ' <span style="color:#c9a832" title="Final prompt is less than 20% of total context — models may weight the context layers more heavily than your question">⚠ final prompt light</span>';
-          // Show focus button
-          let focusBtn = document.getElementById('focus-prompt-btn');
-          if (!focusBtn) {
-            focusBtn = document.createElement('button');
-            focusBtn.id = 'focus-prompt-btn';
-            focusBtn.className = 'hide-inactive-btn';
-            focusBtn.textContent = '⊙ Focus final';
-            focusBtn.dataset.tooltip = 'Inject a focus instruction before the final prompt block so models weight it appropriately';
-            focusBtn.onclick = injectFocusInstruction;
-            estEl.parentNode.insertBefore(focusBtn, estEl.nextSibling);
-          }
-        } else {
-          document.getElementById('focus-prompt-btn')?.remove();
+        // Warn if final block is light (bottom-up stacker) OR first block is light (top-down stacker)
+        const stackImbalanced = (finalPct < 0.2 || firstPct < 0.2) && total > 50;
+        if (stackImbalanced) {
+          label += ' <span style="color:#c9a832" title="Stack imbalance detected — one block may be getting lost. Use Focus final or Prime Focus to declare your question explicitly">⚠ stack light</span>';
+        }
+        // Always show focus button when stacking — researcher decides when they need it
+        let focusBtn = document.getElementById('focus-prompt-btn');
+        if (!focusBtn) {
+          focusBtn = document.createElement('button');
+          focusBtn.id = 'focus-prompt-btn';
+          focusBtn.className = 'hide-inactive-btn';
+          focusBtn.textContent = '⊙ Focus final';
+          focusBtn.dataset.tooltip = 'Inject a focus instruction before the final prompt block so models weight it appropriately';
+          focusBtn.onclick = injectFocusInstruction;
+          estEl.parentNode.insertBefore(focusBtn, estEl.nextSibling);
         }
         estEl.innerHTML = label;
       } else {
@@ -1976,6 +1977,43 @@ function cancelIntelSynthesis() {
 // falls back to plain text rendering — no error, just less visual structure.
 // The colour assignments are not arbitrary: red=tension/conflict,
 // blue=patterns/recurring, purple=absence/missing, green=connection/conversation.
+function renderSynthesisMarkdown(text) {
+  // Lightweight markdown renderer for synthesis output
+  // Handles: **bold**, *italic*, bullet lists (* or - ), model names in bold
+  if (!text) return '';
+  const lines = text.split('\n');
+  let html = '';
+  let inList = false;
+  for (let line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      if (inList) { html += '</ul>'; inList = false; }
+      html += '<br>';
+      continue;
+    }
+    // Bullet list items: * text or - text
+    if (/^[\*\-]\s+/.test(trimmed)) {
+      if (!inList) { html += '<ul style="margin:6px 0 6px 16px;padding:0">'; inList = true; }
+      const content = trimmed.replace(/^[\*\-]\s+/, '');
+      html += '<li style="margin-bottom:4px">' + formatInline(content) + '</li>';
+      continue;
+    }
+    if (inList) { html += '</ul>'; inList = false; }
+    // Regular paragraph line
+    html += '<p style="margin:0 0 6px">' + formatInline(trimmed) + '</p>';
+  }
+  if (inList) html += '</ul>';
+  return html;
+}
+
+function formatInline(text) {
+  // **bold** → <strong>
+  text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  // *italic* → <em> (but not bullet markers)
+  text = text.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+  return text;
+}
+
 function renderSynthesisSections(raw, container) {
   if (!raw || typeof raw !== 'string') return;
   container.innerHTML = '';
@@ -2008,7 +2046,7 @@ function renderSynthesisSections(raw, container) {
   if (preamble && !preamble.startsWith('##')) {
     const pre = document.createElement('div');
     pre.style.cssText = 'font-size:12px;color:var(--muted);font-style:italic;margin-bottom:12px;line-height:1.6';
-    pre.textContent = preamble;
+    pre.innerHTML = renderSynthesisMarkdown(preamble);
     container.appendChild(pre);
   }
   parts.slice(1).forEach(part => {
@@ -2024,8 +2062,8 @@ function renderSynthesisSections(raw, container) {
     heading.style.cssText = `font-family:monospace;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:${color};margin-bottom:8px`;
     heading.textContent = title.charAt(0) + title.slice(1).toLowerCase().replace(/_/g,' ');
     const body = document.createElement('div');
-    body.style.cssText = 'font-size:12px;color:var(--text);line-height:1.7;white-space:pre-wrap';
-    body.textContent = content;
+    body.style.cssText = 'font-size:12px;color:var(--text);line-height:1.7';
+    body.innerHTML = renderSynthesisMarkdown(content);
     card.appendChild(heading);
     card.appendChild(body);
     container.appendChild(card);
