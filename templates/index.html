@@ -90,9 +90,9 @@
       <div class="model-chips" id="model-chips">
         <div class="chip-wrapper">
           <div class="model-chip inactive" data-model="gemini" data-local="false" style="background:rgba(66,133,244,.1);border-color:rgba(66,133,244,.3)" onclick="toggleModel(this)">
-            <div class="chip-dot" style="background:#4285f4"></div><span style="color:#4285f4">Gemini 3.6 Flash</span>
+            <div class="chip-dot" style="background:#4285f4"></div><span style="color:#4285f4">Gemini 3.8 Flash</span>
           </div>
-          <span class="chip-tooltip">🌐 Web-aware · Google Gemini 3.6 Flash<br>Live internet access · Free tier available<br>Knowledge: current</span>
+          <span class="chip-tooltip">🌐 Web-aware · Google Gemini 3.8 Flash<br>Live internet access · Free tier available<br>Knowledge: Mar 2026</span>
         </div>
         <div class="chip-wrapper">
           <div class="model-chip inactive" data-model="anthropic" data-local="false" style="background:rgba(201,100,66,.1);border-color:rgba(201,100,66,.3)" onclick="toggleModel(this)">
@@ -166,12 +166,12 @@
       <span id="researcher-context-preview-text" style="margin-left:8px"></span>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-family:monospace;font-size:10px;color:var(--muted)">
-      <span style="min-width:30px">Build</span>
+      <span style="min-width:42px;color:var(--muted)">Build</span>
       <input type="range" id="disposition-slider" min="0" max="2" step="1" value="1"
         style="flex:1;accent-color:var(--accent)"
         oninput="updateDisposition(this.value)">
-      <span style="min-width:50px">Challenge</span>
-      <span id="disposition-label" style="color:var(--accent);min-width:60px;text-align:right">Balance</span>
+      <span style="min-width:42px;color:var(--muted);text-align:right">Challenge</span>
+      <span id="disposition-label" style="color:var(--accent);min-width:60px;text-align:right;font-weight:500">Balance</span>
     </div>
     <div id="disposition-desc" style="font-family:monospace;font-size:10px;color:var(--muted);margin-bottom:8px;font-style:italic"></div>
 
@@ -372,7 +372,7 @@
     <!-- Unified filter panel -- find-by-text, project, year, status all in one visual block -->
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:14px">
       <div class="search-row" style="margin-bottom:8px">
-        <input class="search-input" id="ref-search" placeholder="Search title, author, keyword, annotation..." oninput="filterRefs();recordFilterHistory()">
+        <input class="search-input" id="ref-search" placeholder="Search title, author, keyword, annotation..." oninput="filterRefs();recordFilterHistoryDebounced()">
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
         <select id="ref-project-filter" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;flex:1" onchange="filterRefs();recordFilterHistory()">
@@ -435,7 +435,7 @@
         </div>
         <textarea class="import-text-area" id="paste-input" placeholder="Paste BibTeX, RIS, CSV, a list of DOIs, or a messy reference list..."></textarea>
         <div style="display:flex;justify-content:flex-end;margin-top:8px">
-          <button class="btn-primary" onclick="runPasteImport()">Import &#8594;</button>
+          <button class="btn-primary" id="paste-import-btn" onclick="runPasteImport()">Import &#8594;</button>
         </div>
         <div class="import-result" id="paste-import-result"></div>
       </div>
@@ -655,7 +655,6 @@
           <button class="format-btn" id="intel-mode-sessions" onclick="setIntelMode('sessions', this)">&#9672; Sessions</button>
           <button class="format-btn" id="intel-mode-both" onclick="setIntelMode('both', this)">&#9670; Both</button>
           <button class="format-btn" id="intel-mode-predict" onclick="setIntelMode('predict', this)" style="color:#6e56cf;border-color:#6e56cf44">&#9650; What am I missing?</button>
-          <button class="format-btn" id="intel-mode-stack" onclick="setIntelMode('stack', this)" style="color:#c9a832;border-color:#c9a83244">&#43;&#43;&#43; Stack</button>
         </div>
         <div style="font-size:11px;font-family:monospace;color:var(--muted);margin-top:6px" id="intel-mode-desc">
           Themes, tensions, absent voices, and conversations across your connected sources

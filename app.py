@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.7.2.0829-0009
+Marginalia — app.py  v1.7.3.0923-1607
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.7.2.0829-0009"
+APP_VERSION = "1.7.3.0923-1607"
 
 
 
@@ -576,11 +576,14 @@ def parse_bibtex_import(text: str) -> list:
     for entry in db.entries:
         authors_raw = entry.get("author", "")
         authors = "; ".join(a.strip() for a in authors_raw.split(" and ")) if authors_raw else ""
-        abstract = strip_jats(entry.get("abstract", "").strip())
-        note     = (entry.get("note", "") or entry.get("annote", "")).strip()
-        if note:
-            note = f"<!-- [import] BibTeX note field — review and edit -->\n\n{note}"
-        truncated = (note and len(note) > 50 and note[-1] not in '.!?') or                     (abstract and len(abstract) > 50 and abstract[-1] not in '.!?')
+        abstract   = strip_jats(entry.get("abstract", "").strip())
+        annote_raw = entry.get("annote", "").strip()
+        note_raw   = entry.get("note", "").strip()
+        annotation = f"<!-- [imported] -->\n\n{annote_raw}" if annote_raw else ""
+        note       = f"<!-- [import] BibTeX note field — review and edit -->\n\n{note_raw}" if note_raw else ""
+        truncated = (note and len(note) > 50 and note[-1] not in '.!?') or \
+                    (abstract and len(abstract) > 50 and abstract[-1] not in '.!?') or \
+                    (annotation and len(annotation) > 50 and annotation[-1] not in '.!?')
         rec = {
             "title":        entry.get("title", "").replace("{", "").replace("}", ""),
             "authors":      authors,
@@ -588,6 +591,7 @@ def parse_bibtex_import(text: str) -> list:
             "source_type":  type_map.get(entry.get("ENTRYTYPE", "").lower(), "other"),
             "url_doi":      entry.get("doi", "") or entry.get("url", ""),
             "abstract":     abstract,
+            "annotation":   annotation,
             "user_notes":   note,
             "keywords":     normalise_keywords(entry.get("keywords", "")),
             "needs_review": truncated,
@@ -619,17 +623,21 @@ def _parse_bibtex_minimal(text: str) -> list:
             return re.sub(r'\s+', ' ', m2.group(1).strip()) if m2 else ""
         authors_raw = field("author")
         authors = "; ".join(a.strip() for a in authors_raw.split(" and ")) if authors_raw else ""
-        abstract = strip_jats(field("abstract").strip())
-        note     = (field("note") or field("annote")).strip()
-        if note:
-            note = f"<!-- [import] BibTeX note field — review and edit -->\n\n{note}"
-        truncated = (note and len(note) > 50 and note[-1] not in '.!?') or                     (abstract and len(abstract) > 50 and abstract[-1] not in '.!?')
+        abstract   = strip_jats(field("abstract").strip())
+        annote_raw = field("annote").strip()
+        note_raw   = field("note").strip()
+        annotation = f"<!-- [imported] -->\n\n{annote_raw}" if annote_raw else ""
+        note       = f"<!-- [import] BibTeX note field — review and edit -->\n\n{note_raw}" if note_raw else ""
+        truncated = (note and len(note) > 50 and note[-1] not in '.!?') or \
+                    (abstract and len(abstract) > 50 and abstract[-1] not in '.!?') or \
+                    (annotation and len(annotation) > 50 and annotation[-1] not in '.!?')
         rec = {
             "title":        field("title").replace("{","").replace("}",""),
             "authors":      authors,
             "year":         field("year"),
             "url_doi":      field("doi") or field("url"),
             "abstract":     abstract,
+            "annotation":   annotation,
             "user_notes":   note,
             "keywords":       field("keywords"),
             "needs_review": truncated,
@@ -929,7 +937,7 @@ def call_model(model, prompt, num_predict=-1):
                 from google import genai as google_genai
                 client = google_genai.Client(api_key=KEYS["gemini"])
                 response = client.models.generate_content(
-                    model="gemini-2.5-flash",
+                    model="gemini-3.8-flash",
                     contents=prompt,
                 )
                 return (model, response.text, None, 0, 0)
@@ -938,7 +946,7 @@ def call_model(model, prompt, num_predict=-1):
                 import google.generativeai as genai
                 genai.configure(api_key=KEYS["gemini"])
                 try:
-                    r = genai.GenerativeModel("gemini-3.6-flash").generate_content(prompt, request_options={"timeout": 60})
+                    r = genai.GenerativeModel("gemini-3.8-flash").generate_content(prompt, request_options={"timeout": 60})
                     return (model, r.text, None, 0, 0)
                 except Exception as e:
                     err_str = str(e)

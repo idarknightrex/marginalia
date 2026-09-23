@@ -642,6 +642,11 @@ async function loadReferences() {
 // ── Filter history ────────────────────────────────────────────────────────────
 // Stores last 3 filter combinations for quick reapply
 let _filterHistory = [];
+let _filterHistDebounceTimer = null;
+function recordFilterHistoryDebounced() {
+  clearTimeout(_filterHistDebounceTimer);
+  _filterHistDebounceTimer = setTimeout(recordFilterHistory, 800);
+}
 function recordFilterHistory() {
   const q    = document.getElementById('ref-search')?.value?.trim() || '';
   const proj = document.getElementById('ref-project-filter')?.value || '';
@@ -1087,7 +1092,7 @@ async function uploadFile(file) {
 
 // ── Paste import ──────────────────────────────────────────────────────────
 function selectFormat(btn) {
-  document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
+  btn.closest('.import-format-row')?.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   pasteFormat = btn.dataset.fmt;
   const placeholders = {
@@ -1105,7 +1110,7 @@ async function runPasteImport() {
   if (!text) return;
   const resultEl = document.getElementById('paste-import-result');
   resultEl.style.display = 'none';
-  const btn = document.querySelector('#view-ingest .import-section:nth-child(2) .btn-primary');
+  const btn = document.getElementById('paste-import-btn');
   btn.textContent = 'Importing...'; btn.disabled = true;
   try {
     const res  = await fetch('/api/import', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ format: pasteFormat, text }) });
@@ -1116,7 +1121,7 @@ async function runPasteImport() {
     resultEl.className = 'import-result error'; resultEl.style.display = 'block';
     resultEl.textContent = 'Import failed: ' + e.message;
   }
-  btn.textContent = 'Import \u2192'; btn.disabled = false;
+  if (btn) { btn.textContent = 'Import \u2192'; btn.disabled = false; }
 }
 
 function showImportResult(el, data) {
