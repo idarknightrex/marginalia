@@ -403,6 +403,29 @@
     </div>
 
     <div id="ref-list"></div>
+
+    <!-- Library audit — corrupt / malformed refs -->
+    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-top:20px;background:var(--surface)">
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+        &#9888; Library Audit — corrupt or malformed references
+      </div>
+      <div style="font-family:monospace;font-size:11px;color:var(--muted);margin-bottom:10px">
+        Scans your entire library for missing fields, BibTeX artefacts, garbled text, bad years, and other structural problems.<br>
+        Click any row to open that reference for editing.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+        <button class="btn-primary" id="run-audit-btn" onclick="runLibraryAudit()" style="font-size:11px;padding:6px 14px">&#9888; Run audit</button>
+        <div style="display:flex;gap:4px">
+          <button class="format-btn active" data-sev="all"      onclick="setAuditSev(this)">All</button>
+          <button class="format-btn"        data-sev="critical" onclick="setAuditSev(this)" style="color:#c84b4b">Critical</button>
+          <button class="format-btn"        data-sev="warning"  onclick="setAuditSev(this)" style="color:#c9a832">Warning</button>
+          <button class="format-btn"        data-sev="noise"    onclick="setAuditSev(this)" style="color:var(--muted)">Noise</button>
+        </div>
+        <span id="audit-summary" style="font-family:monospace;font-size:10px;color:var(--muted);margin-left:4px"></span>
+      </div>
+      <div id="audit-result" style="display:none"></div>
+    </div><!-- /Audit zone -->
+
   </div>
 
 
@@ -545,28 +568,6 @@
         </div>
       </div>
     </div><!-- /Export zone -->
-
-    <!-- Zone 4: Library audit — corrupt / malformed refs -->
-    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface)">
-      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">
-        &#9888; Library Audit — corrupt or malformed references
-      </div>
-      <div style="font-family:monospace;font-size:11px;color:var(--muted);margin-bottom:10px">
-        Scans your entire library for missing fields, BibTeX artefacts, garbled text, bad years, and other structural problems.<br>
-        Click any row to open that reference for editing.
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-        <button class="btn-primary" id="run-audit-btn" onclick="runLibraryAudit()" style="font-size:11px;padding:6px 14px">&#9888; Run audit</button>
-        <div style="display:flex;gap:4px">
-          <button class="format-btn active" data-sev="all"      onclick="setAuditSev(this)">All</button>
-          <button class="format-btn"        data-sev="critical" onclick="setAuditSev(this)" style="color:#c84b4b">Critical</button>
-          <button class="format-btn"        data-sev="warning"  onclick="setAuditSev(this)" style="color:#c9a832">Warning</button>
-          <button class="format-btn"        data-sev="noise"    onclick="setAuditSev(this)" style="color:var(--muted)">Noise</button>
-        </div>
-        <span id="audit-summary" style="font-family:monospace;font-size:10px;color:var(--muted);margin-left:4px"></span>
-      </div>
-      <div id="audit-result" style="display:none"></div>
-    </div><!-- /Audit zone -->
 
   </div><!-- /view-ingest -->
 
