@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.7.3.0923-1607"
+APP_VERSION = "1.7.5.0926-1504"
 
 
 
@@ -676,7 +676,7 @@ def parse_ris_import(text: str) -> list:
 
 def lookup_doi(doi: str) -> dict:
     import urllib.request as _ur
-    doi = doi.strip().lstrip("https://doi.org/").lstrip("http://doi.org/").lstrip("doi:")
+    doi = doi.strip().removeprefix("https://doi.org/").removeprefix("http://doi.org/").removeprefix("doi:")
     url = f"https://api.crossref.org/works/{doi}"
     try:
         req = _ur.Request(url, headers={"User-Agent": "Marginalia/0.9.2.5 (mailto:research@marginalia.local)"})
@@ -733,13 +733,223 @@ def get_token_usage():
     return jsonify({"input": anthropic_tokens["input"], "output": anthropic_tokens["output"], "cost_usd": round(cost, 4)})
 
 
+def _slug_tokens(title: str) -> set:
+    """Return a set of lowercase alpha tokens from a title for fuzzy matching."""
+    import re
+    return set(re.sub(r"[^a-z0-9 ]", "", title.lower()).split())
+
+def _is_likely_duplicate(rec: dict, existing_refs: list) -> dict | None:
+    """Return the first existing ref that looks like a duplicate of rec, or None.
+    Match criteria (any one sufficient):
+      - Same first-author-surname + year + >=3 overlapping title tokens
+      - Exact url_doi match (non-empty)
+    """
+    rec_doi   = (rec.get("url_doi") or "").strip().lower()
+    rec_year  = str(rec.get("year") or "").strip()
+    rec_auth  = rec.get("authors", "Unknown").split(";")[0].split(",")[0].strip().lower()
+    rec_tok   = _slug_tokens(rec.get("title", ""))
+
+    for ex in existing_refs:
+        if rec_doi and rec_doi == (ex.get("url_doi") or "").strip().lower():
+            return ex
+        ex_year = str(ex.get("year") or "").strip()
+        ex_auth = ex.get("authors", "Unknown").split(";")[0].split(",")[0].strip().lower()
+        if ex_year == rec_year and ex_auth == rec_auth:
+            ex_tok = _slug_tokens(ex.get("title", ""))
+            if len(rec_tok & ex_tok) >= 3:
+                return ex
+    return None
+
+
+@app.route("/api/import/check-duplicates", methods=["POST"])
+def check_import_duplicates():
+    """
+    Pre-flight duplicate check. Accepts the same body as /api/import
+    (format + text, or a JSON array under 'records') but does NOT write files.
+    Returns a list of {incoming, existing_file, match_reason} for suspected dupes.
+    """
+    body = request.json or {}
+    fmt  = body.get("format", "").lower()
+    text = body.get("text", "")
+    records = body.get("records")  # pre-parsed list, optional shortcut
+
+    if records is None:
+        if fmt == "doi":
+            dois = [d.strip() for d in text.replace(",", "\n").splitlines() if d.strip()]
+            records = []
+            for doi in dois:
+                r = lookup_doi(doi)
+                if "_error" not in r:
+                    records.append(r)
+        elif fmt == "csv":     records = parse_csv_import(text)
+        elif fmt == "bibtex":  records = parse_bibtex_import(text)
+        elif fmt == "ris":     records = parse_ris_import(text)
+        elif fmt == "plaintext":
+            return jsonify({"error": "Plaintext format requires AI parsing — duplicate check not supported. Import first, then use the audit tool to review."}), 400
+        else:
+            return jsonify({"error": f"Unknown format: {fmt}"}), 400
+
+    existing = read_all_references()
+    dupes = []
+    for rec in records:
+        if not rec.get("title"):
+            continue
+        match = _is_likely_duplicate(rec, existing)
+        if match:
+            reason = "DOI match" if (rec.get("url_doi") or "").strip() and \
+                     (rec.get("url_doi") or "").strip().lower() == (match.get("url_doi") or "").strip().lower() \
+                     else "author + year + title overlap"
+            dupes.append({
+                "incoming_title": rec.get("title", ""),
+                "incoming_authors": rec.get("authors", ""),
+                "incoming_year": rec.get("year", ""),
+                "existing_file": match.get("_filename", ""),
+                "existing_title": match.get("title", ""),
+                "match_reason": reason,
+            })
+    return jsonify({"duplicates": dupes, "checked": len(records)})
+
+
+# ─── Corrupt reference detection ──────────────────────────────────────────────
+import re as _re
+
+_VALID_SOURCE_TYPES = {"journal", "book", "chapter", "conference", "thesis", "web", "other", "report", "dataset", "preprint"}
+_LATEX_RE = _re.compile(r"\\[a-zA-Z]+\{|\\[a-zA-Z]+\s")
+_BRACE_RE = _re.compile(r"[\{\}]")
+_CTRL_RE  = _re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")   # control chars (not \n\r\t)
+
+def _audit_ref(ref: dict) -> list:
+    """
+    Return a list of {field, severity, reason} issues for one reference.
+    severity: 'critical' | 'warning' | 'noise'
+    """
+    issues = []
+
+    def flag(field, severity, reason):
+        issues.append({"field": field, "severity": severity, "reason": reason})
+
+    title   = (ref.get("title") or "").strip()
+    authors = (ref.get("authors") or "").strip()
+    year    = (ref.get("year") or "").strip()
+    stype   = (ref.get("source_type") or "").strip().lower()
+    ref_id  = (ref.get("id") or "").strip()
+    url_doi = (ref.get("url_doi") or "").strip()
+
+    # ── title ─────────────────────────────────────────────────────────────────
+    if not title or title.startswith("<!--"):
+        flag("title", "critical", "missing")
+    elif len(title) < 4:
+        flag("title", "critical", f"suspiciously short: \"{title}\"")
+    elif _BRACE_RE.search(title):
+        flag("title", "noise", "contains raw BibTeX braces { }")
+    elif _LATEX_RE.search(title):
+        flag("title", "noise", "contains LaTeX markup")
+    elif _CTRL_RE.search(title):
+        flag("title", "warning", "contains control characters")
+
+    # ── authors ───────────────────────────────────────────────────────────────
+    if not authors or authors.startswith("<!--"):
+        flag("authors", "critical", "missing")
+    elif authors.strip().lower() in {"unknown", "et al", "et al.", "n/a", "-"}:
+        flag("authors", "warning", f"placeholder value: \"{authors}\"")
+    elif _BRACE_RE.search(authors):
+        flag("authors", "noise", "contains raw BibTeX braces { }")
+    elif _LATEX_RE.search(authors):
+        flag("authors", "noise", "contains LaTeX markup")
+    elif "&" in authors and ";" not in authors:
+        # raw & instead of semicolon-separated — likely bad BibTeX parse
+        flag("authors", "noise", "looks like unsplit BibTeX author string (& not ;)")
+
+    # ── year ──────────────────────────────────────────────────────────────────
+    if not year or year.startswith("<!--"):
+        flag("year", "warning", "missing")
+    else:
+        try:
+            yr = int(year)
+            if yr < 1500:
+                flag("year", "warning", f"implausibly old: {yr}")
+            elif yr > datetime.now(timezone.utc).year + 2:
+                flag("year", "warning", f"future year: {yr}")
+        except ValueError:
+            flag("year", "warning", f"non-numeric: \"{year}\"")
+
+    # ── source_type ───────────────────────────────────────────────────────────
+    if not stype or stype.startswith("<!--"):
+        flag("source_type", "warning", "missing")
+    elif stype not in _VALID_SOURCE_TYPES:
+        flag("source_type", "noise", f"unrecognised value: \"{stype}\"")
+
+    # ── id ────────────────────────────────────────────────────────────────────
+    if not ref_id:
+        flag("id", "warning", "missing — ref cannot be reliably linked")
+    elif len(ref_id) < 8:
+        flag("id", "noise", f"suspiciously short id: \"{ref_id}\"")
+
+    # ── url_doi ───────────────────────────────────────────────────────────────
+    if url_doi and url_doi not in {"", "none", "n/a"}:
+        if _BRACE_RE.search(url_doi):
+            flag("url_doi", "noise", "contains BibTeX braces in DOI/URL")
+        elif _CTRL_RE.search(url_doi):
+            flag("url_doi", "warning", "control characters in DOI/URL")
+        elif url_doi.startswith("http") and len(url_doi) > 300:
+            flag("url_doi", "noise", f"unusually long URL ({len(url_doi)} chars) — may be garbled")
+
+    # ── general control-character sweep ───────────────────────────────────────
+    for fld in ("keywords", "annotation", "abstract", "argument_connection", "user_notes", "connections"):
+        val = (ref.get(fld) or "").strip()
+        if val and _CTRL_RE.search(val):
+            flag(fld, "noise", "control characters in field")
+
+    return issues
+
+
+@app.route("/api/references/audit", methods=["GET"])
+def audit_references():
+    """
+    Scan all canonical reference files for corrupt or malformed fields.
+    Returns a list of refs with issues, sorted critical-first.
+    Query params:
+      severity=critical|warning|noise  (default: all)
+      limit=N                          (default: 200)
+    """
+    severity_filter = request.args.get("severity", "").lower()
+    try:
+        limit = int(request.args.get("limit", 200))
+    except ValueError:
+        limit = 200
+
+    severity_rank = {"critical": 0, "warning": 1, "noise": 2}
+    results = []
+
+    for ref in read_all_references():
+        issues = _audit_ref(ref)
+        if not issues:
+            continue
+        if severity_filter and not any(i["severity"] == severity_filter for i in issues):
+            continue
+        worst = min(issues, key=lambda i: severity_rank.get(i["severity"], 9))
+        results.append({
+            "filename":   ref.get("_filename", ""),
+            "title":      (ref.get("title") or "")[:80],
+            "authors":    (ref.get("authors") or "")[:60],
+            "year":       ref.get("year", ""),
+            "worst":      worst["severity"],
+            "issues":     issues,
+        })
+
+    results.sort(key=lambda r: severity_rank.get(r["worst"], 9))
+    return jsonify({"refs": results[:limit], "total": len(results)})
+
+
 @app.route("/api/import", methods=["POST"])
 def import_references():
     records, parse_errors, fmt = [], [], None
+    project = ""
     if request.files:
         file = request.files.get("file")
         if not file:
             return jsonify({"error": "No file received"}), 400
+        project  = (request.form.get("project") or "").strip()
         filename = file.filename.lower()
         text = file.read().decode("utf-8", errors="replace")
         if filename.endswith(".csv"):    fmt, records = "csv",     parse_csv_import(text)
@@ -748,8 +958,9 @@ def import_references():
         else: return jsonify({"error": f"Unsupported file type: {filename}"}), 400
     elif request.is_json:
         body = request.json
-        fmt  = body.get("format", "").lower()
-        text = body.get("text", "")
+        fmt     = body.get("format", "").lower()
+        text    = body.get("text", "")
+        project = body.get("project", "").strip()
         if fmt == "doi":
             dois = [d.strip() for d in text.replace(",", "\n").splitlines() if d.strip()]
             for doi in dois:
@@ -787,6 +998,8 @@ REFERENCE LIST:
             rec.setdefault("verification_status", "imported")
             rec.setdefault("reading_status", "unread")
             rec.setdefault("physical_holding", "none")
+            if project and not rec.get("connections"):
+                rec["connections"] = f"{project} | imported"
             imported.append(write_canonical_reference(rec).name)
         except Exception as e:
             parse_errors.append(str(e))
@@ -795,6 +1008,7 @@ REFERENCE LIST:
         log_path = SESSIONS_DIR / "imports.md"
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         log_entry = f"\n### {timestamp} — {fmt} import\n"
+        if project: log_entry += f"- Project: {project}\n"
         log_entry += f"- Imported: {len(imported)}\n"
         if skipped:  log_entry += f"- Skipped (no title): {len(skipped)}\n"
         if parse_errors: log_entry += f"- Errors: {len(parse_errors)}\n"
@@ -811,7 +1025,7 @@ REFERENCE LIST:
         except Exception:
             pass
 
-    return jsonify({"format": fmt, "imported": len(imported), "skipped": len(skipped), "errors": parse_errors, "files": imported})
+    return jsonify({"format": fmt, "imported": len(imported), "skipped": len(skipped), "errors": parse_errors, "files": imported, "project": project})
 
 
 @app.route("/api/doi-lookup", methods=["POST"])
@@ -1065,11 +1279,6 @@ def handle_prompt():
                         yield json.dumps({"event": "error", "model": model, "error": err_msg}) + "\n"
 
         for model in local_ordered:
-            global _prompt_cancel_flag
-            if _prompt_cancel_flag:
-                _prompt_cancel_flag = False  # reset for next run
-                yield json.dumps({"event": "cancelled"}) + "\n"
-                break
             yield json.dumps({"event": "start", "model": model}) + "\n"
             import time; time.sleep(0.05)
             yield json.dumps({"event": "heartbeat"}) + "\n"
@@ -1875,14 +2084,6 @@ def get_session_raw(session_filename):
         return jsonify({"error": "Session not found"}), 404
     return jsonify({"content": filepath.read_text(encoding="utf-8"), "filename": session_filename})
 
-# Global cancel flag — set by /api/prompt/cancel, checked between model calls in SSE
-_prompt_cancel_flag = False
-
-@app.route("/api/prompt/cancel", methods=["POST"])
-def cancel_prompt():
-    global _prompt_cancel_flag
-    _prompt_cancel_flag = True
-    return jsonify({"status": "cancel_requested"})
 
 
 @app.route("/api/synthesise", methods=["POST"])

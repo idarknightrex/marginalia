@@ -415,6 +415,14 @@
       <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">
         &#8853; References — importing someone else's work
       </div>
+      <!-- Project assignment — shared by all import methods in this zone -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <span style="font-family:monospace;font-size:10px;color:var(--muted);white-space:nowrap">Add to project:</span>
+        <select id="ingest-project-select" style="flex:1;padding:5px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px" title="Tag all imported refs with this project connection">
+          <option value="">No project</option>
+        </select>
+      </div>
+
       <div class="import-section-title">&#8595; Drop a File</div>
       <div class="import-drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
         <input type="file" id="file-input" accept=".csv,.bib,.ris" onchange="handleFileSelect(event)">
@@ -434,7 +442,8 @@
           <button class="format-btn" data-fmt="plaintext" onclick="selectFormat(this)">Plain text &#9670; local AI</button>
         </div>
         <textarea class="import-text-area" id="paste-input" placeholder="Paste BibTeX, RIS, CSV, a list of DOIs, or a messy reference list..."></textarea>
-        <div style="display:flex;justify-content:flex-end;margin-top:8px">
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+          <button class="btn-secondary" id="check-dupes-btn" onclick="checkDuplicates()" style="font-size:11px;padding:6px 12px" data-tooltip="Check if any pasted refs already exist in your library before importing">Check dupes</button>
           <button class="btn-primary" id="paste-import-btn" onclick="runPasteImport()">Import &#8594;</button>
         </div>
         <div class="import-result" id="paste-import-result"></div>
@@ -536,6 +545,28 @@
         </div>
       </div>
     </div><!-- /Export zone -->
+
+    <!-- Zone 4: Library audit — corrupt / malformed refs -->
+    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:16px;background:var(--surface)">
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+        &#9888; Library Audit — corrupt or malformed references
+      </div>
+      <div style="font-family:monospace;font-size:11px;color:var(--muted);margin-bottom:10px">
+        Scans your entire library for missing fields, BibTeX artefacts, garbled text, bad years, and other structural problems.<br>
+        Click any row to open that reference for editing.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+        <button class="btn-primary" id="run-audit-btn" onclick="runLibraryAudit()" style="font-size:11px;padding:6px 14px">&#9888; Run audit</button>
+        <div style="display:flex;gap:4px">
+          <button class="format-btn active" data-sev="all"      onclick="setAuditSev(this)">All</button>
+          <button class="format-btn"        data-sev="critical" onclick="setAuditSev(this)" style="color:#c84b4b">Critical</button>
+          <button class="format-btn"        data-sev="warning"  onclick="setAuditSev(this)" style="color:#c9a832">Warning</button>
+          <button class="format-btn"        data-sev="noise"    onclick="setAuditSev(this)" style="color:var(--muted)">Noise</button>
+        </div>
+        <span id="audit-summary" style="font-family:monospace;font-size:10px;color:var(--muted);margin-left:4px"></span>
+      </div>
+      <div id="audit-result" style="display:none"></div>
+    </div><!-- /Audit zone -->
 
   </div><!-- /view-ingest -->
 

@@ -766,6 +766,21 @@ function populateRefProjectFilter(projects) {
   if (current) sel.value = current;
 }
 
+function populateIngestProjectSelect(projects) {
+  const sel = document.getElementById('ingest-project-select');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">No project</option>';
+  projects.forEach(p => {
+    const slug = p.slug || p.name || (p._filename || '').replace('.md','');
+    const opt  = document.createElement('option');
+    opt.value       = slug;
+    opt.textContent = (p.label || slug);
+    sel.appendChild(opt);
+  });
+  if (current) sel.value = current;
+}
+
 function updateFilterLabels() {
   const counts = { all: allRefs.length, verified: 0, located: 0, surfaced: 0, imported: 0 };
   const readingCounts = { unread: 0, skimmed: 0, read: 0, 'deeply-read': 0, 'needs-review': 0, 'has-link': 0 };
@@ -1076,6 +1091,8 @@ async function uploadFile(file) {
   dropZone.querySelector('.import-drop-label').textContent = 'Importing ' + file.name + '...';
   const formData = new FormData();
   formData.append('file', file);
+  const proj = (document.getElementById('ingest-project-select')?.value || '').trim();
+  if (proj) formData.append('project', proj);
   try {
     const res  = await fetch('/api/import', { method: 'POST', body: formData });
     const data = await res.json();
@@ -1112,8 +1129,11 @@ async function runPasteImport() {
   resultEl.style.display = 'none';
   const btn = document.getElementById('paste-import-btn');
   btn.textContent = 'Importing...'; btn.disabled = true;
+  const proj = (document.getElementById('ingest-project-select')?.value || '').trim();
   try {
-    const res  = await fetch('/api/import', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ format: pasteFormat, text }) });
+    const body = { format: pasteFormat, text };
+    if (proj) body.project = proj;
+    const res  = await fetch('/api/import', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
     const data = await res.json();
     showImportResult(resultEl, data);
     if (data.imported > 0) { document.getElementById('paste-input').value = ''; loadReferences(); }
@@ -1124,10 +1144,159 @@ async function runPasteImport() {
   if (btn) { btn.textContent = 'Import \u2192'; btn.disabled = false; }
 }
 
+async function checkDuplicates() {
+  const text = document.getElementById('paste-input').value.trim();
+  if (!text) return;
+  const resultEl = document.getElementById('paste-import-result');
+  const btn = document.getElementById('check-dupes-btn');
+  resultEl.style.display = 'none';
+  if (btn) { btn.textContent = 'Checking...'; btn.disabled = true; }
+  try {
+    const res  = await fetch('/api/import/check-duplicates', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ format: pasteFormat, text })
+    });
+    const data = await res.json();
+    if (data.error) {
+      resultEl.className = 'import-result error'; resultEl.style.display = 'block';
+      resultEl.textContent = 'Error: ' + data.error;
+    } else if (!data.duplicates || data.duplicates.length === 0) {
+      resultEl.className = 'import-result success'; resultEl.style.display = 'block';
+      resultEl.textContent = 'No duplicates found in ' + data.checked + ' record' + (data.checked !== 1 ? 's' : '') + '.';
+    } else {
+      resultEl.className = 'import-result error'; resultEl.style.display = 'block';
+      let html = '<strong>' + data.duplicates.length + ' suspected duplicate' + (data.duplicates.length !== 1 ? 's' : '') + '</strong> (of ' + data.checked + ' checked):<br><br>';
+      data.duplicates.forEach(d => {
+        html += '\u26a0\ufe0f <em>' + escHtml(d.incoming_title) + '</em> ('  + escHtml(d.incoming_year) + ')<br>';
+        html += '&nbsp;&nbsp;&nbsp;\u2192 matches <code>' + escHtml(d.existing_file) + '</code> \u2014 ' + escHtml(d.match_reason) + '<br><br>';
+      });
+      resultEl.innerHTML = html;
+    }
+  } catch(e) {
+    resultEl.className = 'import-result error'; resultEl.style.display = 'block';
+    resultEl.textContent = 'Check failed: ' + e.message;
+  }
+  if (btn) { btn.textContent = 'Check dupes'; btn.disabled = false; }
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+
+// ── Library audit ─────────────────────────────────────────────────────────────
+let _auditData = [];
+let _auditSev  = 'all';
+
+function setAuditSev(btn) {
+  btn.closest('div').querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  _auditSev = btn.dataset.sev;
+  renderAuditTable();
+}
+
+async function runLibraryAudit() {
+  const btn     = document.getElementById('run-audit-btn');
+  const summary = document.getElementById('audit-summary');
+  const result  = document.getElementById('audit-result');
+  btn.textContent = 'Scanning...'; btn.disabled = true;
+  result.style.display = 'none';
+  summary.textContent = '';
+  try {
+    const res  = await fetch('/api/references/audit?limit=500');
+    const data = await res.json();
+    if (data.error) {
+      result.style.display = 'block';
+      result.innerHTML = '<div style="color:#c84b4b;font-family:monospace;font-size:11px">Error: ' + escHtml(data.error) + '</div>';
+    } else {
+      _auditData = data.refs || [];
+      const total = data.total || _auditData.length;
+      const crit  = _auditData.filter(r => r.worst === 'critical').length;
+      const warn  = _auditData.filter(r => r.worst === 'warning').length;
+      const noise = _auditData.filter(r => r.worst === 'noise').length;
+      summary.innerHTML = total === 0
+        ? '<span style="color:var(--accent)">&#10003; No issues found</span>'
+        : escHtml(total) + ' with issues — ' +
+          '<span style="color:#c84b4b">' + crit + ' critical</span>, ' +
+          '<span style="color:#c9a832">' + warn + ' warning</span>, ' +
+          '<span style="color:var(--muted)">' + noise + ' noise</span>';
+      renderAuditTable();
+    }
+  } catch(e) {
+    result.style.display = 'block';
+    result.innerHTML = '<div style="color:#c84b4b;font-family:monospace;font-size:11px">Scan failed: ' + escHtml(e.message) + '</div>';
+  }
+  btn.textContent = '⚠ Run audit'; btn.disabled = false;
+}
+
+function renderAuditTable() {
+  const result = document.getElementById('audit-result');
+  const rows   = _auditSev === 'all'
+    ? _auditData
+    : _auditData.filter(r => r.worst === _auditSev || r.issues.some(i => i.severity === _auditSev));
+
+  if (!rows.length) {
+    result.style.display = 'block';
+    result.innerHTML = '<div style="font-family:monospace;font-size:11px;color:var(--muted);padding:10px 0">No refs in this severity tier.</div>';
+    return;
+  }
+
+  const sevColor = { critical: '#c84b4b', warning: '#c9a832', noise: 'var(--muted)' };
+  const sevIcon  = { critical: '✖', warning: '⚠', noise: '•' };
+
+  let html = '<table style="width:100%;border-collapse:collapse;font-family:monospace;font-size:11px">';
+  html += '<thead><tr style="border-bottom:1px solid var(--border);color:var(--muted);text-transform:uppercase;font-size:9px;letter-spacing:.06em">';
+  html += '<th style="text-align:left;padding:4px 6px;width:24px"></th>';
+  html += '<th style="text-align:left;padding:4px 6px">Title</th>';
+  html += '<th style="text-align:left;padding:4px 6px;width:140px">Author / Year</th>';
+  html += '<th style="text-align:left;padding:4px 6px">Issues</th>';
+  html += '</tr></thead><tbody>';
+
+  rows.forEach(r => {
+    const color   = sevColor[r.worst] || 'var(--muted)';
+    const icon    = sevIcon[r.worst]  || '•';
+    const issueList = r.issues.map(i =>
+      '<span style="color:' + (sevColor[i.severity] || 'var(--muted)') + ';margin-right:8px">' +
+      escHtml(i.field) + ': ' + escHtml(i.reason) + '</span>'
+    ).join('');
+    const titleDisp = r.title ? escHtml(r.title) : '<em style="color:var(--muted)">(no title)</em>';
+    html += '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="auditOpenRef(' + JSON.stringify(r.filename) + ')" title="Click to open ref for editing">';
+    html += '<td style="padding:6px 6px;color:' + color + ';font-size:13px">' + icon + '</td>';
+    html += '<td style="padding:6px 6px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + titleDisp + '</td>';
+    html += '<td style="padding:6px 6px;color:var(--muted);white-space:nowrap">' + escHtml((r.authors || '').split(';')[0].split(',')[0]) + ' ' + escHtml(r.year || '') + '</td>';
+    html += '<td style="padding:6px 6px">' + issueList + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  result.style.display = 'block';
+  result.innerHTML = html;
+}
+
+function auditOpenRef(filename) {
+  // Find the ref in allRefs by filename and open its edit modal
+  if (!filename) return;
+  const ref = (typeof allRefs !== 'undefined' ? allRefs : []).find(r => r._filename === filename);
+  if (ref) {
+    showView('references', document.querySelector('[onclick*="references"]'));
+    openEditModal(ref, false);
+  } else {
+    // Refs not loaded or not in current filtered set — switch to refs, clear filters, try again
+    showView('references', document.querySelector('[onclick*="references"]'));
+    setTimeout(async () => {
+      await loadReferences();
+      const r2 = (typeof allRefs !== 'undefined' ? allRefs : []).find(r => r._filename === filename);
+      if (r2) openEditModal(r2, false);
+    }, 300);
+  }
+}
+
+
 function showImportResult(el, data) {
   if (data.error) { el.className = 'import-result error'; el.style.display = 'block'; el.textContent = 'Error: ' + data.error; return; }
   el.className = 'import-result success'; el.style.display = 'block';
   let msg = data.imported + ' reference' + (data.imported !== 1 ? 's' : '') + ' imported';
+  if (data.project) msg += ' → ' + data.project;
   if (data.skipped > 0) msg += ', ' + data.skipped + ' skipped (no title)';
   if (data.errors && data.errors.length) msg += ', ' + data.errors.length + ' error(s)';
   el.textContent = msg;
@@ -1375,14 +1544,14 @@ function renderEnrichCandidates(candidates, queryUsed, filename) {
   }
 
   const cards = candidates.map((c, idx) => {
-    const meta = [c.authors, c.year, c.venue].filter(Boolean).join(' \u00b7 ');
+    const meta = [c.authors, c.year, c.venue].filter(Boolean).map(escHtml).join(' \u00b7 ');
     return `
       <div style="padding:8px;border:1px solid var(--border);border-radius:4px;margin-bottom:6px;background:var(--surface)">
         <div style="font-size:9px;font-family:monospace;color:var(--muted);margin-bottom:3px">${c.source === 'semantic_scholar' ? 'Semantic Scholar' : 'OpenAlex'}</div>
-        <div style="font-weight:600;font-size:11px;margin-bottom:2px">${c.title || 'Untitled'}</div>
+        <div style="font-weight:600;font-size:11px;margin-bottom:2px">${escHtml(c.title || 'Untitled')}</div>
         <div style="font-size:10px;color:var(--muted);margin-bottom:6px">${meta}</div>
-        <div style="font-size:10px;line-height:1.4;margin-bottom:8px;color:var(--text)">${c.preview || ''}${c.abstract && c.abstract.length > 220 ? '\u2026' : ''}</div>
-        <button class="btn-primary" style="font-size:10px;padding:3px 8px" onclick="selectEnrichCandidate(${idx}, '${filename}')">Use this</button>
+        <div style="font-size:10px;line-height:1.4;margin-bottom:8px;color:var(--text)">${escHtml(c.preview || '')}${c.abstract && c.abstract.length > 220 ? '\u2026' : ''}</div>
+        <button class="btn-primary" style="font-size:10px;padding:3px 8px" onclick="selectEnrichCandidate(${idx}, '${escHtml(filename)}')">Use this</button>
       </div>
     `;
   }).join('');
@@ -1712,6 +1881,7 @@ async function loadProjects() {
   populateSynthProjectDropdown(data);
   populateNoteProjectFilter(data);
   populateSessionScopeSelectors(data);
+  populateIngestProjectSelect(data);
   list.innerHTML = '';
   data.forEach(p => {
     const slug  = p.slug || p.name || (p._filename || '').replace('.md','');
