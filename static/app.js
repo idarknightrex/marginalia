@@ -453,6 +453,34 @@ async function sendPrompt() {
   models.forEach(model => grid.appendChild(makeCard(model)));
   document.getElementById('cancel-btn').classList.add('visible');
   document.getElementById('send-btn').disabled = true;
+
+  // ── SLM RAG pre-fetch (observe-only, never blocks) ────────────────────────
+  let ragContext = '', ragCoverage = '', ragMeta = null;
+  const ragEnabled  = document.getElementById('rag-enable')?.checked || false;
+  const slmModel    = document.getElementById('slm-model-select')?.value || 'qwen2.5:0.5b';
+  if (ragEnabled) {
+    try {
+      const ragRes = await fetch('/api/rag-query', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ prompt, slm_model: slmModel }),
+      });
+      if (ragRes.ok) {
+        const ragData = await ragRes.json();
+        ragContext  = ragData.context_block    || '';
+        ragCoverage = ragData.coverage_declaration || '';
+        ragMeta     = { query: ragData.query_used, snippets: ragData.snippet_count };
+      }
+    } catch (_) { /* RAG failure is silent — main prompt proceeds */ }
+    if (ragMeta) {
+      const ragBar = document.createElement('div');
+      ragBar.style.cssText = 'font-family:monospace;font-size:10px;color:var(--muted);padding:4px 0 2px 2px;';
+      ragBar.textContent = `⧉ RAG · "${ragMeta.query}" · ${ragMeta.snippets} snippet${ragMeta.snippets !== 1 ? 's' : ''}`;
+      document.getElementById('response-grid')?.before(ragBar);
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   try {
     const res = await fetch('/api/prompt', {
       method: 'POST',
@@ -467,6 +495,8 @@ async function sendPrompt() {
         project:          document.getElementById('session-project-select')?.value || '',
         writing:          document.getElementById('session-writing-select')?.value || '',
         synthesis_context: getSynthesisContext(),
+        rag_context:      ragContext,
+        rag_coverage:     ragCoverage,
       })
     });
     const reader  = res.body.getReader();
@@ -3883,6 +3913,9 @@ function populateSynthProjectDropdown(projects) {
     opt.textContent = p.label || slug;
     sel.appendChild(opt);
   });
+  // Default to the currently active session project
+  const activeProject = document.getElementById('session-project-select')?.value || '';
+  if (activeProject) sel.value = activeProject;
 }
 
 

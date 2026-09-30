@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.7.5.0926-2325"
+APP_VERSION = "1.7.6.0930-1114"
 
 
 
@@ -921,15 +921,56 @@ def audit_references():
     severity_rank = {"critical": 0, "warning": 1, "noise": 2}
     results = []
 
-    for ref in read_all_references():
+    all_refs = list(read_all_references())
+
+    # ── Field-quality audit ────────────────────────────────────────────────
+    issue_map = {}   # filename → list of issues
+    for ref in all_refs:
         issues = _audit_ref(ref)
-        if not issues:
-            continue
+        fname  = ref.get("_filename", "")
+        if issues:
+            issue_map[fname] = issues
+
+    # ── Dedup audit (passive discovery) ───────────────────────────────────
+    # For each ref, check it against all subsequent refs in the list.
+    # _is_likely_duplicate(rec, list) returns the first matching ref or None.
+    # We call it with a single-element list so we get a precise pairwise signal.
+    # Only flags pairs once; surfaces both members with a cross-reference.
+    seen_pairs = set()
+    for i, ref_a in enumerate(all_refs):
+        fa = ref_a.get("_filename", "")
+        for ref_b in all_refs[i + 1:]:
+            fb = ref_b.get("_filename", "")
+            pair = tuple(sorted([fa, fb]))
+            if pair in seen_pairs:
+                continue
+            match = _is_likely_duplicate(ref_a, [ref_b])
+            if match is not None:
+                seen_pairs.add(pair)
+                # Determine reason for display
+                doi_a = (ref_a.get("url_doi") or "").strip().lower()
+                doi_b = (ref_b.get("url_doi") or "").strip().lower()
+                reason = "DOI match" if (doi_a and doi_a == doi_b) else "author+year+title overlap"
+                issue_map.setdefault(fa, []).append({
+                    "field":    "library",
+                    "severity": "warning",
+                    "reason":   f"possible duplicate of {fb} ({reason})",
+                })
+                issue_map.setdefault(fb, []).append({
+                    "field":    "library",
+                    "severity": "warning",
+                    "reason":   f"possible duplicate of {fa} ({reason})",
+                })
+
+    # ── Build results ──────────────────────────────────────────────────────
+    ref_by_fname = {r.get("_filename", ""): r for r in all_refs}
+    for fname, issues in issue_map.items():
         if severity_filter and not any(i["severity"] == severity_filter for i in issues):
             continue
+        ref  = ref_by_fname.get(fname, {})
         worst = min(issues, key=lambda i: severity_rank.get(i["severity"], 9))
         results.append({
-            "filename":   ref.get("_filename", ""),
+            "filename":   fname,
             "title":      (ref.get("title") or "")[:80],
             "authors":    (ref.get("authors") or "")[:60],
             "year":       ref.get("year", ""),
@@ -1208,6 +1249,118 @@ CLOUD_MODELS = {"gemini", "anthropic", "openai"}
 LOCAL_MODELS = {"deepseek", "gemma", "llama", "qwen", "mistral", "cohere"}
 
 
+# ─── SLM RAG — web retrieval layer ────────────────────────────────────────────
+# qwen2.5:0.5b (397MB) or llama3.2:1b (1.3GB) fires after Send:
+#   1. SLM builds a tight DDG search query from the researcher's prompt
+#   2. DuckDuckGo HTML search fetches snippets (no API key required)
+#   3. Snippets packaged as [RETRIEVED CONTEXT] block with date + coverage window
+#   4. Block prepended to local model calls; Gemini gets coverage declaration only
+# Observe-only — never blocks the main prompt call. Times out silently if slow.
+
+SLM_MODELS = {"qwen2.5:0.5b", "llama3.2:1b"}
+# Oldest council model cutoff (Qwen 2.5, Dec 2023) → today
+RAG_COVERAGE_START = "December 2023"
+
+
+def _ddg_snippets(query: str, max_results: int = 5) -> list[str]:
+    """
+    Fetch DuckDuckGo HTML search snippets without an API key.
+    Returns a list of plain-text snippet strings (may be empty on failure).
+    """
+    import urllib.request as _ur
+    import urllib.parse
+    import html
+    import re
+    encoded = urllib.parse.quote_plus(query)
+    url = f"https://html.duckduckgo.com/html/?q={encoded}"
+    req = _ur.Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (compatible; Marginalia-RAG/1.7.6)",
+        "Accept-Language": "en-US,en;q=0.9",
+    })
+    try:
+        with _ur.urlopen(req, timeout=8) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+    except Exception:
+        return []
+
+    # Extract result snippets from DDG HTML — look for result__snippet spans
+    snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', body, re.DOTALL)
+    clean = []
+    for s in snippets[:max_results]:
+        s = re.sub(r"<[^>]+>", " ", s)
+        s = html.unescape(s).strip()
+        s = re.sub(r"\s+", " ", s)
+        if s:
+            clean.append(s)
+    return clean
+
+
+@app.route("/api/rag-query", methods=["POST"])
+def rag_query():
+    """
+    SLM RAG layer: given a researcher prompt, use a small local model to
+    build a DDG search query, fetch snippets, and return a formatted
+    [RETRIEVED CONTEXT] block ready to prepend to council calls.
+
+    Body: { "prompt": str, "slm_model": "qwen2.5:0.5b"|"llama3.2:1b" }
+    Returns: { "context_block": str, "coverage_window": str }
+          or { "error": str } on failure (caller ignores gracefully)
+    """
+    body = request.json or {}
+    prompt_text = (body.get("prompt") or "").strip()
+    slm_model   = (body.get("slm_model") or "qwen2.5:0.5b").strip()
+
+    if not prompt_text:
+        return jsonify({"error": "empty prompt"}), 400
+    if slm_model not in SLM_MODELS:
+        return jsonify({"error": f"unknown SLM model: {slm_model}"}), 400
+
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+
+    # Step 1: SLM builds a search query from the researcher's prompt
+    query_prompt = (
+        "You are a search assistant. Given a research question, output ONLY a "
+        "concise web search query (5-10 words, no quotes, no explanation).\n\n"
+        f"Research question: {prompt_text[:600]}\n\nSearch query:"
+    )
+    try:
+        slm_query = call_ollama(
+            slm_model, query_prompt,
+            unload_after=True, num_predict=30
+        ).strip().strip('"').strip("'")
+    except Exception as e:
+        return jsonify({"error": f"SLM query build failed: {e}"}), 500
+
+    if not slm_query:
+        return jsonify({"error": "SLM returned empty query"}), 500
+
+    # Step 2: Fetch DDG snippets
+    snippets = _ddg_snippets(slm_query, max_results=5)
+    if not snippets:
+        return jsonify({"error": "no snippets retrieved"}), 502
+
+    # Step 3: Package context block
+    snippets_text = "\n".join(f"- {s}" for s in snippets)
+    context_block = (
+        f"[RETRIEVED CONTEXT — {today_str}]\n"
+        f"[Coverage window: {RAG_COVERAGE_START}–{today_str}]\n"
+        f"[Source: web · query: {slm_query}]\n\n"
+        f"{snippets_text}\n"
+        f"[END RETRIEVED CONTEXT]"
+    )
+    coverage_declaration = (
+        f"[Web coverage window: {RAG_COVERAGE_START}–{today_str}. "
+        f"Retrieved context injected into local model calls.]"
+    )
+
+    return jsonify({
+        "context_block":       context_block,
+        "coverage_declaration": coverage_declaration,
+        "query_used":          slm_query,
+        "snippet_count":       len(snippets),
+    })
+
+
 @app.route("/api/prompt", methods=["POST"])
 def handle_prompt():
     global anthropic_tokens
@@ -1243,6 +1396,16 @@ def handle_prompt():
         print(f"EARLY SESSION WRITE FAILED: {e}", file=sys.stderr, flush=True)
     # ──────────────────────────────────────────────────────────────────────────
 
+    # ── RAG context injection ──────────────────────────────────────────────────
+    # Frontend fires /api/rag-query before this call, passes back context_block
+    # (full snippet block) and coverage_declaration (compact summary for cloud).
+    # Local models get the full block prepended; Gemini gets coverage only.
+    # Both are optional — if absent, prompt is passed through unchanged.
+    rag_context    = (data.get("rag_context") or "").strip()
+    rag_coverage   = (data.get("rag_coverage") or "").strip()
+    prompt_local   = (f"{rag_context}\n\n{prompt}") if rag_context else prompt
+    prompt_cloud   = (f"{rag_coverage}\n\n{prompt}") if rag_coverage else prompt
+
     dynamic_local = [m for m in models if m.startswith("ollama:")]
     cloud_ordered = [m for m in MODEL_ORDER if m in models and m in CLOUD_MODELS]
     local_ordered = [m for m in MODEL_ORDER if m in models and m in LOCAL_MODELS] + dynamic_local
@@ -1255,7 +1418,7 @@ def handle_prompt():
             for m in cloud_ordered:
                 yield json.dumps({"event": "start", "model": m}) + "\n"
             with concurrent.futures.ThreadPoolExecutor() as ex:
-                futures = {ex.submit(call_model, m, prompt, num_predict): m for m in cloud_ordered}
+                futures = {ex.submit(call_model, m, prompt_cloud, num_predict): m for m in cloud_ordered}
                 for future in concurrent.futures.as_completed(futures):
                     try:
                         model, result, error, in_tok, out_tok = future.result()
@@ -1282,7 +1445,7 @@ def handle_prompt():
             yield json.dumps({"event": "start", "model": model}) + "\n"
             import time; time.sleep(0.05)
             yield json.dumps({"event": "heartbeat"}) + "\n"
-            _, result, error, _, _ = call_model(model, prompt, num_predict)
+            _, result, error, _, _ = call_model(model, prompt_local, num_predict)
             if result:
                 results[model] = result
                 yield json.dumps({"event": "result", "model": model, "text": result}) + "\n"
