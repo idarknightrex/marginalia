@@ -27,7 +27,7 @@ const MODEL_META = {
 };
 function getModelMeta(model) {
   if (MODEL_META[model]) return MODEL_META[model];
-  return { type: 'local', web: false, label: 'local · Ollama · ~1yr cutoff' };
+  return { type: 'local', web: false, label: 'local · Ollama · ~early 2025' };
 }
 
 
@@ -299,8 +299,8 @@ function makeCard(model) {
     : meta.type === 'local'
       ? '<span style="font-size:9px;font-family:monospace;background:#52c41a22;color:#52c41a;border:1px solid #52c41a44;border-radius:3px;padding:1px 5px;margin-left:5px">&#128274; local</span>'
       : '<span style="font-size:9px;font-family:monospace;background:#8a7a6a22;color:#c9a832;border:1px solid #c9a83244;border-radius:3px;padding:1px 5px;margin-left:5px">&#9729; cloud</span>';
-  const cutoff = meta.type === 'local'
-    ? '<span style="font-size:9px;font-family:monospace;color:var(--muted);margin-left:4px">~1yr cutoff</span>'
+  const cutoff = meta.type === 'local' && meta.label
+    ? '<span style="font-size:9px;font-family:monospace;color:var(--muted);margin-left:4px">' + meta.label + '</span>'
     : '';
   const cdClass = meta.type === 'local' ? 'local' : '';
   card.innerHTML =
@@ -761,7 +761,7 @@ function populateRefProjectFilter(projects) {
   const sel = document.getElementById('ref-project-filter');
   if (!sel) return;
   const current = sel.value;
-  sel.innerHTML = '<option value="">All projects</option>';
+  sel.innerHTML = '<option value="">All projects</option><option value="__none__">No project assigned</option>';
   projects.forEach(p => {
     const slug = p.slug || p.name || (p._filename || '').replace('.md','');
     const opt  = document.createElement('option');
@@ -867,7 +867,7 @@ function renderRefs() {
   if (sortMode === 'alpha') {
     filtered.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
   } else if (sortMode === 'recent') {
-    filtered.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    filtered.sort((a, b) => (b.last_edit || '').localeCompare(a.last_edit || ''));
   } else if (sortMode === 'year-desc') {
     filtered.sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
   } else if (sortMode === 'year-asc') {

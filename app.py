@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.7.7.1001-1908"
+APP_VERSION = "1.7.9.1001-2134"
 
 
 
@@ -2012,6 +2012,84 @@ def export_bibtex():
     from flask import Response
     return Response(bib_content, mimetype="application/x-bibtex",
                     headers={"Content-Disposition": "inline; filename=marginalia.bib"})
+
+
+@app.route("/api/export/csl-json", methods=["GET"])
+def export_csl_json():
+    # Live CSL JSON export -- generates fresh from canonical files on every request.
+    # Zettlr: Settings -> Export -> Citation database -> enter URL or file path.
+    # On Tailscale: point Zettlr at http://100.126.14.57:5001/api/export/csl-json
+    # CSL type map -- Marginalia source_type -> CSL item type
+    csl_type_map = {
+        "journal article":           "article-journal",
+        "journal":                   "article-journal",
+        "book":                      "book",
+        "chapter":                   "chapter",
+        "conference paper":          "paper-conference",
+        "conference":                "paper-conference",
+        "conference presentation":   "speech",
+        "thesis":                    "thesis",
+        "preprint":                  "article",
+        "essay":                     "article",
+        "keynote":                   "speech",
+        "poster":                    "paper-conference",
+        "talk":                      "speech",
+        "web":                       "webpage",
+        "other":                     "document",
+    }
+    items = []
+    for ref in read_all_references():
+        slug = ref.get("slug") or ref.get("_filename","").replace(".md","")
+        if not slug:
+            continue
+        csl_type = csl_type_map.get(ref.get("source_type","").lower(), "document")
+
+        # Authors: "Last, First; Last, First" or "First Last; ..."
+        author_list = []
+        for raw in (ref.get("authors","") or "").split(";"):
+            raw = raw.strip()
+            if not raw:
+                continue
+            if "," in raw:
+                family, given = raw.split(",", 1)
+                author_list.append({"family": family.strip(), "given": given.strip()})
+            else:
+                parts = raw.rsplit(" ", 1)
+                if len(parts) == 2:
+                    author_list.append({"family": parts[1], "given": parts[0]})
+                else:
+                    author_list.append({"literal": raw})
+
+        item = {"id": slug, "type": csl_type, "title": ref.get("title","") or slug}
+        if author_list:
+            item["author"] = author_list
+        year = ref.get("year","").strip()
+        if year and year.isdigit():
+            item["issued"] = {"date-parts": [[int(year)]]}
+        url_doi = (ref.get("url_doi","") or "").strip()
+        if url_doi:
+            if "doi.org" in url_doi or url_doi.startswith("10."):
+                item["DOI"] = url_doi.replace("https://doi.org/","").replace("http://doi.org/","")
+                item["URL"] = "https://doi.org/" + item["DOI"]
+            else:
+                item["URL"] = url_doi
+        for fname in ("journal","publisher","volume","issue","pages","edition"):
+            val = (ref.get(fname,"") or "").strip()
+            if val:
+                item[fname] = val
+        kw = ref.get("keywords","").strip()
+        if kw:
+            item["keyword"] = kw
+        if ref.get("abstract","").strip():
+            item["abstract"] = ref["abstract"].strip()
+        items.append(item)
+    from flask import Response
+    return Response(json.dumps(items, ensure_ascii=False, indent=2),
+                    mimetype="application/json",
+                    headers={
+                        "Content-Disposition": "inline; filename=marginalia.json",
+                        "Access-Control-Allow-Origin": "*",
+                    })
 
 
 @app.route("/api/keywords", methods=["GET"])
