@@ -40,7 +40,7 @@ function showView(name, btn) {
   if (name === 'writing')      loadWriting();
   if (name === 'notes')        loadNotes();
   if (name === 'intelligence') { loadIntelligenceProjects(); populateIntelWritingFilter(); }
-  if (name === 'ingest')       loadResearcherContext();
+  if (name === 'ingest')       { loadResearcherContext(); loadProjects(); }
   if (name === 'prompt')       loadResearcherContext();
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -250,6 +250,8 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   // Apply saved font size on load
   initFontSize();
+  // Apply persisted settings (default project, RAG toggle, SLM model)
+  applySettingsDefaults();
 });
 
 // ── Focus instruction injection ───────────────────────────────────────────────
@@ -453,35 +455,10 @@ async function sendPrompt() {
   models.forEach(model => grid.appendChild(makeCard(model)));
   document.getElementById('cancel-btn').classList.add('visible');
   document.getElementById('send-btn').disabled = true;
-
-  // ── SLM RAG pre-fetch (observe-only, never blocks) ────────────────────────
-  let ragContext = '', ragCoverage = '', ragMeta = null;
-  const ragEnabled  = document.getElementById('rag-enable')?.checked || false;
-  const slmModel    = document.getElementById('slm-model-select')?.value || 'qwen2.5:0.5b';
-  if (ragEnabled) {
-    try {
-      const ragRes = await fetch('/api/rag-query', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ prompt, slm_model: slmModel }),
-      });
-      if (ragRes.ok) {
-        const ragData = await ragRes.json();
-        ragContext  = ragData.context_block    || '';
-        ragCoverage = ragData.coverage_declaration || '';
-        ragMeta     = { query: ragData.query_used, snippets: ragData.snippet_count };
-      }
-    } catch (_) { /* RAG failure is silent — main prompt proceeds */ }
-    if (ragMeta) {
-      const ragBar = document.createElement('div');
-      ragBar.style.cssText = 'font-family:monospace;font-size:10px;color:var(--muted);padding:4px 0 2px 2px;';
-      ragBar.textContent = `⧉ RAG · "${ragMeta.query}" · ${ragMeta.snippets} snippet${ragMeta.snippets !== 1 ? 's' : ''}`;
-      document.getElementById('response-grid')?.before(ragBar);
-    }
-  }
-  // ─────────────────────────────────────────────────────────────────────────
-
   try {
+    // RAG: fire intent-classified retrieval before sending to models
+    const ragData = await _fireRAG(prompt);
+
     const res = await fetch('/api/prompt', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -495,8 +472,7 @@ async function sendPrompt() {
         project:          document.getElementById('session-project-select')?.value || '',
         writing:          document.getElementById('session-writing-select')?.value || '',
         synthesis_context: getSynthesisContext(),
-        rag_context:      ragContext,
-        rag_coverage:     ragCoverage,
+        ...ragData,
       })
     });
     const reader  = res.body.getReader();
@@ -885,6 +861,19 @@ function renderRefs() {
     }
     return matchFilter && matchSearch && matchProject && matchYear && matchReading;
   });
+
+  // Sort
+  const sortMode = document.getElementById('ref-sort')?.value || 'alpha';
+  if (sortMode === 'alpha') {
+    filtered.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  } else if (sortMode === 'recent') {
+    filtered.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  } else if (sortMode === 'year-desc') {
+    filtered.sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
+  } else if (sortMode === 'year-asc') {
+    filtered.sort((a, b) => (parseInt(a.year) || 0) - (parseInt(b.year) || 0));
+  }
+
   document.getElementById('ref-count').textContent = filtered.length + ' of ' + allRefs.length + ' sources';
   if (!filtered.length) {
     list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-family:monospace;font-size:12px">No references match</div>';
@@ -2988,15 +2977,35 @@ function getActivePrompt() {
 
 
 // ── Font size adjustment ──────────────────────────────────────────────────────
+// Sets a --ui-scale CSS variable in addition to root font-size.
+// Elements using px inline styles are scaled via the variable; rem-based
+// elements respond to the root font-size change directly.
+const FONT_SIZE_DEFAULT = 14;
 function adjustFontSize(delta) {
-  const current = parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const current = parseFloat(getComputedStyle(document.documentElement).fontSize) || FONT_SIZE_DEFAULT;
   const next    = Math.min(Math.max(current + delta, 11), 20);
-  document.documentElement.style.fontSize = next + 'px';
+  _applyFontSize(next);
   localStorage.setItem('marginalia-font-size', next);
+  const label = document.getElementById('settings-font-size-label');
+  if (label) label.textContent = next + 'px';
+}
+function resetFontSize() {
+  _applyFontSize(FONT_SIZE_DEFAULT);
+  localStorage.removeItem('marginalia-font-size');
+  const label = document.getElementById('settings-font-size-label');
+  if (label) label.textContent = FONT_SIZE_DEFAULT + 'px';
+}
+function _applyFontSize(px) {
+  document.documentElement.style.fontSize = px + 'px';
+  // Scale factor relative to default; used by CSS var(--ui-scale) consumers
+  document.documentElement.style.setProperty('--ui-scale', (px / FONT_SIZE_DEFAULT).toFixed(3));
 }
 function initFontSize() {
   const saved = localStorage.getItem('marginalia-font-size');
-  if (saved) document.documentElement.style.fontSize = saved + 'px';
+  const px = saved ? parseFloat(saved) : FONT_SIZE_DEFAULT;
+  _applyFontSize(px);
+  const label = document.getElementById('settings-font-size-label');
+  if (label) label.textContent = px + 'px';
 }
 
 
@@ -3913,9 +3922,6 @@ function populateSynthProjectDropdown(projects) {
     opt.textContent = p.label || slug;
     sel.appendChild(opt);
   });
-  // Default to the currently active session project
-  const activeProject = document.getElementById('session-project-select')?.value || '';
-  if (activeProject) sel.value = activeProject;
 }
 
 
@@ -4792,3 +4798,204 @@ function closeLeadsPanel() {
   if (panel) panel.style.display = 'none';
   currentLeads = [];
 }
+
+// ── Settings modal ────────────────────────────────────────────────────────────
+async function openSettingsModal() {
+  const overlay = document.getElementById('settings-modal-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'flex';
+  initFontSize(); // refresh label
+  // Load persisted settings into modal
+  try {
+    const res  = await fetch('/api/settings');
+    const data = await res.json();
+    const defProj = document.getElementById('settings-default-project');
+    const ragCb   = document.getElementById('settings-rag-default');
+    const slmSel  = document.getElementById('settings-slm-default');
+    if (ragCb)  ragCb.checked  = !!(data.rag_default);
+    if (slmSel) slmSel.value   = data.slm_default || 'qwen2.5:0.5b';
+    // Populate project dropdown
+    if (defProj) {
+      try {
+        const pr = await fetch('/api/projects');
+        const ps = await pr.json();
+        defProj.innerHTML = '<option value="">No default</option>';
+        ps.forEach(p => {
+          const slug = p.slug || p.name || (p._filename||'').replace('.md','');
+          const opt  = document.createElement('option');
+          opt.value = slug;
+          opt.textContent = (p.label || slug);
+          defProj.appendChild(opt);
+        });
+        defProj.value = data.default_project || '';
+      } catch(e) {}
+    }
+  } catch(e) {}
+}
+
+function closeSettingsModal() {
+  const overlay = document.getElementById('settings-modal-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+async function saveSettings() {
+  try {
+    const res  = await fetch('/api/settings');
+    const data = await res.json();
+    const ragCb   = document.getElementById('settings-rag-default');
+    const slmSel  = document.getElementById('settings-slm-default');
+    const defProj = document.getElementById('settings-default-project');
+    if (ragCb)  data.rag_default     = ragCb.checked;
+    if (slmSel) data.slm_default     = slmSel.value;
+    if (defProj) data.default_project = defProj.value;
+    await fetch('/api/settings', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(data)
+    });
+    closeSettingsModal();
+    // Apply default project to session selector if set
+    if (defProj && defProj.value) {
+      const ss = document.getElementById('session-project-select');
+      if (ss && !ss.value) ss.value = defProj.value;
+    }
+    // Apply RAG default to checkbox
+    if (ragCb) {
+      const ragEl = document.getElementById('rag-enable');
+      if (ragEl && ragEl.checked !== ragCb.checked) ragEl.checked = ragCb.checked;
+    }
+    // Apply SLM default
+    if (slmSel) {
+      const slmEl = document.getElementById('slm-model-select');
+      if (slmEl) slmEl.value = slmSel.value;
+    }
+  } catch(e) {}
+}
+
+// Apply settings defaults on page load
+async function applySettingsDefaults() {
+  try {
+    const res  = await fetch('/api/settings');
+    const data = await res.json();
+    if (data.default_project) {
+      const ss = document.getElementById('session-project-select');
+      if (ss && !ss.value) ss.value = data.default_project;
+    }
+    if (data.rag_default !== undefined) {
+      const ragEl = document.getElementById('rag-enable');
+      if (ragEl) ragEl.checked = !!data.rag_default;
+    }
+    if (data.slm_default) {
+      const slmEl = document.getElementById('slm-model-select');
+      if (slmEl) slmEl.value = data.slm_default;
+    }
+  } catch(e) {}
+}
+
+// ── RAG intent classification + pre-send firing ──────────────────────────────
+// Detects temporal/factual markers in the prompt before firing DDG.
+// Only fires if the rag-enable checkbox is checked.
+const RAG_TEMPORAL_PATTERNS = [
+  /\b(today|yesterday|this (morning|afternoon|evening|week|month|year))\b/i,
+  /\b(current(ly)?|right now|at the moment|as of|latest|recent(ly)?)\b/i,
+  /\b(who is|what is|where is|where was|who was|what happened)\b/i,
+  /\b(prime minister|president|premier|leader|ceo|minister)\b/i,
+  /\b(news|announced|released|published|elected|resigned|appointed)\b/i,
+  /\b(this \w+ (said|announced|proposed|released))\b/i,
+];
+
+function _ragShouldFire(prompt) {
+  return RAG_TEMPORAL_PATTERNS.some(re => re.test(prompt));
+}
+
+async function _fireRAG(prompt) {
+  // Returns { rag_context, rag_coverage } or {} on failure/skip
+  const ragEl   = document.getElementById('rag-enable');
+  const slmEl   = document.getElementById('slm-model-select');
+  if (!ragEl || !ragEl.checked) return {};
+  if (!_ragShouldFire(prompt)) return {};
+  try {
+    const res  = await fetch('/api/rag-query', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ prompt, model: slmEl?.value || 'qwen2.5:0.5b' })
+    });
+    if (!res.ok) return {};
+    const data = await res.json();
+    return {
+      rag_context:  data.context_block   || '',
+      rag_coverage: data.coverage_declaration || '',
+    };
+  } catch(e) { return {}; }
+}
+
+// ── Boulder/hill footer animation ─────────────────────────────────────────────
+// Decorative only. Boulder climbs toward the cog at the hill crest on a 2h
+// cycle tied to the autosave nudge timer, then rolls back. The cog is NOT
+// a button and NOT connected to the settings modal.
+(function initBoulderAnimation() {
+  // Hill control points for the boulder path (x, y pairs, matching SVG polyline)
+  const HILL_PTS = [
+    [0,36],[600,36],[780,28],[850,18],[900,10],[940,6],[980,8],[1010,14],[1050,24],[1100,32],[1200,36]
+  ];
+  // Two-hour cycle in ms; matches autosave nudge
+  const CYCLE_MS = 2 * 60 * 60 * 1000;
+  const CREST_X  = 940; // x of hill cog
+
+  function _lerp(a, b, t) { return a + (b - a) * t; }
+
+  // Interpolate y position on hill given x progress (0=left edge, 1=crest)
+  function _hillY(progress) {
+    // progress 0..1 maps x from 0 to CREST_X
+    const x = progress * CREST_X;
+    for (let i = 1; i < HILL_PTS.length; i++) {
+      const [x0, y0] = HILL_PTS[i-1];
+      const [x1, y1] = HILL_PTS[i];
+      if (x <= x1) {
+        const t = (x - x0) / (x1 - x0);
+        return _lerp(y0, y1, t);
+      }
+    }
+    return 36;
+  }
+
+  function _updateBoulder(progress) {
+    const circle = document.getElementById('boulder-circle');
+    const crack  = document.getElementById('boulder-crack');
+    if (!circle || !crack) return;
+    const x = progress * CREST_X;
+    const y = _hillY(progress);
+    circle.setAttribute('cx', x.toFixed(1));
+    circle.setAttribute('cy', y.toFixed(1));
+    // Crack rotates with progress to suggest rolling
+    const angle = progress * 720;
+    const rad   = angle * Math.PI / 180;
+    const r = 5;
+    crack.setAttribute('x1', (x + r * Math.cos(rad)).toFixed(1));
+    crack.setAttribute('y1', (y + r * Math.sin(rad)).toFixed(1));
+    crack.setAttribute('x2', (x - r * Math.cos(rad)).toFixed(1));
+    crack.setAttribute('y2', (y - r * Math.sin(rad)).toFixed(1));
+  }
+
+  let _boulderStart = Date.now();
+  let _rollingBack  = false;
+
+  function _boulderFrame() {
+    const elapsed = Date.now() - _boulderStart;
+    let progress;
+    if (!_rollingBack) {
+      // Climb: ease-out over CYCLE_MS
+      progress = Math.min(elapsed / CYCLE_MS, 1);
+      progress = 1 - Math.pow(1 - progress, 2); // ease-out quad
+      if (progress >= 1) { _rollingBack = true; _boulderStart = Date.now(); }
+    } else {
+      // Roll back: fast, ease-in, over 8 seconds
+      progress = Math.max(1 - (elapsed / 8000), 0);
+      progress = Math.pow(progress, 2); // ease-in
+      if (progress <= 0) { _rollingBack = false; _boulderStart = Date.now(); }
+    }
+    _updateBoulder(progress);
+    requestAnimationFrame(_boulderFrame);
+  }
+
+  // Start animation after short delay so page is ready
+  setTimeout(() => requestAnimationFrame(_boulderFrame), 500);
+})();

@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.7.6.0930-1114"
+APP_VERSION = "1.7.7.1001-1819"
 
 
 
@@ -1191,9 +1191,13 @@ def call_model(model, prompt, num_predict=-1):
             try:
                 from google import genai as google_genai
                 client = google_genai.Client(api_key=KEYS["gemini"])
+                from google.genai import types as genai_types
                 response = client.models.generate_content(
                     model="gemini-3.8-flash",
                     contents=prompt,
+                    config=genai_types.GenerateContentConfig(
+                        http_options=genai_types.HttpOptions(timeout=60000)
+                    ),
                 )
                 return (model, response.text, None, 0, 0)
             except ImportError:
