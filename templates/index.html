@@ -294,22 +294,26 @@
     <div class="page-header" style="display:flex;align-items:baseline;justify-content:space-between">
       <div><h1>References</h1><small id="ref-count">Loading...</small></div>
       <div style="display:flex;gap:6px;align-items:center">
-        <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="toggleBibTexPanel()" data-tooltip="Export library as BibTeX — live URL for Zettlr or one-time download">↓ BibTeX</button>
+        <button class="btn-secondary" style="font-size:10px;padding:4px 10px" onclick="toggleBibTexPanel()" data-tooltip="Export library as BibTeX or CSL JSON — live URLs for Zettlr">↓ Export</button>
       </div>
     </div>
     <div id="bibtex-panel" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:10px 12px;margin-bottom:10px;font-family:monospace;font-size:11px">
-      <div style="color:var(--muted);margin-bottom:6px;font-size:10px;text-transform:uppercase;letter-spacing:.06em">BibTeX Export</div>
+      <div style="color:var(--muted);margin-bottom:8px;font-size:10px;text-transform:uppercase;letter-spacing:.06em">Export</div>
       <div style="margin-bottom:8px">
-        <div style="color:var(--text);margin-bottom:3px">Live URL <span style="color:var(--muted);font-size:10px">— point Zettlr at this in Preferences → Citations</span></div>
+        <div style="color:var(--text);margin-bottom:3px">BibTeX <span style="color:var(--muted);font-size:10px">— Zettlr · Preferences → Citations</span></div>
         <div style="display:flex;gap:6px;align-items:center">
           <code id="bibtex-url" style="background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:3px 8px;color:var(--accent);flex:1;font-size:11px">http://100.126.14.57:5001/api/export/bibtex</code>
           <button class="btn-secondary" style="font-size:10px;padding:3px 8px" onclick="copyBibTexUrl()">Copy</button>
+          <a href="/api/export/bibtex" download="marginalia.bib" class="btn-secondary" style="font-size:10px;padding:3px 8px;text-decoration:none">↓ .bib</a>
         </div>
-        <div style="color:var(--muted);font-size:10px;margin-top:3px">Updates live as your library grows. Zettlr resolves <code>[@slug]</code> citekeys against this feed.</div>
       </div>
       <div>
-        <a href="/api/export/bibtex" download="marginalia.bib" style="color:var(--accent);text-decoration:none;font-size:10px">↓ Download one-time .bib file</a>
-        <span style="color:var(--muted);font-size:10px"> — static snapshot for other citation managers</span>
+        <div style="color:var(--text);margin-bottom:3px">CSL JSON <span style="color:var(--muted);font-size:10px">— Zettlr 2.x · Preferences → Citations (URL or file path)</span></div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <code style="background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:3px 8px;color:var(--accent);flex:1;font-size:11px">http://100.126.14.57:5001/api/export/csl-json</code>
+          <button class="btn-secondary" style="font-size:10px;padding:3px 8px" onclick="navigator.clipboard.writeText('http://100.126.14.57:5001/api/export/csl-json')">Copy</button>
+          <a href="/api/export/csl-json" download="marginalia.json" class="btn-secondary" style="font-size:10px;padding:3px 8px;text-decoration:none">↓ .json</a>
+        </div>
       </div>
     </div>
 
@@ -411,7 +415,7 @@
         <input id="ref-year-filter" type="text" placeholder="Year (e.g. 1952 or 1950-1960)" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;width:160px" oninput="filterRefs()">
         <select id="ref-sort" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;width:140px" onchange="filterRefs()">
           <option value="alpha">A–Z</option>
-          <option value="recent">Recently added</option>
+          <option value="recent">Recently edited</option>
           <option value="year-desc">Year ↓</option>
           <option value="year-asc">Year ↑</option>
         </select>
@@ -565,19 +569,26 @@
         &#8599; Export — take your library elsewhere
       </div>
       <div class="import-section">
-        <div class="import-section-title">BibTeX — Zettlr &amp; citation managers</div>
+        <div class="import-section-title">BibTeX &amp; CSL JSON — Zettlr &amp; citation managers</div>
         <div style="font-family:monospace;font-size:11px;color:var(--muted);margin-bottom:10px">
-          Marginalia serves your library as a live BibTeX feed. Point Zettlr at the URL below in<br>
-          <strong>Preferences → Citations → Citation Database</strong>. Citekeys are your reference slugs.<br>
-          Updates automatically as your library grows — no manual export needed.
+          Both endpoints are live — they regenerate from your library on every request.<br>
+          Point Zettlr at one of the URLs below in <strong>Preferences → Citations → Citation Database</strong>.<br>
+          Citekeys are your reference slugs. No manual export needed.
         </div>
-        <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
           <code style="background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:5px 10px;color:var(--accent);flex:1;font-size:11px">http://100.126.14.57:5001/api/export/bibtex</code>
+          <span style="font-family:monospace;font-size:10px;color:var(--muted);white-space:nowrap">.bib</span>
           <button class="btn-secondary" onclick="copyBibTexUrl()" style="font-size:10px;padding:4px 10px">Copy</button>
-          <a href="/api/export/bibtex" download="marginalia.bib" class="btn-secondary" style="font-size:10px;padding:4px 10px;text-decoration:none">↓ Download</a>
+          <a href="/api/export/bibtex" download="marginalia.bib" class="btn-secondary" style="font-size:10px;padding:4px 10px;text-decoration:none">↓</a>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
+          <code style="background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:5px 10px;color:var(--accent);flex:1;font-size:11px">http://100.126.14.57:5001/api/export/csl-json</code>
+          <span style="font-family:monospace;font-size:10px;color:var(--muted);white-space:nowrap">.json</span>
+          <button class="btn-secondary" onclick="navigator.clipboard.writeText('http://100.126.14.57:5001/api/export/csl-json')" style="font-size:10px;padding:4px 10px">Copy</button>
+          <a href="/api/export/csl-json" download="marginalia.json" class="btn-secondary" style="font-size:10px;padding:4px 10px;text-decoration:none">↓</a>
         </div>
         <div style="font-family:monospace;font-size:10px;color:var(--muted)">
-          Localhost URL (from Solaris only): <code style="background:var(--bg);padding:1px 5px;border-radius:2px">http://localhost:5001/api/export/bibtex</code>
+          Localhost URLs (from Solaris only): <code style="background:var(--bg);padding:1px 5px;border-radius:2px">http://localhost:5001/api/export/bibtex</code> &nbsp; <code style="background:var(--bg);padding:1px 5px;border-radius:2px">http://localhost:5001/api/export/csl-json</code>
         </div>
       </div>
     </div><!-- /Export zone -->
@@ -1094,7 +1105,7 @@
 <div id="boulder-footer" style="position:fixed;bottom:28px;left:0;right:0;height:36px;pointer-events:none;overflow:hidden;z-index:5">
   <svg id="boulder-svg" viewBox="0 0 1200 36" preserveAspectRatio="xMidYMid meet" style="width:100%;height:36px">
     <!-- Hill: angular, rough, asymmetric — rises from right, crest near right edge -->
-    <polyline id="hill-line" points="0,36 600,36 780,28 850,18 900,10 940,6 980,8 1010,14 1050,24 1100,32 1200,36" fill="none" stroke="var(--muted)" stroke-width="1" opacity="0.35"/>
+    <polygon id="hill-line" points="0,36 600,36 780,28 850,18 900,10 940,6 980,8 1010,14 1050,24 1100,32 1200,36 1200,40 0,40" fill="var(--muted)" stroke="none" opacity="0.18"/>
     <!-- Decorative flag at crest -->
     <line x1="940" y1="6" x2="940" y2="18" stroke="var(--muted)" stroke-width="1" opacity="0.45"/>
     <polygon points="940,6 951,9 940,12" fill="var(--muted)" opacity="0.4"/>
