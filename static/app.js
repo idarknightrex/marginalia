@@ -18,12 +18,12 @@ const MODEL_META = {
   gemini:    { type: 'cloud',  web: true,  label: 'web' },
   anthropic: { type: 'cloud',  web: false, label: 'cloud' },
   openai:    { type: 'cloud',  web: false, label: 'cloud' },
-  deepseek:  { type: 'local',  web: false, label: 'local · China · knowledge to ~early 2024' },
-  qwen:      { type: 'local',  web: false, label: 'local · Asia/Global South · knowledge to ~mid 2024' },
-  mistral:   { type: 'local',  web: false, label: 'local · Europe · knowledge to ~early 2023' },
+  deepseek:  { type: 'local',  web: false, label: 'local · China · knowledge to ~early 2025' },
+  qwen:      { type: 'local',  web: false, label: 'local · Asia/Global South · knowledge to ~early 2025' },
+  mistral:   { type: 'local',  web: false, label: 'local · Europe · knowledge to ~early 2025' },
   gemma:     { type: 'local',  web: false, label: 'local · Western · knowledge to ~early 2025' },
-  llama:     { type: 'local',  web: false, label: 'local · Global · knowledge to ~early 2024' },
-  cohere:    { type: 'local',  web: false, label: 'local · Canada · knowledge to ~early 2024' },
+  llama:     { type: 'local',  web: false, label: 'local · Global · knowledge to ~early 2025' },
+  cohere:    { type: 'local',  web: false, label: 'local · Canada · knowledge to ~early 2025' },
 };
 function getModelMeta(model) {
   if (MODEL_META[model]) return MODEL_META[model];
@@ -4320,7 +4320,14 @@ function populateSessionScopeSelectors(projects) {
     opt.textContent = p.label || slug;
     pSel.appendChild(opt);
   });
-  if (curP) pSel.value = curP;
+  if (curP) {
+    pSel.value = curP;
+  } else {
+    // No prior selection — apply saved default project if any
+    fetch('/api/settings').then(r => r.json()).then(s => {
+      if (s.default_project) pSel.value = s.default_project;
+    }).catch(() => {});
+  }
   // Writing elements loaded separately
   loadWritingForScope(wSel, curW);
 }
@@ -4907,24 +4914,35 @@ function _ragShouldFire(prompt) {
   return RAG_TEMPORAL_PATTERNS.some(re => re.test(prompt));
 }
 
+function _ragSetStatus(msg, active) {
+  const el = document.getElementById('rag-status-label');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = active ? 'var(--text)' : 'var(--muted)';
+}
+
 async function _fireRAG(prompt) {
   // Returns { rag_context, rag_coverage } or {} on failure/skip
   const ragEl   = document.getElementById('rag-enable');
   const slmEl   = document.getElementById('slm-model-select');
   if (!ragEl || !ragEl.checked) return {};
   if (!_ragShouldFire(prompt)) return {};
+  _ragSetStatus('☍ RAG: fetching…', true);
   try {
     const res  = await fetch('/api/rag-query', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ prompt, model: slmEl?.value || 'qwen2.5:0.5b' })
     });
-    if (!res.ok) return {};
+    if (!res.ok) { _ragSetStatus('☍ RAG: failed', false); return {}; }
     const data = await res.json();
+    const count = (data.context_block || '').split('\n').filter(l => l.startsWith('[')).length;
+    _ragSetStatus('☍ RAG: ' + (count || '?') + ' results', true);
+    setTimeout(() => _ragSetStatus('☍ RAG', false), 8000);
     return {
       rag_context:  data.context_block   || '',
       rag_coverage: data.coverage_declaration || '',
     };
-  } catch(e) { return {}; }
+  } catch(e) { _ragSetStatus('☍ RAG: error', false); return {}; }
 }
 
 // ── Boulder/hill footer animation ─────────────────────────────────────────────

@@ -213,7 +213,7 @@
       <div style="display:flex;align-items:center;gap:5px;font-family:monospace;font-size:10px;color:var(--muted)" data-tooltip="Web RAG — fires a local SLM to build a search query, fetches snippets from DuckDuckGo, prepends retrieved context to local model calls">
         <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
           <input type="checkbox" id="rag-enable" style="accent-color:var(--accent);cursor:pointer">
-          <span>&#9741; RAG</span>
+          <span id="rag-status-label">&#9741; RAG</span>
         </label>
         <select id="slm-model-select" style="font-family:monospace;font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 4px">
           <option value="qwen2.5:0.5b">qwen2.5:0.5b</option>

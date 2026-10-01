@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.7.7.1001-1835"
+APP_VERSION = "1.7.7.1001-1853"
 
 
 
@@ -1193,7 +1193,7 @@ def call_model(model, prompt, num_predict=-1):
                 client = google_genai.Client(api_key=KEYS["gemini"])
                 from google.genai import types as genai_types
                 response = client.models.generate_content(
-                    model="gemini-3.8-flash",
+                    model="gemini-2.0-flash",  # verified: 2026-10
                     contents=prompt,
                     config=genai_types.GenerateContentConfig(
                         http_options=genai_types.HttpOptions(timeout=60000)
@@ -1205,7 +1205,7 @@ def call_model(model, prompt, num_predict=-1):
                 import google.generativeai as genai
                 genai.configure(api_key=KEYS["gemini"])
                 try:
-                    r = genai.GenerativeModel("gemini-3.8-flash").generate_content(prompt, request_options={"timeout": 60})
+                    r = genai.GenerativeModel("gemini-2.0-flash").generate_content(prompt, request_options={"timeout": 60})  # verified: 2026-10
                     return (model, r.text, None, 0, 0)
                 except Exception as e:
                     err_str = str(e)
@@ -1220,13 +1220,13 @@ def call_model(model, prompt, num_predict=-1):
         elif model == "anthropic" and KEYS.get("anthropic"):
             import anthropic as _anth
             client = _anth.Anthropic(api_key=KEYS["anthropic"])
-            msg = client.messages.create(model="claude-haiku-4-5", max_tokens=1024,
+            msg = client.messages.create(model="claude-haiku-4-5", max_tokens=1024,  # verified: 2026-10
                                          messages=[{"role": "user", "content": prompt}])
             return (model, msg.content[0].text, None, msg.usage.input_tokens, msg.usage.output_tokens)
         elif model == "openai" and KEYS.get("openai"):
             from openai import OpenAI
             client = OpenAI(api_key=KEYS["openai"])
-            r = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": prompt}])
+            r = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": prompt}])  # verified: 2026-10
             return (model, r.choices[0].message.content, None, 0, 0)
         elif model == "deepseek":
             return (model, call_ollama(local_cfg.get("reasoning", "deepseek-r1:8b"), prompt), None, 0, 0)
