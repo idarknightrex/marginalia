@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.7.7.1001-1903"
+APP_VERSION = "1.7.7.1001-1908"
 
 
 
@@ -1268,31 +1268,39 @@ RAG_COVERAGE_START = "December 2023"
 
 def _ddg_snippets(query: str, max_results: int = 5) -> list[str]:
     """
-    Fetch DuckDuckGo HTML search snippets without an API key.
+    Fetch DuckDuckGo Lite search snippets without an API key.
+    Uses POST to lite.duckduckgo.com/lite/ — returns results where the
+    html.duckduckgo.com GET endpoint bot-detects and returns a blank page.
+    Class name on this endpoint is 'result-snippet' (hyphen, not underscore).
     Returns a list of plain-text snippet strings (may be empty on failure).
     """
     import urllib.request as _ur
     import urllib.parse
     import html
     import re
-    encoded = urllib.parse.quote_plus(query)
-    url = f"https://html.duckduckgo.com/html/?q={encoded}"
-    req = _ur.Request(url, headers={
-        "User-Agent": "Mozilla/5.0 (compatible; Marginalia-RAG/1.7.6)",
-        "Accept-Language": "en-US,en;q=0.9",
-    })
+    import ssl
+    data = urllib.parse.urlencode({"q": query, "kl": "us-en"}).encode()
+    req = _ur.Request(
+        "https://lite.duckduckgo.com/lite/",
+        data=data,
+        headers={
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "text/html,application/xhtml+xml",
+        },
+    )
     try:
-        with _ur.urlopen(req, timeout=8) as resp:
+        ctx = ssl.create_default_context()
+        with _ur.urlopen(req, timeout=10, context=ctx) as resp:
             body = resp.read().decode("utf-8", errors="replace")
     except Exception as e:
         app.logger.warning(f"RAG _ddg_snippets network error: {e}")
         return []
 
-    # Extract result snippets from DDG HTML — tag-agnostic: matches <a> or <span>
-    # DDG has used both over time; capture content between class attr and closing tag
-    snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</(?:a|span)>', body, re.DOTALL)
+    # lite endpoint uses class="result-snippet" (hyphen)
+    snippets = re.findall(r'class=["\']result-snippet["\'][^>]*>(.*?)</(?:td|span|a)>', body, re.DOTALL)
     if not snippets:
-        app.logger.warning(f"RAG _ddg_snippets: no snippets found in DDG response (body len={len(body)})")
+        app.logger.warning(f"RAG _ddg_snippets: no snippets found in DDG Lite response (body len={len(body)})")
     clean = []
     for s in snippets[:max_results]:
         s = re.sub(r"<[^>]+>", " ", s)
