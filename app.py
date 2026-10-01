@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.7.7.1001-1853"
+APP_VERSION = "1.7.7.1001-1903"
 
 
 
@@ -1193,7 +1193,7 @@ def call_model(model, prompt, num_predict=-1):
                 client = google_genai.Client(api_key=KEYS["gemini"])
                 from google.genai import types as genai_types
                 response = client.models.generate_content(
-                    model="gemini-2.0-flash",  # verified: 2026-10
+                    model="gemini-3.8-flash",  # verified: 2026-10
                     contents=prompt,
                     config=genai_types.GenerateContentConfig(
                         http_options=genai_types.HttpOptions(timeout=60000)
@@ -1205,7 +1205,7 @@ def call_model(model, prompt, num_predict=-1):
                 import google.generativeai as genai
                 genai.configure(api_key=KEYS["gemini"])
                 try:
-                    r = genai.GenerativeModel("gemini-2.0-flash").generate_content(prompt, request_options={"timeout": 60})  # verified: 2026-10
+                    r = genai.GenerativeModel("gemini-3.8-flash").generate_content(prompt, request_options={"timeout": 60})  # verified: 2026-10
                     return (model, r.text, None, 0, 0)
                 except Exception as e:
                     err_str = str(e)
@@ -1284,11 +1284,15 @@ def _ddg_snippets(query: str, max_results: int = 5) -> list[str]:
     try:
         with _ur.urlopen(req, timeout=8) as resp:
             body = resp.read().decode("utf-8", errors="replace")
-    except Exception:
+    except Exception as e:
+        app.logger.warning(f"RAG _ddg_snippets network error: {e}")
         return []
 
-    # Extract result snippets from DDG HTML — look for result__snippet spans
-    snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', body, re.DOTALL)
+    # Extract result snippets from DDG HTML — tag-agnostic: matches <a> or <span>
+    # DDG has used both over time; capture content between class attr and closing tag
+    snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</(?:a|span)>', body, re.DOTALL)
+    if not snippets:
+        app.logger.warning(f"RAG _ddg_snippets: no snippets found in DDG response (body len={len(body)})")
     clean = []
     for s in snippets[:max_results]:
         s = re.sub(r"<[^>]+>", " ", s)
