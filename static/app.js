@@ -4961,14 +4961,14 @@ async function _fireRAG(prompt) {
     const circle = document.getElementById('boulder-circle');
     const crack  = document.getElementById('boulder-crack');
     if (!circle || !crack) return;
+    const r = 5;
     const x = progress * CREST_X;
-    const y = _hillY(progress);
+    const y = _hillY(progress) - r; // sit on top of hill, not through it
     circle.setAttribute('cx', x.toFixed(1));
     circle.setAttribute('cy', y.toFixed(1));
     // Crack rotates with progress to suggest rolling
     const angle = progress * 720;
     const rad   = angle * Math.PI / 180;
-    const r = 5;
     crack.setAttribute('x1', (x + r * Math.cos(rad)).toFixed(1));
     crack.setAttribute('y1', (y + r * Math.sin(rad)).toFixed(1));
     crack.setAttribute('x2', (x - r * Math.cos(rad)).toFixed(1));

@@ -43,5 +43,8 @@
     "default_verification_status": "located",
     "dwell_threshold_seconds": 30,
     "upgrade_check_days": 30
-  }
+  },
+  "rag_default": true,
+  "slm_default": "qwen2.5:0.5b",
+  "default_project": "phd_core"
 }
