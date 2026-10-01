@@ -1,6 +1,7 @@
 {
   "_comment": "Marginalia settings \u2014 human readable, travels with your repo, committed to git",
   "_docs": "All values editable here or via Settings panel in the UI",
+  "default_project": "phd_core",
   "disposition": "balance",
   "models": {
     "cloud": {
@@ -26,6 +27,8 @@
       "Other"
     ]
   },
+  "rag_default": true,
+  "slm_default": "qwen2.5:0.5b",
   "storage": {
     "canonical_folder": "canonical",
     "captures_folder": "canonical/captures",
@@ -43,8 +46,5 @@
     "default_verification_status": "located",
     "dwell_threshold_seconds": 30,
     "upgrade_check_days": 30
-  },
-  "rag_default": true,
-  "slm_default": "qwen2.5:0.5b",
-  "default_project": "phd_core"
+  }
 }

@@ -4854,9 +4854,9 @@ async function saveSettings() {
     });
     closeSettingsModal();
     // Apply default project to session selector if set
-    if (defProj && defProj.value) {
+    if (defProj) {
       const ss = document.getElementById('session-project-select');
-      if (ss && !ss.value) ss.value = defProj.value;
+      if (ss) ss.value = defProj.value;
     }
     // Apply RAG default to checkbox
     if (ragCb) {
@@ -4878,7 +4878,7 @@ async function applySettingsDefaults() {
     const data = await res.json();
     if (data.default_project) {
       const ss = document.getElementById('session-project-select');
-      if (ss && !ss.value) ss.value = data.default_project;
+      if (ss) ss.value = data.default_project;
     }
     if (data.rag_default !== undefined) {
       const ragEl = document.getElementById('rag-enable');
