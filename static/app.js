@@ -1325,15 +1325,15 @@ function renderAuditTable() {
 
 async function auditOpenRef(filename) {
   if (!filename) return;
-  // Ensure refs are loaded
   if (!allRefs || !allRefs.length) await loadReferences();
   const ref = allRefs.find(r => r._filename === filename);
-  if (ref) {
-    // Switch to references view, then open the edit modal for this ref
-    const navBtn = document.querySelector('.nav-btn[onclick*="references"]');
-    showView('references', navBtn);
-    setTimeout(() => openEditModal(ref, false), 80);
-  }
+  if (!ref) return;
+  let navBtn = null;
+  document.querySelectorAll('.nav-btn').forEach(b => {
+    if (b.textContent.includes('References')) navBtn = b;
+  });
+  showView('references', navBtn);
+  setTimeout(() => openEditModal(ref, false), 80);
 }
 
 
