@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.2.1002-0223"
+APP_VERSION = "1.8.3.1002-1114"
 
 
 
@@ -744,7 +744,7 @@ def _is_likely_duplicate(rec: dict, existing_refs: list):
       - Same first-author-surname + year + >=3 overlapping title tokens
       - Exact url_doi match (non-empty)
     """
-    _DOI_PLACEHOLDERS = {"", "none", "n/a", "-", "–", "na", "null"}
+    _DOI_PLACEHOLDERS = {"", "none", "n/a", "-", "–", "na", "null", "other"}
     rec_doi   = (rec.get("url_doi") or "").strip().lower()
     if rec_doi in _DOI_PLACEHOLDERS:
         rec_doi = ""
@@ -960,7 +960,7 @@ def audit_references():
             if match is not None:
                 seen_pairs.add(pair)
                 # Determine reason for display
-                _placeholders = {"", "none", "n/a", "-", "–", "na", "null"}
+                _placeholders = {"", "none", "n/a", "-", "–", "na", "null", "other"}
                 doi_a = (ref_a.get("url_doi") or "").strip().lower()
                 doi_b = (ref_b.get("url_doi") or "").strip().lower()
                 if doi_a in _placeholders: doi_a = ""
