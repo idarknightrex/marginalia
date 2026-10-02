@@ -1321,15 +1321,18 @@ function renderAuditTable() {
 
 async function auditOpenRef(filename) {
   if (!filename) return;
-  // Switch to references view and ensure refs are loaded
   const navBtn = document.querySelector('.nav-btn[onclick*="references"]');
   showView('references', navBtn);
-  await loadReferences();   // waits for allRefs to be populated and renderRefs() to run
-  // Clear all filters so every ref is visible, then re-render
+  await loadReferences();
   resetAllRefFilters();
-  // One rAF to let the DOM settle after renderRefs()
+  // Two rAFs: first lets React/DOM flush, second confirms paint
   await new Promise(r => requestAnimationFrame(r));
-  const card = document.querySelector('[data-filename="' + CSS.escape(filename) + '"]');
+  await new Promise(r => requestAnimationFrame(r));
+  // Find card by iterating — avoids CSS.escape quoting issues
+  let card = null;
+  document.querySelectorAll('[data-filename]').forEach(el => {
+    if (el.dataset.filename === filename) card = el;
+  });
   if (card) {
     card.scrollIntoView({ behavior: 'smooth', block: 'center' });
     card.style.outline = '2px solid var(--accent)';
