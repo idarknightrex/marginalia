@@ -1308,7 +1308,8 @@ function renderAuditTable() {
     ).join('');
     const titleDisp = r.title ? escHtml(r.title) : '<em style="color:var(--muted)">(no title)</em>';
     const fnJson    = JSON.stringify(r.filename);
-    const titleJson = JSON.stringify(r.title || r.filename.replace(/\.md$/, ''));
+    const plainTitle = (r.title || r.filename.replace(/\.md$/, '')).replace(/<[^>]*>/g, '');
+    const titleJson = JSON.stringify(plainTitle);
     html += '<tr style="border-bottom:1px solid var(--border)">';
     html += '<td style="padding:6px 4px;vertical-align:top;white-space:nowrap">'
           + '<span style="color:' + color + ';font-size:13px;margin-right:6px">' + icon + '</span>'
@@ -1324,13 +1325,15 @@ function renderAuditTable() {
   result.innerHTML = html;
 }
 
-function auditOpenRef(filename, title) {
+async function auditOpenRef(filename, title) {
   if (!filename) return;
-  // Click the References nav button to switch view
+  // Switch to References view
   document.querySelectorAll('.nav-btn').forEach(b => {
     if (b.textContent.includes('References')) b.click();
   });
-  // Stuff the title into the search box and filter — no async needed
+  // Wait for refs to load if not already populated
+  if (!allRefs.length) await loadReferences();
+  // Stuff the plain-text title into the search box and filter
   const searchTerm = title || filename.replace(/\.md$/, '');
   document.getElementById('ref-search').value = searchTerm;
   filterRefs();
