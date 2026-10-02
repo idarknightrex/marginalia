@@ -1325,17 +1325,19 @@ function renderAuditTable() {
 
 async function auditOpenRef(filename) {
   if (!filename) return;
+  // Switch view first (nav highlight + view swap, but don't rely on its loadReferences)
   let navBtn = null;
   document.querySelectorAll('.nav-btn').forEach(b => {
     if (b.textContent.includes('References')) navBtn = b;
   });
-  showView('references', navBtn);
-  // showView triggers loadReferences() async; wait for it then find and open
-  setTimeout(async () => {
-    if (!allRefs || !allRefs.length) await loadReferences();
-    const ref = allRefs.find(r => r._filename === filename);
-    if (ref) openEditModal(ref, false);
-  }, 300);
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('view-references').classList.add('active');
+  if (navBtn) navBtn.classList.add('active');
+  // Now load refs ourselves and await the result
+  await loadReferences();
+  const ref = allRefs.find(r => r._filename === filename);
+  if (ref) openEditModal(ref, false);
 }
 
 
