@@ -872,6 +872,8 @@ function renderRefs() {
     filtered.sort((a, b) => (parseInt(b.year) || 0) - (parseInt(a.year) || 0));
   } else if (sortMode === 'year-asc') {
     filtered.sort((a, b) => (parseInt(a.year) || 0) - (parseInt(b.year) || 0));
+  } else if (sortMode === 'added') {
+    filtered.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
   }
 
   document.getElementById('ref-count').textContent = filtered.length + ' of ' + allRefs.length + ' sources';
@@ -1299,7 +1301,7 @@ function renderAuditTable() {
   const sevColor = { critical: '#c84b4b', warning: '#c9a832', noise: 'var(--muted)' };
   const sevIcon  = { critical: '✖', warning: '⚠', noise: '•' };
 
-  let html = '<table style="width:100%;border-collapse:collapse;font-family:monospace;font-size:11px">';
+  let html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-family:monospace;font-size:11px">';
   html += '<thead><tr style="border-bottom:1px solid var(--border);color:var(--muted);text-transform:uppercase;font-size:9px;letter-spacing:.06em">';
   html += '<th style="text-align:left;padding:4px 6px;width:24px"></th>';
   html += '<th style="text-align:left;padding:4px 6px">Title</th>';
@@ -1322,7 +1324,7 @@ function renderAuditTable() {
     html += '<td style="padding:6px 6px">' + issueList + '</td>';
     html += '</tr>';
   });
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
   result.style.display = 'block';
   result.innerHTML = html;
 }
