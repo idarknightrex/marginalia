@@ -1325,15 +1325,17 @@ function renderAuditTable() {
 
 async function auditOpenRef(filename) {
   if (!filename) return;
-  if (!allRefs || !allRefs.length) await loadReferences();
-  const ref = allRefs.find(r => r._filename === filename);
-  if (!ref) return;
   let navBtn = null;
   document.querySelectorAll('.nav-btn').forEach(b => {
     if (b.textContent.includes('References')) navBtn = b;
   });
   showView('references', navBtn);
-  setTimeout(() => openEditModal(ref, false), 80);
+  // showView triggers loadReferences() async; wait for it then find and open
+  setTimeout(async () => {
+    if (!allRefs || !allRefs.length) await loadReferences();
+    const ref = allRefs.find(r => r._filename === filename);
+    if (ref) openEditModal(ref, false);
+  }, 300);
 }
 
 
