@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.1.1002-1114"
+APP_VERSION = "1.8.2.1002-0223"
 
 
 
@@ -744,13 +744,19 @@ def _is_likely_duplicate(rec: dict, existing_refs: list):
       - Same first-author-surname + year + >=3 overlapping title tokens
       - Exact url_doi match (non-empty)
     """
+    _DOI_PLACEHOLDERS = {"", "none", "n/a", "-", "–", "na", "null"}
     rec_doi   = (rec.get("url_doi") or "").strip().lower()
+    if rec_doi in _DOI_PLACEHOLDERS:
+        rec_doi = ""
     rec_year  = str(rec.get("year") or "").strip()
     rec_auth  = rec.get("authors", "Unknown").split(";")[0].split(",")[0].strip().lower()
     rec_tok   = _slug_tokens(rec.get("title", ""))
 
     for ex in existing_refs:
-        if rec_doi and rec_doi == (ex.get("url_doi") or "").strip().lower():
+        ex_doi = (ex.get("url_doi") or "").strip().lower()
+        if ex_doi in _DOI_PLACEHOLDERS:
+            ex_doi = ""
+        if rec_doi and ex_doi and rec_doi == ex_doi:
             return ex
         ex_year = str(ex.get("year") or "").strip()
         ex_auth = ex.get("authors", "Unknown").split(";")[0].split(",")[0].strip().lower()
@@ -813,7 +819,13 @@ def check_import_duplicates():
 # ─── Corrupt reference detection ──────────────────────────────────────────────
 import re as _re
 
-_VALID_SOURCE_TYPES = {"journal", "book", "chapter", "conference", "thesis", "web", "other", "report", "dataset", "preprint"}
+_VALID_SOURCE_TYPES = {
+    "journal", "journal article",
+    "book", "chapter",
+    "conference", "conference paper", "conference presentation",
+    "thesis", "web", "other", "report", "dataset", "preprint",
+    "essay", "keynote", "poster", "talk",
+}
 _LATEX_RE = _re.compile(r"\\[a-zA-Z]+\{|\\[a-zA-Z]+\s")
 _BRACE_RE = _re.compile(r"[\{\}]")
 _CTRL_RE  = _re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")   # control chars (not \n\r\t)
@@ -948,9 +960,12 @@ def audit_references():
             if match is not None:
                 seen_pairs.add(pair)
                 # Determine reason for display
+                _placeholders = {"", "none", "n/a", "-", "–", "na", "null"}
                 doi_a = (ref_a.get("url_doi") or "").strip().lower()
                 doi_b = (ref_b.get("url_doi") or "").strip().lower()
-                reason = "DOI match" if (doi_a and doi_a == doi_b) else "author+year+title overlap"
+                if doi_a in _placeholders: doi_a = ""
+                if doi_b in _placeholders: doi_b = ""
+                reason = "DOI match" if (doi_a and doi_b and doi_a == doi_b) else "author+year+title overlap"
                 issue_map.setdefault(fa, []).append({
                     "field":    "library",
                     "severity": "warning",
