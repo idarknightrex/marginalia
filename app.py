@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.0.1001-2143"
+APP_VERSION = "1.8.1.1002-1114"
 
 
 
@@ -2090,6 +2090,33 @@ def export_csl_json():
                         "Content-Disposition": "inline; filename=marginalia.json",
                         "Access-Control-Allow-Origin": "*",
                     })
+
+
+@app.route("/api/export/csl-json/sync", methods=["POST"])
+def sync_csl_json():
+    """Write the CSL JSON library to a configured local path (e.g. iCloud folder).
+    Path is stored in settings JSON as csl_sync_path.
+    Records synced_at timestamp back to settings so the UI can show last-synced.
+    """
+    settings = load_settings()
+    sync_path = (settings.get("csl_sync_path") or "").strip()
+    if not sync_path:
+        return jsonify({"error": "No sync path configured. Set one in Settings."}), 400
+    dest = Path(sync_path).expanduser()
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        # Re-use export logic — call the internal function directly
+        from flask import current_app
+        with current_app.test_request_context():
+            resp = export_csl_json()
+        json_bytes = resp.get_data()
+        dest.write_bytes(json_bytes)
+        synced_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        settings["csl_synced_at"] = synced_at
+        save_settings(settings)
+        return jsonify({"ok": True, "path": str(dest), "synced_at": synced_at})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/keywords", methods=["GET"])

@@ -205,6 +205,7 @@ main { max-width: 900px; margin: 0 auto; padding: 20px; }
 .import-result { font-family: monospace; font-size: 11px; padding: 8px 12px; border-radius: 4px; margin-top: 10px; display: none; }
 .import-result.success { background: #3d8b3718; border: 1px solid #3d8b3744; color: #3d8b37; }
 .import-result.error   { background: #c9424218; border: 1px solid #c9424244; color: #c94242; }
+.import-result.warning { background: #c9a83218; border: 1px solid #c9a83244; color: #8a6f1e; }
 
 /* ── DOI quick lookup ── */
 .doi-row { display: flex; gap: 8px; margin-bottom: 16px; }

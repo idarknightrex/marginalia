@@ -1178,8 +1178,12 @@ async function checkDuplicates() {
     });
     const data = await res.json();
     if (data.error) {
-      resultEl.className = 'import-result error'; resultEl.style.display = 'block';
-      resultEl.textContent = 'Error: ' + data.error;
+      const isPlaintextWarning = data.error.includes('Plaintext format');
+      resultEl.className = 'import-result ' + (isPlaintextWarning ? 'warning' : 'error');
+      resultEl.style.display = 'block';
+      resultEl.textContent = isPlaintextWarning
+        ? 'Plain text import uses AI parsing — duplicate check runs after import. Use Library Audit in References to review.'
+        : 'Error: ' + data.error;
     } else if (!data.duplicates || data.duplicates.length === 0) {
       resultEl.className = 'import-result success'; resultEl.style.display = 'block';
       resultEl.textContent = 'No duplicates found in ' + data.checked + ' record' + (data.checked !== 1 ? 's' : '') + '.';
@@ -1197,6 +1201,26 @@ async function checkDuplicates() {
     resultEl.textContent = 'Check failed: ' + e.message;
   }
   if (btn) { btn.textContent = 'Check dupes'; btn.disabled = false; }
+}
+
+async function syncCslJson() {
+  const btn = document.querySelector('[onclick="syncCslJson()"]');
+  const statusEl = document.getElementById('csl-sync-status');
+  if (btn) { btn.textContent = 'Syncing...'; btn.disabled = true; }
+  if (statusEl) statusEl.textContent = 'Syncing...';
+  try {
+    const res  = await fetch('/api/export/csl-json/sync', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      const d = new Date(data.synced_at);
+      if (statusEl) statusEl.textContent = 'Last synced: ' + d.toLocaleString();
+    } else {
+      if (statusEl) statusEl.textContent = data.error || 'Sync failed';
+    }
+  } catch(e) {
+    if (statusEl) statusEl.textContent = 'Sync error: ' + e.message;
+  }
+  if (btn) { btn.textContent = 'Sync now'; btn.disabled = false; }
 }
 
 function escHtml(s) {
@@ -1287,14 +1311,14 @@ function renderAuditTable() {
     const color   = sevColor[r.worst] || 'var(--muted)';
     const icon    = sevIcon[r.worst]  || '•';
     const issueList = r.issues.map(i =>
-      '<span style="color:' + (sevColor[i.severity] || 'var(--muted)') + ';margin-right:8px">' +
-      escHtml(i.field) + ': ' + escHtml(i.reason) + '</span>'
+      '<div style="color:' + (sevColor[i.severity] || 'var(--muted)') + ';margin-bottom:2px">' +
+      '<span style="opacity:.6">' + escHtml(i.field) + ':</span> ' + escHtml(i.reason) + '</div>'
     ).join('');
     const titleDisp = r.title ? escHtml(r.title) : '<em style="color:var(--muted)">(no title)</em>';
     html += '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="auditOpenRef(' + JSON.stringify(r.filename) + ')" title="Click to open ref for editing">';
-    html += '<td style="padding:6px 6px;color:' + color + ';font-size:13px">' + icon + '</td>';
-    html += '<td style="padding:6px 6px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + titleDisp + '</td>';
-    html += '<td style="padding:6px 6px;color:var(--muted);white-space:nowrap">' + escHtml((r.authors || '').split(';')[0].split(',')[0]) + ' ' + escHtml(r.year || '') + '</td>';
+    html += '<td style="padding:6px 6px;color:' + color + ';font-size:13px;vertical-align:top">' + icon + '</td>';
+    html += '<td style="padding:6px 6px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top">' + titleDisp + '</td>';
+    html += '<td style="padding:6px 6px;color:var(--muted);white-space:nowrap;vertical-align:top">' + escHtml((r.authors || '').split(';')[0].split(',')[0]) + ' ' + escHtml(r.year || '') + '</td>';
     html += '<td style="padding:6px 6px">' + issueList + '</td>';
     html += '</tr>';
   });
@@ -3659,6 +3683,18 @@ function toggleBibTexPanel() {
   const panel = document.getElementById('bibtex-panel');
   if (!panel) return;
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  if (panel.style.display === 'block') {
+    // Refresh last-synced status from settings
+    fetch('/api/settings').then(r => r.json()).then(data => {
+      const statusEl = document.getElementById('csl-sync-status');
+      if (!statusEl) return;
+      if (data.csl_synced_at) {
+        try { statusEl.textContent = 'Last synced: ' + new Date(data.csl_synced_at).toLocaleString(); } catch(e) {}
+      } else if (!data.csl_sync_path) {
+        statusEl.textContent = 'Sync path not configured — set in Settings';
+      }
+    }).catch(() => {});
+  }
 }
 function copyBibTexUrl() {
   const url = 'http://100.126.14.57:5001/api/export/bibtex';
@@ -4821,6 +4857,18 @@ async function openSettingsModal() {
     const slmSel  = document.getElementById('settings-slm-default');
     if (ragCb)  ragCb.checked  = !!(data.rag_default);
     if (slmSel) slmSel.value   = data.slm_default || 'qwen2.5:0.5b';
+    const cslPath = document.getElementById('settings-csl-sync-path');
+    if (cslPath) cslPath.value = data.csl_sync_path || '';
+    // Update sync status in export panel
+    const syncStatus = document.getElementById('csl-sync-status');
+    if (syncStatus && data.csl_synced_at) {
+      try {
+        const d = new Date(data.csl_synced_at);
+        syncStatus.textContent = 'Last synced: ' + d.toLocaleString();
+      } catch(e) {}
+    } else if (syncStatus && !data.csl_sync_path) {
+      syncStatus.textContent = 'Sync path not configured';
+    }
     // Populate project dropdown
     if (defProj) {
       try {
@@ -4855,6 +4903,8 @@ async function saveSettings() {
     if (ragCb)  data.rag_default     = ragCb.checked;
     if (slmSel) data.slm_default     = slmSel.value;
     if (defProj) data.default_project = defProj.value;
+    const cslPath = document.getElementById('settings-csl-sync-path');
+    if (cslPath) data.csl_sync_path = cslPath.value.trim();
     await fetch('/api/settings', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify(data)

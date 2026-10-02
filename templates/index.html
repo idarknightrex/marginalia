@@ -304,15 +304,19 @@
         <div style="display:flex;gap:6px;align-items:center">
           <code id="bibtex-url" style="background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:3px 8px;color:var(--accent);flex:1;font-size:11px">http://100.126.14.57:5001/api/export/bibtex</code>
           <button class="btn-secondary" style="font-size:10px;padding:3px 8px" onclick="copyBibTexUrl()">Copy</button>
-          <a href="/api/export/bibtex" download="marginalia.bib" class="btn-secondary" style="font-size:10px;padding:3px 8px;text-decoration:none">↓ .bib</a>
+          <a href="/api/export/bibtex" download="marginalia.bib" class="btn-primary" style="font-size:10px;padding:3px 8px;text-decoration:none">↓ .bib</a>
         </div>
       </div>
       <div>
         <div style="color:var(--text);margin-bottom:3px">CSL JSON <span style="color:var(--muted);font-size:10px">— Zettlr 2.x · Preferences → Citations (URL or file path)</span></div>
-        <div style="display:flex;gap:6px;align-items:center">
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
           <code style="background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:3px 8px;color:var(--accent);flex:1;font-size:11px">http://100.126.14.57:5001/api/export/csl-json</code>
           <button class="btn-secondary" style="font-size:10px;padding:3px 8px" onclick="navigator.clipboard.writeText('http://100.126.14.57:5001/api/export/csl-json')">Copy</button>
-          <a href="/api/export/csl-json" download="marginalia.json" class="btn-secondary" style="font-size:10px;padding:3px 8px;text-decoration:none">↓ .json</a>
+          <a href="/api/export/csl-json" download="marginalia.json" class="btn-primary" style="font-size:10px;padding:3px 8px;text-decoration:none">↓ .json</a>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn-secondary" style="font-size:10px;padding:2px 8px" onclick="syncCslJson()">Sync now</button>
+          <span id="csl-sync-status" style="font-family:monospace;font-size:9px;color:var(--muted)">—</span>
         </div>
       </div>
     </div>
@@ -579,13 +583,13 @@
           <code style="background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:5px 10px;color:var(--accent);flex:1;font-size:11px">http://100.126.14.57:5001/api/export/bibtex</code>
           <span style="font-family:monospace;font-size:10px;color:var(--muted);white-space:nowrap">.bib</span>
           <button class="btn-secondary" onclick="copyBibTexUrl()" style="font-size:10px;padding:4px 10px">Copy</button>
-          <a href="/api/export/bibtex" download="marginalia.bib" class="btn-secondary" style="font-size:10px;padding:4px 10px;text-decoration:none">↓</a>
+          <a href="/api/export/bibtex" download="marginalia.bib" class="btn-primary" style="font-size:10px;padding:4px 10px;text-decoration:none">↓</a>
         </div>
         <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
           <code style="background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:5px 10px;color:var(--accent);flex:1;font-size:11px">http://100.126.14.57:5001/api/export/csl-json</code>
           <span style="font-family:monospace;font-size:10px;color:var(--muted);white-space:nowrap">.json</span>
           <button class="btn-secondary" onclick="navigator.clipboard.writeText('http://100.126.14.57:5001/api/export/csl-json')" style="font-size:10px;padding:4px 10px">Copy</button>
-          <a href="/api/export/csl-json" download="marginalia.json" class="btn-secondary" style="font-size:10px;padding:4px 10px;text-decoration:none">↓</a>
+          <a href="/api/export/csl-json" download="marginalia.json" class="btn-primary" style="font-size:10px;padding:4px 10px;text-decoration:none">↓</a>
         </div>
         <div style="font-family:monospace;font-size:10px;color:var(--muted)">
           Localhost URLs (from Solaris only): <code style="background:var(--bg);padding:1px 5px;border-radius:2px">http://localhost:5001/api/export/bibtex</code> &nbsp; <code style="background:var(--bg);padding:1px 5px;border-radius:2px">http://localhost:5001/api/export/csl-json</code>
@@ -1092,6 +1096,13 @@
           <option value="llama3.2:1b">llama3.2:1b</option>
         </select>
       </div>
+    </div>
+
+    <!-- Zettlr / CSL JSON sync path -->
+    <div style="margin-bottom:18px">
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Zettlr / CSL JSON sync path</div>
+      <input type="text" id="settings-csl-sync-path" placeholder="/path/to/folder/marginalia.json" style="width:100%;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:monospace;font-size:10px;box-sizing:border-box">
+      <div style="font-family:monospace;font-size:9px;color:var(--muted);margin-top:4px">Full path including filename. Zettlr watches this file automatically.</div>
     </div>
 
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px">
