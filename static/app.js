@@ -1307,11 +1307,12 @@ function renderAuditTable() {
       '<span style="opacity:.6">' + escHtml(i.field) + ':</span> ' + escHtml(i.reason) + '</div>'
     ).join('');
     const titleDisp = r.title ? escHtml(r.title) : '<em style="color:var(--muted)">(no title)</em>';
-    const fnJson = JSON.stringify(r.filename);
+    const fnJson    = JSON.stringify(r.filename);
+    const titleJson = JSON.stringify(r.title || r.filename.replace(/\.md$/, ''));
     html += '<tr style="border-bottom:1px solid var(--border)">';
     html += '<td style="padding:6px 4px;vertical-align:top;white-space:nowrap">'
           + '<span style="color:' + color + ';font-size:13px;margin-right:6px">' + icon + '</span>'
-          + '<button onclick="auditOpenRef(' + fnJson + ')" style="background:none;border:1px solid var(--border);border-radius:3px;color:var(--accent);font-family:monospace;font-size:10px;padding:1px 5px;cursor:pointer" title="Open in References">→</button>'
+          + '<button onclick="auditOpenRef(' + fnJson + ',' + titleJson + ')" style="background:none;border:1px solid var(--border);border-radius:3px;color:var(--accent);font-family:monospace;font-size:10px;padding:1px 5px;cursor:pointer" title="Find in References">→</button>'
           + '</td>';
     html += '<td style="padding:6px 6px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top">' + titleDisp + '</td>';
     html += '<td style="padding:6px 6px;color:var(--muted);white-space:nowrap;vertical-align:top">' + escHtml((r.authors || '').split(';')[0].split(',')[0]) + ' ' + escHtml(r.year || '') + '</td>';
@@ -1323,21 +1324,16 @@ function renderAuditTable() {
   result.innerHTML = html;
 }
 
-async function auditOpenRef(filename) {
+function auditOpenRef(filename, title) {
   if (!filename) return;
-  // Switch view first (nav highlight + view swap, but don't rely on its loadReferences)
-  let navBtn = null;
+  // Click the References nav button to switch view
   document.querySelectorAll('.nav-btn').forEach(b => {
-    if (b.textContent.includes('References')) navBtn = b;
+    if (b.textContent.includes('References')) b.click();
   });
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('view-references').classList.add('active');
-  if (navBtn) navBtn.classList.add('active');
-  // Now load refs ourselves and await the result
-  await loadReferences();
-  const ref = allRefs.find(r => r._filename === filename);
-  if (ref) openEditModal(ref, false);
+  // Stuff the title into the search box and filter — no async needed
+  const searchTerm = title || filename.replace(/\.md$/, '');
+  document.getElementById('ref-search').value = searchTerm;
+  filterRefs();
 }
 
 
