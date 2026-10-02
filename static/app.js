@@ -1327,14 +1327,18 @@ function renderAuditTable() {
 
 async function auditOpenRef(filename, title) {
   if (!filename) return;
-  // Switch to References view
+  // Manually switch to References view (avoid WKWebView .click() quirks)
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => {
-    if (b.textContent.includes('References')) b.click();
+    b.classList.remove('active');
+    if (b.textContent.includes('References')) b.classList.add('active');
   });
-  // Wait for refs to load if not already populated
-  if (!allRefs.length) await loadReferences();
-  // Stuff the plain-text title into the search box and filter
-  const searchTerm = title || filename.replace(/\.md$/, '');
+  const refsView = document.getElementById('view-references');
+  if (refsView) refsView.classList.add('active');
+  // Load refs fresh, then filter
+  await loadReferences();
+  checkAcademicHealth();
+  const searchTerm = (title || filename.replace(/\.md$/, '')).replace(/<[^>]*>/g, '');
   document.getElementById('ref-search').value = searchTerm;
   filterRefs();
 }
