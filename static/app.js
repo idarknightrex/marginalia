@@ -742,8 +742,10 @@ function resetAllRefFilters() {
   document.getElementById('ref-search').value = '';
   const projFilter = document.getElementById('ref-project-filter');
   if (projFilter) projFilter.value = '';
-  const yearFilter = document.getElementById('ref-year-filter');
-  if (yearFilter) yearFilter.value = '';
+  const addedFrom = document.getElementById('ref-added-from');
+  if (addedFrom) addedFrom.value = '';
+  const addedTo = document.getElementById('ref-added-to');
+  if (addedTo) addedTo.value = '';
   renderRefs();
 }
 function setReadingStatus(btn) {
@@ -818,24 +820,10 @@ function updateFilterLabels() {
 function renderRefs() {
   const q       = document.getElementById('ref-search').value.toLowerCase();
   const slug    = (document.getElementById('ref-project-filter')?.value || '').trim();
-  const yearRaw = (document.getElementById('ref-year-filter')?.value || '').trim();
+  const addedFrom = (document.getElementById('ref-added-from')?.value || '').trim();
+  const addedTo   = (document.getElementById('ref-added-to')?.value   || '').trim();
   const list    = document.getElementById('ref-list');
   list.innerHTML = '';
-
-  // Year filter: accepts a single year ("1952") or a range ("1950-1960").
-  // Blank passes everything through. Non-numeric input is ignored safely
-  // rather than throwing -- a half-typed year shouldn't break the list.
-  let yearMin = null, yearMax = null;
-  if (yearRaw) {
-    const rangeMatch = yearRaw.match(/^(\d{1,4})\s*-\s*(\d{1,4})$/);
-    if (rangeMatch) {
-      yearMin = parseInt(rangeMatch[1]);
-      yearMax = parseInt(rangeMatch[2]);
-    } else if (/^\d{1,4}$/.test(yearRaw)) {
-      yearMin = yearMax = parseInt(yearRaw);
-    }
-    // else: unparseable input, yearMin/yearMax stay null, filter is a no-op
-  }
 
   const filtered = allRefs.filter(r => {
     const matchFilter  = activeFilter === 'all' || r.verification_status === activeFilter;
@@ -845,8 +833,9 @@ function renderRefs() {
     const matchProject = !slug ? true
       : slug === '__none__' ? !(r.conn_list || []).some(line => line.trim().length > 0)
       : (r.conn_list || []).some(line => line.split('|')[0].trim() === slug);
-    const refYear      = parseInt(r.year);
-    const matchYear    = yearMin === null || (!isNaN(refYear) && refYear >= yearMin && refYear <= yearMax);
+    // Import date range filter — created_at is ISO8601; date-only prefix comparison works lexicographically
+    const refAdded  = (r.created_at || '').slice(0, 10); // 'YYYY-MM-DD'
+    const matchAdded = (!addedFrom || refAdded >= addedFrom) && (!addedTo || refAdded <= addedTo);
     // Reading filter: 'needs-review' matches needs_review=true OR (unread AND imported)
     let matchReading = true;
     if (activeReadingFilter !== 'all') {
@@ -859,7 +848,7 @@ function renderRefs() {
         matchReading = (r.reading_status || 'unread') === activeReadingFilter;
       }
     }
-    return matchFilter && matchSearch && matchProject && matchYear && matchReading;
+    return matchFilter && matchSearch && matchProject && matchAdded && matchReading;
   });
 
   // Sort
@@ -886,6 +875,7 @@ function renderRefs() {
     const color  = STATUS_COLORS[status] || '#888';
     const card   = document.createElement('div');
     card.className = 'ref-card';
+    card.dataset.filename = ref._filename || '';
     card.style.borderLeftColor = color;
 
     // Identity row
@@ -1330,21 +1320,33 @@ function renderAuditTable() {
 }
 
 function auditOpenRef(filename) {
-  // Find the ref in allRefs by filename and open its edit modal
   if (!filename) return;
-  const ref = (typeof allRefs !== 'undefined' ? allRefs : []).find(r => r._filename === filename);
-  if (ref) {
-    showView('references', document.querySelector('[onclick*="references"]'));
-    openEditModal(ref, false);
-  } else {
-    // Refs not loaded or not in current filtered set — switch to refs, clear filters, try again
-    showView('references', document.querySelector('[onclick*="references"]'));
-    setTimeout(async () => {
-      await loadReferences();
-      const r2 = (typeof allRefs !== 'undefined' ? allRefs : []).find(r => r._filename === filename);
-      if (r2) openEditModal(r2, false);
-    }, 300);
-  }
+  // Switch to references view, clear all filters so the ref is visible, then scroll + highlight
+  showView('references', document.querySelector('[onclick*="references"]'));
+  resetAllRefFilters();
+  // After render settles, find the card by data-filename and scroll to it
+  setTimeout(() => {
+    const card = document.querySelector('[data-filename="' + CSS.escape(filename) + '"]');
+    if (card) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.style.outline = '2px solid var(--accent)';
+      card.style.outlineOffset = '2px';
+      setTimeout(() => { card.style.outline = ''; card.style.outlineOffset = ''; }, 2000);
+    } else {
+      // Refs may not be loaded yet — load then retry once
+      loadReferences().then(() => {
+        setTimeout(() => {
+          const c2 = document.querySelector('[data-filename="' + CSS.escape(filename) + '"]');
+          if (c2) {
+            c2.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            c2.style.outline = '2px solid var(--accent)';
+            c2.style.outlineOffset = '2px';
+            setTimeout(() => { c2.style.outline = ''; c2.style.outlineOffset = ''; }, 2000);
+          }
+        }, 300);
+      });
+    }
+  }, 150);
 }
 
 
