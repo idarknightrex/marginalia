@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.11.1002-1114"
+APP_VERSION = "1.8.12.1002-2358"
 
 
 
@@ -128,13 +128,16 @@ def write_canonical_reference(data: dict) -> Path:
     else:
         conn_lines = "<!-- Connections to writing/projects: slug | note -->"
 
+    _raw_url = (data.get("url_doi") or "").strip()
+    _url_doi = _raw_url if (_raw_url.startswith("http://") or _raw_url.startswith("https://") or _raw_url.startswith("10.")) else ""
+
     canonical = f"""---
 id: {ref_id}
 title: {data.get("title", "")}
 authors: {data.get("authors", "")}
 year: {data.get("year", "")}
 source_type: {data.get("source_type", "other")}
-url_doi: {data.get("url_doi", "")}
+url_doi: {_url_doi}
 verification_status: {data.get("verification_status", "surfaced")}
 reading_status: {data.get("reading_status", "unread")}
 physical_holding: {data.get("physical_holding", "none")}
@@ -2015,11 +2018,12 @@ def export_bibtex():
                   f"  title     = {{{ref.get('title','')}}}",
                   f"  year      = {{{ref.get('year','')}}}"]
         if ref.get("url_doi"):
-            doi = ref["url_doi"]
-            if "doi.org" in doi or doi.startswith("10."):
-                fields.append(f"  doi       = {{{doi}}}")
-            else:
-                fields.append(f"  url       = {{{doi}}}")
+            doi = ref["url_doi"].strip()
+            if doi.startswith("http://") or doi.startswith("https://") or doi.startswith("10."):
+                if "doi.org" in doi or doi.startswith("10."):
+                    fields.append(f"  doi       = {{{doi}}}")
+                else:
+                    fields.append(f"  url       = {{{doi}}}")
         if ref.get("tags"):
             fields.append(f"  keywords  = {{{ref['tags']}}}")
         if ref.get("annotation"):
@@ -2084,7 +2088,7 @@ def export_csl_json():
         if year and year.isdigit():
             item["issued"] = {"date-parts": [[int(year)]]}
         url_doi = (ref.get("url_doi","") or "").strip()
-        if url_doi:
+        if url_doi and (url_doi.startswith("http://") or url_doi.startswith("https://") or url_doi.startswith("10.")):
             if "doi.org" in url_doi or url_doi.startswith("10."):
                 item["DOI"] = url_doi.replace("https://doi.org/","").replace("http://doi.org/","")
                 item["URL"] = "https://doi.org/" + item["DOI"]
