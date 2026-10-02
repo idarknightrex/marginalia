@@ -1307,9 +1307,13 @@ function renderAuditTable() {
       '<span style="opacity:.6">' + escHtml(i.field) + ':</span> ' + escHtml(i.reason) + '</div>'
     ).join('');
     const titleDisp = r.title ? escHtml(r.title) : '<em style="color:var(--muted)">(no title)</em>';
-    html += '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="auditOpenRef(' + JSON.stringify(r.filename) + ')" title="Click to open ref for editing">';
-    html += '<td style="padding:6px 6px;color:' + color + ';font-size:13px;vertical-align:top">' + icon + '</td>';
-    html += '<td style="padding:6px 6px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top">' + titleDisp + '</td>';
+    const fnJson = JSON.stringify(r.filename);
+    html += '<tr style="border-bottom:1px solid var(--border)">';
+    html += '<td style="padding:6px 4px;vertical-align:top;white-space:nowrap">'
+          + '<span style="color:' + color + ';font-size:13px;margin-right:6px">' + icon + '</span>'
+          + '<button onclick="auditOpenRef(' + fnJson + ')" style="background:none;border:1px solid var(--border);border-radius:3px;color:var(--accent);font-family:monospace;font-size:10px;padding:1px 5px;cursor:pointer" title="Open in References">→</button>'
+          + '</td>';
+    html += '<td style="padding:6px 6px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top">' + titleDisp + '</td>';
     html += '<td style="padding:6px 6px;color:var(--muted);white-space:nowrap;vertical-align:top">' + escHtml((r.authors || '').split(';')[0].split(',')[0]) + ' ' + escHtml(r.year || '') + '</td>';
     html += '<td style="padding:6px 6px">' + issueList + '</td>';
     html += '</tr>';
@@ -1321,23 +1325,14 @@ function renderAuditTable() {
 
 async function auditOpenRef(filename) {
   if (!filename) return;
-  const navBtn = document.querySelector('.nav-btn[onclick*="references"]');
-  showView('references', navBtn);
-  await loadReferences();
-  resetAllRefFilters();
-  // Two rAFs: first lets React/DOM flush, second confirms paint
-  await new Promise(r => requestAnimationFrame(r));
-  await new Promise(r => requestAnimationFrame(r));
-  // Find card by iterating — avoids CSS.escape quoting issues
-  let card = null;
-  document.querySelectorAll('[data-filename]').forEach(el => {
-    if (el.dataset.filename === filename) card = el;
-  });
-  if (card) {
-    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    card.style.outline = '2px solid var(--accent)';
-    card.style.outlineOffset = '2px';
-    setTimeout(() => { card.style.outline = ''; card.style.outlineOffset = ''; }, 2500);
+  // Ensure refs are loaded
+  if (!allRefs || !allRefs.length) await loadReferences();
+  const ref = allRefs.find(r => r._filename === filename);
+  if (ref) {
+    // Switch to references view, then open the edit modal for this ref
+    const navBtn = document.querySelector('.nav-btn[onclick*="references"]');
+    showView('references', navBtn);
+    setTimeout(() => openEditModal(ref, false), 80);
   }
 }
 
