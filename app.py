@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.10.1002-1813"
+APP_VERSION = "1.8.11.1002-1114"
 
 
 
@@ -2005,6 +2005,8 @@ def export_bibtex():
     for ref in read_all_references():
         slug   = ref.get("slug") or (ref.get("_filename","")).replace(".md","")
         if not slug: continue
+        # BibTeX cite keys must not contain spaces; replace with underscores
+        slug = slug.replace(" ", "_")
         entry_type = type_map.get(ref.get("source_type","").lower(), "misc")
         # Convert "Last, First; Last, First" or "First Last; First Last" to BibTeX "and" format
         authors_raw = ref.get("authors","")
@@ -2130,6 +2132,21 @@ def sync_csl_json():
         settings["csl_synced_at"] = synced_at
         save_settings(settings)
         return jsonify({"ok": True, "path": str(dest), "synced_at": synced_at})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/export/bibtex/sync", methods=["POST"])
+def sync_bibtex():
+    """Write BibTeX library to exports/marginalia.bib — pull with bibsync alias."""
+    try:
+        EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        dest = EXPORTS_DIR / "marginalia.bib"
+        from flask import current_app
+        with current_app.test_request_context():
+            resp = export_bibtex()
+        dest.write_bytes(resp.get_data())
+        return jsonify({"ok": True, "path": str(dest)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

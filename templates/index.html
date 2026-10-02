@@ -383,6 +383,7 @@
 
     <!-- Actions row -- separate from filtering, so the two don't compete visually -->
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px">
+      <button class="btn-secondary" onclick="syncBibtex(this)">&#8595; Sync .bib</button>
       <button class="btn-secondary" onclick="showView('ingest', document.querySelector('[onclick*=\'ingest\']'))">&#8853; Import</button>
       <button class="btn-primary" onclick="openAddPanel()">+ Add</button>
     </div>

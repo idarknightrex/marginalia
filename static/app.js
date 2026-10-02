@@ -1240,6 +1240,21 @@ function setAuditSev(btn) {
   renderAuditTable();
 }
 
+async function syncBibtex(btn) {
+  const orig = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/export/bibtex/sync', { method: 'POST' });
+    const d = await r.json();
+    btn.textContent = d.ok ? '✓ Synced' : '✗ Error';
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+  } catch(e) {
+    btn.textContent = '✗ Error';
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+  }
+}
+
 async function runLibraryAudit() {
   const btn     = document.getElementById('run-audit-btn');
   const summary = document.getElementById('audit-summary');
