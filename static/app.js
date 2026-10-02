@@ -1319,34 +1319,23 @@ function renderAuditTable() {
   result.innerHTML = html;
 }
 
-function auditOpenRef(filename) {
+async function auditOpenRef(filename) {
   if (!filename) return;
-  // Switch to references view, clear all filters so the ref is visible, then scroll + highlight
-  showView('references', document.querySelector('[onclick*="references"]'));
+  // Switch to references view and ensure refs are loaded
+  const navBtn = document.querySelector('.nav-btn[onclick*="references"]');
+  showView('references', navBtn);
+  await loadReferences();   // waits for allRefs to be populated and renderRefs() to run
+  // Clear all filters so every ref is visible, then re-render
   resetAllRefFilters();
-  // After render settles, find the card by data-filename and scroll to it
-  setTimeout(() => {
-    const card = document.querySelector('[data-filename="' + CSS.escape(filename) + '"]');
-    if (card) {
-      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      card.style.outline = '2px solid var(--accent)';
-      card.style.outlineOffset = '2px';
-      setTimeout(() => { card.style.outline = ''; card.style.outlineOffset = ''; }, 2000);
-    } else {
-      // Refs may not be loaded yet — load then retry once
-      loadReferences().then(() => {
-        setTimeout(() => {
-          const c2 = document.querySelector('[data-filename="' + CSS.escape(filename) + '"]');
-          if (c2) {
-            c2.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            c2.style.outline = '2px solid var(--accent)';
-            c2.style.outlineOffset = '2px';
-            setTimeout(() => { c2.style.outline = ''; c2.style.outlineOffset = ''; }, 2000);
-          }
-        }, 300);
-      });
-    }
-  }, 150);
+  // One rAF to let the DOM settle after renderRefs()
+  await new Promise(r => requestAnimationFrame(r));
+  const card = document.querySelector('[data-filename="' + CSS.escape(filename) + '"]');
+  if (card) {
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.style.outline = '2px solid var(--accent)';
+    card.style.outlineOffset = '2px';
+    setTimeout(() => { card.style.outline = ''; card.style.outlineOffset = ''; }, 2500);
+  }
 }
 
 
