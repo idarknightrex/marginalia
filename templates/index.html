@@ -446,6 +446,15 @@
         <button class="filter-btn" data-reading="needs-review" id="reading-needs-review" onclick="setReadingFilter(this)" style="color:#c9a832;border-color:#c9a832">⚠ needs review</button>
         <button class="filter-btn" data-reading="has-link" id="reading-has-link" onclick="setReadingFilter(this)" style="color:#4285f4;border-color:#4285f4">🔗 has link</button>
       </div>
+      <div class="filter-row" style="margin:4px 0 0">
+        <span style="font-family:monospace;font-size:10px;color:var(--muted);margin-right:4px">audit:</span>
+        <button class="filter-btn active" data-audit="all" id="audit-filter-all" onclick="setAuditFilter(this)">all</button>
+        <button class="filter-btn" data-audit="clean" id="audit-filter-clean" onclick="setAuditFilter(this)" style="color:#3d8b37;border-color:#3d8b37">clean</button>
+        <button class="filter-btn" data-audit="noise" id="audit-filter-noise" onclick="setAuditFilter(this)" style="color:var(--muted);border-color:var(--muted)">noise</button>
+        <button class="filter-btn" data-audit="warning" id="audit-filter-warning" onclick="setAuditFilter(this)" style="color:#c9a832;border-color:#c9a832">warning</button>
+        <button class="filter-btn" data-audit="critical" id="audit-filter-critical" onclick="setAuditFilter(this)" style="color:#c0392b;border-color:#c0392b">critical</button>
+        <button class="filter-btn" data-audit="unscored" id="audit-filter-unscored" onclick="setAuditFilter(this)" style="color:#888;border-color:#888">unscored</button>
+      </div>
     </div>
 
     <div id="ref-list"></div>

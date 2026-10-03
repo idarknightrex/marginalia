@@ -715,6 +715,7 @@ function applyFilterHistory(h) {
 
 function filterRefs() { renderRefs(); }
 let activeReadingFilter = 'all';
+let activeAuditFilter  = 'all';
 function setFilter(btn) {
   document.querySelectorAll('.filter-btn[data-filter]').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
@@ -729,16 +730,27 @@ function setReadingFilter(btn) {
   renderRefs();
   recordFilterHistory();
 }
+function setAuditFilter(btn) {
+  document.querySelectorAll('.filter-btn[data-audit]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activeAuditFilter = btn.dataset.audit;
+  renderRefs();
+  recordFilterHistory();
+}
 function resetAllRefFilters() {
   // Hard reset all filter state — recovers from any stuck/corrupt filter combination
   activeFilter = 'all';
   activeReadingFilter = 'all';
+  activeAuditFilter = 'all';
   document.querySelectorAll('.filter-btn[data-filter]').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.filter-btn[data-reading]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.filter-btn[data-audit]').forEach(b => b.classList.remove('active'));
   const allBtn = document.getElementById('filter-all');
   const readingAllBtn = document.getElementById('reading-all');
+  const auditAllBtn = document.getElementById('audit-filter-all');
   if (allBtn) allBtn.classList.add('active');
   if (readingAllBtn) readingAllBtn.classList.add('active');
+  if (auditAllBtn) auditAllBtn.classList.add('active');
   document.getElementById('ref-search').value = '';
   const projFilter = document.getElementById('ref-project-filter');
   if (projFilter) projFilter.value = '';
@@ -848,7 +860,17 @@ function renderRefs() {
         matchReading = (r.reading_status || 'unread') === activeReadingFilter;
       }
     }
-    return matchFilter && matchSearch && matchProject && matchAdded && matchReading;
+    // Audit filter — uses audit_worst field written at save time
+    let matchAudit = true;
+    if (activeAuditFilter !== 'all') {
+      const aw = (r.audit_worst || '').trim();
+      if (activeAuditFilter === 'unscored') {
+        matchAudit = !aw;
+      } else {
+        matchAudit = aw === activeAuditFilter;
+      }
+    }
+    return matchFilter && matchSearch && matchProject && matchAdded && matchReading && matchAudit;
   });
 
   // Sort
@@ -914,6 +936,22 @@ function renderRefs() {
       nrEl.textContent = '⚠ review';
       nrEl.title = 'This reference needs review — check annotation and reading status';
       badgeGroup.appendChild(nrEl);
+    }
+    // Audit badge
+    const aw = (ref.audit_worst || '').trim();
+    if (aw && aw !== 'clean') {
+      const AUDIT_COLORS = { critical: '#c0392b', warning: '#c9a832', noise: '#888' };
+      const awEl = document.createElement('span');
+      awEl.style.cssText = `font-family:monospace;font-size:9px;color:${AUDIT_COLORS[aw] || '#888'};cursor:pointer`;
+      awEl.textContent = aw === 'critical' ? '✖ ' + aw : '◆ ' + aw;
+      // Build tooltip from audit_issues if present
+      let awIssues = [];
+      try { awIssues = JSON.parse(ref.audit_issues || '[]'); } catch(e) {}
+      awEl.title = awIssues.length
+        ? awIssues.map(i => i.field + ': ' + i.reason).join('\n')
+        : 'Audit: ' + aw;
+      awEl.onclick = (e) => { e.stopPropagation(); setAuditFilter(document.getElementById('audit-filter-' + aw)); };
+      badgeGroup.appendChild(awEl);
     }
     topRow.appendChild(left);
     topRow.appendChild(badgeGroup);

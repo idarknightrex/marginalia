@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.12.1002-2358"
+APP_VERSION = "1.8.13.1003-0018"
 
 
 
@@ -131,6 +131,13 @@ def write_canonical_reference(data: dict) -> Path:
     _raw_url = (data.get("url_doi") or "").strip()
     _url_doi = _raw_url if (_raw_url.startswith("http://") or _raw_url.startswith("https://") or _raw_url.startswith("10.")) else ""
 
+    # Persistent audit flags — computed at write time so queries/filters need no re-scan
+    _audit_issues   = _audit_ref(data)
+    _sev_rank       = {"critical": 3, "warning": 2, "noise": 1}
+    _worst_sev      = max((_sev_rank.get(i["severity"], 0) for i in _audit_issues), default=0)
+    _audit_worst    = {3: "critical", 2: "warning", 1: "noise", 0: "clean"}[_worst_sev]
+    _audit_issues_json = json.dumps(_audit_issues)
+
     canonical = f"""---
 id: {ref_id}
 title: {data.get("title", "")}
@@ -144,6 +151,8 @@ physical_holding: {data.get("physical_holding", "none")}
 holding_location: {data.get("holding_location", "")}
 keywords: {keywords}
 needs_review: {str(data.get("needs_review", True)).lower()}
+audit_worst: {_audit_worst}
+audit_issues: {_audit_issues_json}
 created_at: {datetime.now(timezone.utc).isoformat()}
 updated_at: {datetime.now(timezone.utc).isoformat()}
 ---
