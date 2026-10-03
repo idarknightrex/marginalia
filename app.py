@@ -64,7 +64,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.13.1003-0018"
+APP_VERSION = "1.8.14.1003-0022"
 
 
 
@@ -1007,6 +1007,52 @@ def audit_references():
 
     results.sort(key=lambda r: severity_rank.get(r["worst"], 9))
     return jsonify({"refs": results[:limit], "total": len(results)})
+
+
+@app.route("/api/references/audit/backfill", methods=["POST"])
+def audit_backfill():
+    """
+    Rewrite every ref file that is missing audit_worst/audit_issues frontmatter.
+    Field-quality only — no dedup (dedup stays library-wide, not per-file).
+    Safe to call repeatedly; skips refs that already have audit_worst set.
+    Returns {updated, skipped}.
+    """
+    updated = 0
+    skipped = 0
+    for filepath in sorted(REFERENCES_DIR.glob("*.md")):
+        try:
+            text = filepath.read_text(encoding="utf-8")
+            if not text.startswith("---"):
+                skipped += 1
+                continue
+            parts = text.split("---", 2)
+            if len(parts) < 3:
+                skipped += 1
+                continue
+            fm_raw = parts[1]
+            # Skip if already scored
+            if "audit_worst:" in fm_raw:
+                skipped += 1
+                continue
+            # Parse frontmatter into dict
+            meta = {}
+            for line in fm_raw.strip().splitlines():
+                if ": " in line:
+                    k, v = line.split(": ", 1)
+                    meta[k.strip()] = v.strip()
+            # Compute audit flags
+            _issues     = _audit_ref(meta)
+            _sev_rank   = {"critical": 3, "warning": 2, "noise": 1}
+            _worst_sev  = max((_sev_rank.get(i["severity"], 0) for i in _issues), default=0)
+            _worst      = {3: "critical", 2: "warning", 1: "noise", 0: "clean"}[_worst_sev]
+            _issues_json = json.dumps(_issues)
+            # Inject two lines before the closing --- of frontmatter
+            new_fm = fm_raw.rstrip() + f"\naudit_worst: {_worst}\naudit_issues: {_issues_json}\n"
+            filepath.write_text("---" + new_fm + "---" + parts[2], encoding="utf-8")
+            updated += 1
+        except Exception:
+            skipped += 1
+    return jsonify({"updated": updated, "skipped": skipped})
 
 
 @app.route("/api/import", methods=["POST"])

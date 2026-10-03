@@ -644,6 +644,13 @@ async function loadReferences() {
   allRefs = await res.json();
   document.getElementById('ref-count').textContent = allRefs.length + ' sources';
   renderRefs();
+  // Backfill audit flags on any refs written before v1.8.13 — fire-and-forget, reload when done
+  if (allRefs.some(r => !r.audit_worst)) {
+    fetch('/api/references/audit/backfill', { method: 'POST' })
+      .then(r => r.json())
+      .then(d => { if (d.updated > 0) loadReferences(); })
+      .catch(() => {});
+  }
 }
 // ── Filter history ────────────────────────────────────────────────────────────
 // Stores last 3 filter combinations for quick reapply
