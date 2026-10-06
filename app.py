@@ -6,6 +6,7 @@ All API keys loaded from setup.env — edit that file, never touch this one.
 
 import os
 import io
+import re
 import csv
 import json
 import uuid
@@ -64,7 +65,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.14.1003-0022"
+APP_VERSION = "1.8.15.1005-1344"
 
 
 
@@ -107,6 +108,7 @@ def write_canonical_reference(data: dict) -> Path:
     ref_id = data.get("id") or str(uuid.uuid4())
     data["id"] = ref_id
     first_author = data.get("authors", "Unknown").split(";")[0].split(",")[0].strip()
+    first_author = first_author.replace(" ", "")   # compress name particles: "van Manen" -> "vanManen"
     year = data.get("year", "0000")
     title_slug = "-".join(data.get("title", "untitled").lower().split()[:3])
     title_slug = "".join(c for c in title_slug if c.isalnum() or c == "-")
@@ -2063,8 +2065,10 @@ def export_bibtex():
     for ref in read_all_references():
         slug   = ref.get("slug") or (ref.get("_filename","")).replace(".md","")
         if not slug: continue
-        # BibTeX cite keys must not contain spaces; replace with underscores
-        slug = slug.replace(" ", "_")
+        # BibTeX cite keys must not contain spaces; compress (don't underscore-pad particles)
+        slug = slug.replace(" ", "")
+        # Strip trailing dedup suffix (_xxxxxx where x is 6 hex chars) from cite keys
+        slug = re.sub(r'_[0-9a-f]{6}$', '', slug)
         entry_type = type_map.get(ref.get("source_type","").lower(), "misc")
         # Convert "Last, First; Last, First" or "First Last; First Last" to BibTeX "and" format
         authors_raw = ref.get("authors","")
