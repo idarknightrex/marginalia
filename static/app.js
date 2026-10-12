@@ -1479,7 +1479,11 @@ function showImportResult(el, data) {
   let msg = data.imported + ' reference' + (data.imported !== 1 ? 's' : '') + ' imported';
   if (data.project) msg += ' → ' + data.project;
   if (data.skipped > 0) msg += ', ' + data.skipped + ' skipped (no title)';
-  if (data.errors && data.errors.length) msg += ', ' + data.errors.length + ' error(s)';
+  if (data.errors && data.errors.length) {
+    msg += ', ' + data.errors.length + ' error(s):\n';
+    msg += data.errors.map(e => '• ' + (typeof e === 'string' ? e : (e.message || e.error || JSON.stringify(e)))).join('\n');
+  }
+  el.style.whiteSpace = 'pre-wrap';
   el.textContent = msg;
 }
 
