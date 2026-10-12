@@ -298,6 +298,7 @@
       </div>
     </div>
     <div id="bibtex-panel" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:10px 12px;margin-bottom:10px;font-family:monospace;font-size:11px">
+      <div id="export-incomplete-banner" style="display:none;background:#fff3cd;border:1px solid #ffc107;border-radius:3px;padding:7px 10px;margin-bottom:8px;font-size:10px;color:#856404;font-family:var(--font-ui)"></div>
       <div style="color:var(--muted);margin-bottom:8px;font-size:10px;text-transform:uppercase;letter-spacing:.06em">Export</div>
       <div style="margin-bottom:8px">
         <div style="color:var(--text);margin-bottom:3px">BibTeX <span style="color:var(--muted);font-size:10px">— Zettlr · Preferences → Citations</span></div>
@@ -499,7 +500,6 @@
         </div>
         <textarea class="import-text-area" id="paste-input" placeholder="Paste BibTeX, RIS, CSV, a list of DOIs, or a messy reference list..."></textarea>
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
-          <button class="btn-secondary" id="check-dupes-btn" onclick="checkDuplicates()" style="font-size:11px;padding:6px 12px" data-tooltip="Check if any pasted refs already exist in your library before importing">Check dupes</button>
           <button class="btn-primary" id="paste-import-btn" onclick="runPasteImport()">Import &#8594;</button>
         </div>
         <div class="import-result" id="paste-import-result"></div>
@@ -885,6 +885,16 @@
       </div>
     </div>
     <div class="edit-field"><label>DOI / URL</label><input id="edit-doi" type="text"></div>
+    <div class="edit-field"><label>Cite Key <span style="font-weight:normal;color:var(--muted);font-size:10px">— auto-generated if blank; used for BibTeX export</span></label><input id="edit-cite-key" type="text" placeholder="e.g. Smith2021theo"></div>
+    <div class="edit-field" style="display:flex;gap:12px">
+      <div style="flex:3"><label>Journal / Venue</label><input id="edit-journal" type="text" placeholder="Journal or conference name"></div>
+      <div style="flex:1"><label>Volume</label><input id="edit-volume" type="text"></div>
+      <div style="flex:1"><label>Issue</label><input id="edit-issue" type="text"></div>
+    </div>
+    <div class="edit-field" style="display:flex;gap:12px">
+      <div style="flex:1"><label>Pages</label><input id="edit-pages" type="text" placeholder="e.g. 45–67"></div>
+      <div style="flex:2"><label>Publisher</label><input id="edit-publisher" type="text"></div>
+    </div>
     <div class="edit-field" style="display:flex;gap:12px">
       <div style="flex:1"><label>Status</label>
         <select id="edit-status">
@@ -1139,6 +1149,79 @@
 </div>
 
 <datalist id="project-slugs-list"></datalist>
+
+<!-- ── Ingest Confirmation Modal ──────────────────────────────────────── -->
+<div id="ingest-confirm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:900;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px 28px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.35)">
+    <div style="font-size:13px;font-family:monospace;font-weight:600;color:var(--text);margin-bottom:10px">Confirm Import</div>
+    <div id="ingest-confirm-body" style="font-size:12px;color:var(--muted);margin-bottom:18px;line-height:1.7"></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px">
+      <button class="btn-secondary" onclick="cancelIngestConfirm()" style="font-size:11px;padding:6px 14px">Cancel</button>
+      <button class="btn-primary" id="ingest-confirm-ok" onclick="confirmAndImport()" style="font-size:11px;padding:6px 14px">Add to Library &#8594;</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Ref View Panel ──────────────────────────────────────────────────── -->
+<div id="ref-view-panel" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:800;align-items:flex-start;justify-content:flex-end;overflow-y:auto">
+  <div style="background:var(--surface);border-left:1px solid var(--border);width:min(560px,100vw);min-height:100vh;padding:24px 24px 40px;box-shadow:-6px 0 32px rgba(0,0,0,0.25);overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
+      <div>
+        <div id="rvp-authors" style="font-family:monospace;font-size:12px;color:var(--muted)"></div>
+        <div id="rvp-title" style="font-size:15px;font-weight:600;color:var(--text);margin-top:4px;line-height:1.4"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0;margin-left:16px">
+        <button class="btn-secondary" onclick="openEditFromView()" style="font-size:11px;padding:5px 12px">Edit</button>
+        <button class="btn-secondary" onclick="closeRefView()" style="font-size:11px;padding:5px 12px">&times;</button>
+      </div>
+    </div>
+
+    <!-- Cite key + enriched fields -->
+    <div id="rvp-meta" style="background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:10px 14px;margin-bottom:16px;font-family:monospace;font-size:11px;line-height:2;color:var(--muted)"></div>
+
+    <!-- Rendered citation block -->
+    <div style="font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px">Citation</div>
+    <div id="rvp-citation-tabs" style="display:flex;gap:6px;margin-bottom:8px">
+      <button onclick="setCitationStyle('apa')" id="cite-tab-apa" class="cite-tab cite-tab-active" style="font-size:10px;font-family:monospace;padding:3px 10px;border-radius:3px;border:1px solid var(--border);background:var(--accent);color:#fff;cursor:pointer">APA</button>
+      <button onclick="setCitationStyle('mla')" id="cite-tab-mla" class="cite-tab" style="font-size:10px;font-family:monospace;padding:3px 10px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer">MLA</button>
+      <button onclick="setCitationStyle('chicago')" id="cite-tab-chicago" class="cite-tab" style="font-size:10px;font-family:monospace;padding:3px 10px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer">Chicago</button>
+    </div>
+    <div id="rvp-citation" style="font-size:12px;color:var(--text);line-height:1.6;padding:10px 14px;border:1px solid var(--border);border-radius:5px;background:var(--bg);margin-bottom:16px;position:relative">
+      <span id="rvp-citation-text"></span>
+      <button onclick="copyRefCitation()" style="position:absolute;right:8px;top:8px;font-size:10px;font-family:monospace;background:var(--surface);border:1px solid var(--border);border-radius:3px;padding:2px 7px;cursor:pointer;color:var(--muted)">copy</button>
+    </div>
+
+    <!-- Abstract -->
+    <div id="rvp-abstract-block" style="display:none">
+      <div style="font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px">Abstract</div>
+      <div id="rvp-abstract" style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:14px"></div>
+    </div>
+
+    <!-- Annotation -->
+    <div id="rvp-annotation-block" style="display:none">
+      <div style="font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px">AI Annotation</div>
+      <div id="rvp-annotation" style="font-size:12px;color:var(--text);line-height:1.6;margin-bottom:14px"></div>
+    </div>
+
+    <!-- User notes -->
+    <div id="rvp-notes-block" style="display:none">
+      <div style="font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px">Your Notes</div>
+      <div id="rvp-notes" style="font-size:12px;color:var(--text);line-height:1.6;margin-bottom:14px"></div>
+    </div>
+
+    <!-- Argument connection -->
+    <div id="rvp-argument-block" style="display:none">
+      <div style="font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px">Argument Connection</div>
+      <div id="rvp-argument" style="font-size:12px;color:var(--text);line-height:1.6;margin-bottom:14px"></div>
+    </div>
+
+    <!-- Incomplete ref warning -->
+    <div id="rvp-incomplete-warning" style="display:none;font-size:11px;font-family:monospace;color:#c9a832;border:1px solid #c9a83244;background:#c9a83211;border-radius:5px;padding:8px 12px;margin-top:8px">
+      &#9888; This ref is missing enrichment data (DOI or journal fields). Check before citing.
+    </div>
+  </div>
+</div>
+
 <script src="/static/app.js?v={{ app_version }}"></script>
 </body>
 </html>

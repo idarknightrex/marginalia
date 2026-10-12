@@ -65,7 +65,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.15.1006-0226"
+APP_VERSION = "1.8.16.1012-2015"
 
 
 
@@ -140,13 +140,34 @@ def write_canonical_reference(data: dict) -> Path:
     _audit_worst    = {3: "critical", 2: "warning", 1: "noise", 0: "clean"}[_worst_sev]
     _audit_issues_json = json.dumps(_audit_issues)
 
+    # Cite key: use provided or auto-generate from author+year
+    _cite_key = (data.get("cite_key") or "").strip()
+    if not _cite_key:
+        _ck_author = first_author[:12] if first_author else "unknown"
+        _ck_year   = str(year)
+        _ck_title  = "".join(w[:3] for w in data.get("title","").lower().split()[:2] if w.isalpha())
+        _cite_key  = f"{_ck_author}{_ck_year}{_ck_title}"
+
+    # CrossRef-enriched bibliographic fields (may be blank for new refs)
+    _journal   = (data.get("journal")   or "").strip()
+    _volume    = (data.get("volume")    or "").strip()
+    _issue     = (data.get("issue")     or "").strip()
+    _pages     = (data.get("pages")     or "").strip()
+    _publisher = (data.get("publisher") or "").strip()
+
     canonical = f"""---
 id: {ref_id}
+cite_key: {_cite_key}
 title: {data.get("title", "")}
 authors: {data.get("authors", "")}
 year: {data.get("year", "")}
 source_type: {data.get("source_type", "other")}
 url_doi: {_url_doi}
+journal: {_journal}
+volume: {_volume}
+issue: {_issue}
+pages: {_pages}
+publisher: {_publisher}
 verification_status: {data.get("verification_status", "surfaced")}
 reading_status: {data.get("reading_status", "unread")}
 physical_holding: {data.get("physical_holding", "none")}
@@ -1057,6 +1078,40 @@ def audit_backfill():
     return jsonify({"updated": updated, "skipped": skipped})
 
 
+@app.route("/api/import/preview", methods=["POST"])
+def preview_import():
+    """Parse a file/text and return a count of importable records without writing anything.
+    Used by the ingest confirmation modal."""
+    records, fmt = [], None
+    if request.files:
+        file = request.files.get("file")
+        if not file:
+            return jsonify({"error": "No file received"}), 400
+        project  = (request.form.get("project") or "").strip()
+        filename = file.filename.lower()
+        text = file.read().decode("utf-8", errors="replace")
+        if filename.endswith(".csv"):    fmt, records = "csv",    parse_csv_import(text)
+        elif filename.endswith(".bib"):  fmt, records = "bibtex", parse_bibtex_import(text)
+        elif filename.endswith(".ris"):  fmt, records = "ris",    parse_ris_import(text)
+        else: return jsonify({"error": f"Unsupported file type: {filename}"}), 400
+    elif request.is_json:
+        body = request.json
+        fmt  = body.get("format","").lower()
+        text = body.get("text","")
+        project = body.get("project","").strip()
+        if fmt == "doi":
+            records = [{"title": d.strip()} for d in text.replace(",","\n").splitlines() if d.strip()]
+        elif fmt == "csv":     records = parse_csv_import(text)
+        elif fmt == "bibtex":  records = parse_bibtex_import(text)
+        elif fmt == "ris":     records = parse_ris_import(text)
+        elif fmt == "plaintext": records = [{"title": "parsed"}]  # can't count without calling model
+        else: return jsonify({"error": f"Unknown format: {fmt}"}), 400
+    else:
+        return jsonify({"error": "No file or JSON body received"}), 400
+    valid = [r for r in records if r.get("title")]
+    return jsonify({"count": len(valid), "format": fmt, "project": project})
+
+
 @app.route("/api/import", methods=["POST"])
 def import_references():
     records, parse_errors, fmt = [], [], None
@@ -1657,8 +1712,9 @@ def update_reference(ref_filename):
     if "connections" in data and data["connections"]:
         body = replace_section(body, "Connections", data["connections"])
     # Write all tracked frontmatter fields from data into meta
-    for field in ["title","authors","year","source_type","url_doi","physical_holding",
-                  "holding_location","verification_status","reading_status","needs_review","keywords"]:
+    for field in ["title","authors","year","source_type","url_doi","cite_key",
+                  "journal","volume","issue","pages","publisher",
+                  "physical_holding","holding_location","verification_status","reading_status","needs_review","keywords"]:
         if field in data:
             val = str(data[field]).strip() if data[field] is not None else ""
             if field == "keywords" and val:
@@ -1671,7 +1727,7 @@ def update_reference(ref_filename):
 
     meta["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-    tracked = ["title","authors","year","source_type","url_doi","keywords","physical_holding","holding_location","verification_status","reading_status","needs_review"]
+    tracked = ["title","authors","year","source_type","url_doi","cite_key","journal","volume","issue","pages","publisher","keywords","physical_holding","holding_location","verification_status","reading_status","needs_review"]
     changed = [f for f in tracked if f in data and str(data[f]).strip() != str(meta.get(f,"")).strip()]
     body_changed = [s for s in ["annotation","connections","argument_connection","user_notes"] if s in data and data[s]]
     all_changed = changed + body_changed
@@ -2083,7 +2139,13 @@ def export_bibtex():
                     fields.append(f"  doi       = {{{doi}}}")
                 else:
                     fields.append(f"  url       = {{{doi}}}")
-        if ref.get("tags"):
+        for bib_field, ref_key in [("journal","journal"),("volume","volume"),("number","issue"),("pages","pages"),("publisher","publisher")]:
+            val = (ref.get(ref_key,"") or "").strip()
+            if val:
+                fields.append(f"  {bib_field:<9} = {{{val}}}")
+        if ref.get("keywords"):
+            fields.append(f"  keywords  = {{{ref['keywords']}}}")
+        elif ref.get("tags"):
             fields.append(f"  keywords  = {{{ref['tags']}}}")
         if ref.get("annotation"):
             fields.append(f"  annote    = {{{ref['annotation'][:500]}}}")
@@ -2214,6 +2276,29 @@ def sync_bibtex():
         return jsonify({"ok": True, "path": str(dest)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/export/incomplete-check", methods=["GET"])
+def export_incomplete_check():
+    """Return counts of refs with no DOI and refs flagged as CrossRef failures (audit_worst critical/warning).
+    Used by the export UI to show a pre-export warning banner."""
+    refs = read_all_references()
+    no_doi, flagged, flagged_titles = [], [], []
+    for ref in refs:
+        doi = (ref.get("url_doi") or "").strip()
+        if not doi or doi.lower() in ("none", "n/a", ""):
+            no_doi.append(ref.get("_filename",""))
+        aw = (ref.get("audit_worst") or "").strip()
+        if aw in ("critical", "warning"):
+            flagged.append(ref.get("_filename",""))
+            flagged_titles.append(ref.get("title","")[:60])
+    return jsonify({
+        "total": len(refs),
+        "no_doi": len(no_doi),
+        "flagged": len(flagged),
+        "flagged_titles": flagged_titles[:10],
+        "ok": len(no_doi) == 0 and len(flagged) == 0,
+    })
 
 
 @app.route("/api/keywords", methods=["GET"])

@@ -15,15 +15,15 @@ let pasteFormat = 'bibtex';
 const STATUS_COLORS = { verified: '#3d8b37', located: '#c9a832', surfaced: '#6e56cf', imported: '#4285f4', rejected: '#c94242' };
 const MODEL_COLORS  = { gemini: '#4285f4', anthropic: '#c96442', openai: '#10a37f', llama: '#9c6ade', deepseek: '#52c41a', gemma: '#ffab00', qwen: '#0891b2', mistral: '#ff7000', cohere: '#0d9488' };
 const MODEL_META = {
-  gemini:    { type: 'cloud',  web: true,  label: 'web' },
-  anthropic: { type: 'cloud',  web: false, label: 'cloud' },
-  openai:    { type: 'cloud',  web: false, label: 'cloud' },
-  deepseek:  { type: 'local',  web: false, label: 'local · China · knowledge to ~early 2025' },
-  qwen:      { type: 'local',  web: false, label: 'local · Asia/Global South · knowledge to ~early 2025' },
-  mistral:   { type: 'local',  web: false, label: 'local · Europe · knowledge to ~early 2025' },
-  gemma:     { type: 'local',  web: false, label: 'local · Western · knowledge to ~early 2025' },
-  llama:     { type: 'local',  web: false, label: 'local · Global · knowledge to ~early 2025' },
-  cohere:    { type: 'local',  web: false, label: 'local · Canada · knowledge to ~early 2025' },
+  gemini:    { type: 'cloud',  web: true,  label: 'cloud · Google (US) · live web access' },
+  anthropic: { type: 'cloud',  web: false, label: 'cloud · Anthropic (US) · knowledge to ~early 2025' },
+  openai:    { type: 'cloud',  web: false, label: 'cloud · OpenAI (US) · knowledge to ~early 2025' },
+  deepseek:  { type: 'local',  web: false, label: 'local · DeepSeek (China) · knowledge to ~early 2025' },
+  qwen:      { type: 'local',  web: false, label: 'local · Alibaba (China) · knowledge to ~early 2025' },
+  mistral:   { type: 'local',  web: false, label: 'local · Mistral AI (France) · knowledge to ~early 2025' },
+  gemma:     { type: 'local',  web: false, label: 'local · Google DeepMind (US) · knowledge to ~early 2025' },
+  llama:     { type: 'local',  web: false, label: 'local · Meta (US) · knowledge to ~early 2025' },
+  cohere:    { type: 'local',  web: false, label: 'local · Cohere (Canada) · knowledge to ~early 2025' },
 };
 function getModelMeta(model) {
   if (MODEL_META[model]) return MODEL_META[model];
@@ -303,10 +303,12 @@ function makeCard(model) {
     ? '<span style="font-size:9px;font-family:monospace;color:var(--muted);margin-left:4px">' + meta.label + '</span>'
     : '';
   const cdClass = meta.type === 'local' ? 'local' : '';
+  // Paper-in-context badge — added after card is in DOM if dataset flag is set
+  const picBadge = '<span id="pic-' + model + '" style="display:none;font-size:9px;font-family:monospace;background:#4285f411;color:#4285f4;border:1px solid #4285f433;border-radius:3px;padding:1px 6px;margin-left:6px" title="Prompt included a paper reference via SOURCE: block">&#128196; paper in context</span>';
   card.innerHTML =
     '<div class="timeout-countdown ' + cdClass + '" id="cd-' + model + '">Waiting… <span class="countdown-bar"><span class="countdown-fill" id="cdfill-' + model + '" style="width:100%"></span></span> <span id="cdsec-' + model + '"></span></div>' +
     '<div class="model-label" style="color:' + (MODEL_COLORS[model] || chipColor || '#888') + ';display:flex;align-items:center">' +
-      (model.startsWith('ollama:') ? model.replace(/^ollama:/, '').replace(/:latest$/, '') : model) + badge + cutoff +
+      (model.startsWith('ollama:') ? model.replace(/^ollama:/, '').replace(/:latest$/, '') : model) + badge + cutoff + picBadge +
     '</div>' +
     '<div class="response-text"></div>' +
     '<div class="response-timing" id="timing-' + model + '" style="display:none"></div>';
@@ -452,7 +454,16 @@ async function sendPrompt() {
     grid.innerHTML = '<div style="color:#c9a832;font-family:monospace;font-size:12px;padding:12px">No active models — select at least one chip above before sending.</div>';
     return;
   }
-  models.forEach(model => grid.appendChild(makeCard(model)));
+  // Detect paper-in-context: prompt contains SOURCE: block from launchPromptFromRef
+  const hasPaperInContext = /\bSOURCE:\s/.test(prompt);
+  models.forEach(model => {
+    const card = makeCard(model);
+    // Attach paper-in-context indicator to each response card
+    if (hasPaperInContext) {
+      card.dataset.paperInContext = 'true';
+    }
+    grid.appendChild(card);
+  });
   document.getElementById('cancel-btn').classList.add('visible');
   document.getElementById('send-btn').disabled = true;
   try {
@@ -506,6 +517,11 @@ async function sendPrompt() {
             const elapsed = cardStartTimes[evt.model] ? ((Date.now() - cardStartTimes[evt.model]) / 1000).toFixed(1) : null;
             const timingEl = document.getElementById('timing-' + evt.model);
             if (timingEl && elapsed) { timingEl.style.display = 'block'; timingEl.textContent = '\u23f1 ' + elapsed + 's'; }
+            // Show paper-in-context badge if this card was flagged
+            if (card.dataset.paperInContext === 'true') {
+              const picEl = document.getElementById('pic-' + evt.model);
+              if (picEl) picEl.style.display = 'inline';
+            }
           }
         } else if (evt.event === 'error') {
           const card = document.getElementById('card-' + evt.model);
@@ -996,6 +1012,10 @@ function renderRefs() {
     launchBtn.className = 'ref-action';
     launchBtn.innerHTML = 'Launch Prompt &#8594;';
     launchBtn.onclick = () => launchPromptFromRef(ref._filename || '');
+    const viewBtn = document.createElement('button');
+    viewBtn.className = 'ref-action';
+    viewBtn.textContent = 'View';
+    viewBtn.onclick = () => openRefView(ref);
     const annotateBtn = document.createElement('button');
     annotateBtn.className = 'ref-action';
     annotateBtn.innerHTML = '&#9670; Annotate';
@@ -1009,6 +1029,7 @@ function renderRefs() {
     deleteBtn.textContent = '\u2715 Delete';
     deleteBtn.onclick = () => deleteRef(ref._filename || '', deleteBtn);
     actions.appendChild(launchBtn);
+    actions.appendChild(viewBtn);
     actions.appendChild(annotateBtn);
     // DOI/URL button — only shown when url_doi is populated
     if (ref.url_doi && ref.url_doi.trim()) {
@@ -1073,6 +1094,20 @@ function renderRefs() {
       el.className = 'ref-argument-preview';
       el.textContent = ref.argument_connection.length > 200 ? ref.argument_connection.slice(0, 200) + '\u2026' : ref.argument_connection;
       card.appendChild(label); card.appendChild(el);
+    }
+
+    // Enriched bibliographic fields (journal, volume, issue, pages, publisher)
+    const bibParts = [];
+    if (ref.journal) bibParts.push(ref.journal);
+    if (ref.volume)  bibParts.push('vol. ' + ref.volume);
+    if (ref.issue)   bibParts.push('no. ' + ref.issue);
+    if (ref.pages)   bibParts.push('pp. ' + ref.pages);
+    if (bibParts.length) {
+      const bibEl = document.createElement('div');
+      bibEl.style.cssText = 'font-size:11px;font-family:monospace;color:var(--muted);margin-top:5px;line-height:1.5';
+      bibEl.textContent = bibParts.join(' · ');
+      if (ref.publisher) bibEl.textContent += ' — ' + ref.publisher;
+      card.appendChild(bibEl);
     }
 
     // Holding location
@@ -1178,17 +1213,51 @@ function selectFormat(btn) {
   document.getElementById('paste-input').placeholder = placeholders[pasteFormat] || '';
 }
 
+let _pendingImportPayload = null;
+
 async function runPasteImport() {
   const text = document.getElementById('paste-input').value.trim();
   if (!text) return;
   const resultEl = document.getElementById('paste-import-result');
   resultEl.style.display = 'none';
   const btn = document.getElementById('paste-import-btn');
-  btn.textContent = 'Importing...'; btn.disabled = true;
+  btn.textContent = 'Checking...'; btn.disabled = true;
   const proj = (document.getElementById('ingest-project-select')?.value || '').trim();
   try {
-    const body = { format: pasteFormat, text };
-    if (proj) body.project = proj;
+    const previewBody = { format: pasteFormat, text };
+    if (proj) previewBody.project = proj;
+    const previewRes  = await fetch('/api/import/preview', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(previewBody) });
+    const previewData = await previewRes.json();
+    if (previewData.error) throw new Error(previewData.error);
+    _pendingImportPayload = previewBody;
+    const modal = document.getElementById('ingest-confirm-modal');
+    const msg   = document.getElementById('ingest-confirm-body');
+    const n     = previewData.count || 0;
+    const projLabel = proj ? (' to <strong>' + escHtml(proj) + '</strong>') : '';
+    msg.innerHTML = 'You are about to add <strong>' + n + ' reference' + (n !== 1 ? 's' : '') + '</strong>' + projLabel + '. Continue?';
+    modal.style.display = 'flex';
+  } catch(e) {
+    resultEl.className = 'import-result error'; resultEl.style.display = 'block';
+    resultEl.textContent = 'Import failed: ' + e.message;
+  }
+  if (btn) { btn.textContent = 'Import \u2192'; btn.disabled = false; }
+}
+
+function cancelIngestConfirm() {
+  document.getElementById('ingest-confirm-modal').style.display = 'none';
+  _pendingImportPayload = null;
+}
+
+async function confirmAndImport() {
+  if (!_pendingImportPayload) return;
+  document.getElementById('ingest-confirm-modal').style.display = 'none';
+  const resultEl = document.getElementById('paste-import-result');
+  resultEl.style.display = 'none';
+  const btn = document.getElementById('paste-import-btn');
+  btn.textContent = 'Importing...'; btn.disabled = true;
+  const body = _pendingImportPayload;
+  _pendingImportPayload = null;
+  try {
     const res  = await fetch('/api/import', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
     const data = await res.json();
     showImportResult(resultEl, data);
@@ -1492,6 +1561,12 @@ function openEditModal(ref, runAnnotate) {
   document.getElementById('edit-year').value               = ref.year || '';
   document.getElementById('edit-type').value               = ref.source_type || 'journal';
   document.getElementById('edit-doi').value                = ref.url_doi || '';
+  document.getElementById('edit-cite-key').value           = ref.cite_key || '';
+  document.getElementById('edit-journal').value            = ref.journal || '';
+  document.getElementById('edit-volume').value             = ref.volume || '';
+  document.getElementById('edit-issue').value              = ref.issue || '';
+  document.getElementById('edit-pages').value              = ref.pages || '';
+  document.getElementById('edit-publisher').value          = ref.publisher || '';
   document.getElementById('edit-keywords').value           = ref.keywords || '';
   document.getElementById('edit-status').value             = ref.verification_status || 'surfaced';
   document.getElementById('edit-holding').value            = ref.physical_holding || 'none';
@@ -1545,6 +1620,12 @@ async function saveEdit() {
     annotation:          document.getElementById('edit-annotation').value.trim(),
     user_notes:          document.getElementById('edit-user-notes').value.trim(),
     argument_connection: document.getElementById('edit-argument').value.trim(),
+    cite_key:           document.getElementById('edit-cite-key').value.trim(),
+    journal:            document.getElementById('edit-journal').value.trim(),
+    volume:             document.getElementById('edit-volume').value.trim(),
+    issue:              document.getElementById('edit-issue').value.trim(),
+    pages:              document.getElementById('edit-pages').value.trim(),
+    publisher:          document.getElementById('edit-publisher').value.trim(),
   };
   try {
     const res  = await fetch('/api/references/' + encodeURIComponent(editingFilename), {
@@ -3742,6 +3823,7 @@ function toggleBibTexPanel() {
   if (!panel) return;
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
   if (panel.style.display === 'block') {
+    checkExportIncomplete();
     // Refresh last-synced status from settings
     fetch('/api/settings').then(r => r.json()).then(data => {
       const statusEl = document.getElementById('csl-sync-status');
@@ -5125,3 +5207,232 @@ async function _fireRAG(prompt) {
   // Start animation after short delay so page is ready
   setTimeout(() => requestAnimationFrame(_boulderFrame), 500);
 })();
+
+
+// ── Ref View Panel ────────────────────────────────────────────────────────
+
+let _viewingRef = null;
+let _citationStyle = 'apa';
+
+function openRefView(ref) {
+  _viewingRef = ref;
+  _citationStyle = 'apa';
+
+  const panel = document.getElementById('ref-view-panel');
+
+  // Header
+  document.getElementById('rvp-title').textContent   = ref.title  || '(no title)';
+  document.getElementById('rvp-authors').textContent = ref.authors || '';
+
+  // Meta block
+  const metaParts = [];
+  if (ref.year)        metaParts.push(ref.year);
+  if (ref.source_type) metaParts.push(ref.source_type);
+  if (ref.journal)     metaParts.push('<em>' + escHtml(ref.journal) + '</em>');
+  const volIssue = [ref.volume ? 'vol. ' + ref.volume : null, ref.issue ? 'no. ' + ref.issue : null].filter(Boolean).join(', ');
+  if (volIssue)  metaParts.push(volIssue);
+  if (ref.pages) metaParts.push('pp. ' + ref.pages);
+  if (ref.publisher) metaParts.push(ref.publisher);
+  if (ref.url_doi)   metaParts.push('<a href="https://doi.org/' + escHtml(ref.url_doi) + '" target="_blank">DOI</a>');
+
+  document.getElementById('rvp-meta').innerHTML = metaParts.join(' &middot; ');
+
+  // Text blocks
+  document.getElementById('rvp-abstract').textContent   = ref.abstract            || '';
+  document.getElementById('rvp-annotation').textContent = ref.annotation          || '';
+  document.getElementById('rvp-notes').textContent      = ref.user_notes          || '';
+  document.getElementById('rvp-argument').textContent   = ref.argument_connection || '';
+
+  // Toggle section block visibility
+  const _secMap = { abstract: ref.abstract, annotation: ref.annotation, notes: ref.user_notes, argument: ref.argument_connection };
+  ['abstract','annotation','notes','argument'].forEach(k => {
+    const sec = document.getElementById('rvp-' + k + '-block');
+    if (sec) sec.style.display = _secMap[k] ? '' : 'none';
+  });
+
+  // Incomplete warning
+  const warnEl = document.getElementById('rvp-incomplete-warning');
+  if (warnEl) {
+    const missing = [];
+    if (!ref.url_doi || !ref.url_doi.trim())  missing.push('DOI');
+    if (!ref.journal && !ref.publisher)       missing.push('journal or publisher');
+    if (!ref.year)                            missing.push('year');
+    if (missing.length) {
+      warnEl.style.display = '';
+      warnEl.textContent   = '⚠️ Incomplete ref: missing ' + missing.join(', ') + '. Check before export.';
+    } else {
+      warnEl.style.display = 'none';
+    }
+  }
+
+  // Render initial citation
+  renderCitation(_citationStyle);
+
+  panel.style.display = 'flex';
+  // Trigger CSS transition
+  requestAnimationFrame(() => panel.classList.add('open'));
+}
+
+function closeRefView() {
+  const panel = document.getElementById('ref-view-panel');
+  panel.classList.remove('open');
+  setTimeout(() => { panel.style.display = 'none'; }, 280);
+  _viewingRef = null;
+}
+
+function openEditFromView() {
+  const ref = _viewingRef;
+  closeRefView();
+  if (ref && ref.filename) openEditModal(ref.filename);
+}
+
+function setCitationStyle(style) {
+  _citationStyle = style;
+  ['apa','mla','chicago'].forEach(s => {
+    const btn = document.getElementById('cite-tab-' + s);
+    if (!btn) return;
+    if (s === style) {
+      btn.style.background = 'var(--accent)'; btn.style.color = '#fff';
+    } else {
+      btn.style.background = 'var(--bg)'; btn.style.color = 'var(--text)';
+    }
+  });
+  renderCitation(style);
+}
+
+function renderCitation(style) {
+  const el = document.getElementById('rvp-citation-text');
+  if (!el || !_viewingRef) return;
+  const text = formatCitation(_viewingRef, style);
+  el.textContent = text;
+}
+
+function copyRefCitation() {
+  const el = document.getElementById('rvp-citation-text');
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent).then(() => {
+    const btn = document.querySelector('#rvp-citation button');
+    if (btn) { const orig = btn.textContent; btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = orig, 1500); }
+  });
+}
+
+// ── Citation Formatters ───────────────────────────────────────────────────
+
+function formatCitation(ref, style) {
+  if (style === 'apa')     return _citeAPA(ref);
+  if (style === 'mla')     return _citeMLA(ref);
+  if (style === 'chicago') return _citeChicago(ref);
+  return '';
+}
+
+function _authorList(authorsStr, maxFull, style) {
+  if (!authorsStr) return '';
+  const parts = authorsStr.split(/[,;](?!\s*\w+\s*$)|\sand\s/i).map(a => a.trim()).filter(Boolean);
+  // heuristic: if comma-separated with Last, First pattern, handle accordingly
+  // For simplicity treat the raw string as the author list
+  return authorsStr.trim();
+}
+
+function _citeAPA(ref) {
+  const authors = ref.authors || '(No author)';
+  const year    = ref.year    ? '(' + ref.year + ')' : '(n.d.)';
+  const title   = ref.title   || 'Untitled';
+  const journal = ref.journal || '';
+  const volume  = ref.volume  || '';
+  const issue   = ref.issue   ? '(' + ref.issue + ')' : '';
+  const pages   = ref.pages   || '';
+  const doi     = ref.url_doi || '';
+  const publisher = ref.publisher || '';
+
+  let parts = [authors + '.', year + '.', title + '.'];
+  if (journal) {
+    let src = journal;
+    if (volume) src += ', ' + volume + issue;
+    if (pages)  src += ', ' + pages;
+    parts.push(src + '.');
+  } else if (publisher) {
+    parts.push(publisher + '.');
+  }
+  if (doi) parts.push('https://doi.org/' + doi);
+  return parts.join(' ');
+}
+
+function _citeMLA(ref) {
+  const authors = ref.authors || 'Unknown';
+  const title   = '"' + (ref.title || 'Untitled') + '."';
+  const journal = ref.journal   || '';
+  const volume  = ref.volume    || '';
+  const issue   = ref.issue     || '';
+  const year    = ref.year      || 'n.d.';
+  const pages   = ref.pages     || '';
+  const doi     = ref.url_doi   || '';
+  const publisher = ref.publisher || '';
+
+  let parts = [authors + '.', title];
+  if (journal) {
+    let src = '<em>' + journal + '</em>';
+    if (volume) src += ', vol. ' + volume;
+    if (issue)  src += ', no. '  + issue;
+    src += ', ' + year;
+    if (pages)  src += ', pp. '  + pages;
+    parts.push(src + '.');
+  } else if (publisher) {
+    parts.push(publisher + ', ' + year + '.');
+  } else {
+    parts.push(year + '.');
+  }
+  if (doi) parts.push('DOI: ' + doi + '.');
+  return parts.join(' ');
+}
+
+function _citeChicago(ref) {
+  const authors = ref.authors || 'Unknown';
+  const title   = '"' + (ref.title || 'Untitled') + '."';
+  const journal = ref.journal   || '';
+  const volume  = ref.volume    || '';
+  const issue   = ref.issue     || '';
+  const year    = ref.year      || 'n.d.';
+  const pages   = ref.pages     || '';
+  const doi     = ref.url_doi   || '';
+  const publisher = ref.publisher || '';
+
+  let parts = [authors + '.', title];
+  if (journal) {
+    let src = '<em>' + journal + '</em>';
+    if (volume) src += ' ' + volume;
+    if (issue)  src += ', no. ' + issue;
+    src += ' (' + year + ')';
+    if (pages)  src += ': ' + pages;
+    parts.push(src + '.');
+  } else if (publisher) {
+    parts.push(publisher + ', ' + year + '.');
+  } else {
+    parts.push(year + '.');
+  }
+  if (doi) parts.push('https://doi.org/' + doi + '.');
+  return parts.join(' ');
+}
+
+// ── Export Incomplete Check ───────────────────────────────────────────────
+
+async function checkExportIncomplete() {
+  try {
+    const res  = await fetch('/api/export/incomplete-check');
+    const data = await res.json();
+    const bannerEl = document.getElementById('export-incomplete-banner');
+    if (!bannerEl) return;
+    if (data.flagged && data.flagged > 0) {
+      const pct  = Math.round((data.flagged / data.total) * 100);
+      let msg    = '⚠️ ' + data.flagged + ' of ' + data.total + ' refs (' + pct + '%) have no DOI or failed CrossRef enrichment. ';
+      if (data.flagged_titles && data.flagged_titles.length) {
+        msg += 'E.g.: ' + data.flagged_titles.slice(0, 3).map(t => '“' + t + '”').join('; ');
+        if (data.flagged > 3) msg += '…';
+      }
+      msg += ' Check refs before export.';
+      bannerEl.textContent   = msg;
+      bannerEl.style.display = '';
+    } else {
+      bannerEl.style.display = 'none';
+    }
+  } catch(e) { /* silent — non-critical */ }
+}
