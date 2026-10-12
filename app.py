@@ -65,7 +65,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.16.1012-2128"
+APP_VERSION = "1.8.16.1012-2256"
 
 def _unquote_fm(v: str) -> str:
     """Strip surrounding double-quotes from a YAML frontmatter value if present.
@@ -2222,13 +2222,22 @@ def export_csl_json():
         if url_doi and (url_doi.startswith("http://") or url_doi.startswith("https://") or url_doi.startswith("10.")):
             if "doi.org" in url_doi or url_doi.startswith("10."):
                 item["DOI"] = url_doi.replace("https://doi.org/","").replace("http://doi.org/","")
-                item["URL"] = "https://doi.org/" + item["DOI"]
+                item["url"] = "https://doi.org/" + item["DOI"]
             else:
-                item["URL"] = url_doi
-        for fname in ("journal","publisher","volume","issue","pages","edition"):
-            val = (ref.get(fname,"") or "").strip()
+                item["url"] = url_doi
+        # CSL-JSON field mapping: internal name -> CSL spec name
+        csl_field_map = {
+            "journal":   "container-title",
+            "publisher": "publisher",
+            "volume":    "volume",
+            "issue":     "issue",
+            "pages":     "page",
+            "edition":   "edition",
+        }
+        for internal, csl_key in csl_field_map.items():
+            val = (ref.get(internal,"") or "").strip()
             if val:
-                item[fname] = val
+                item[csl_key] = val
         kw = ref.get("keywords","").strip()
         if kw:
             item["keyword"] = kw
