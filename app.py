@@ -65,8 +65,16 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.16.1012-2015"
+APP_VERSION = "1.8.16.1012-2128"
 
+def _unquote_fm(v: str) -> str:
+    """Strip surrounding double-quotes from a YAML frontmatter value if present.
+    Older BibTeX/RIS importers stored values as: journal: "Teaching in Higher Education"
+    """
+    s = v.strip()
+    if len(s) >= 2 and s[0] == '"' and s[-1] == '"':
+        return s[1:-1]
+    return s
 
 
 # ─── App ──────────────────────────────────────────────────────────────────────
@@ -387,7 +395,7 @@ def read_all_references() -> list:
                     for line in parts[1].strip().splitlines():
                         if ": " in line:
                             k, v = line.split(": ", 1)
-                            meta[k.strip()] = v.strip()
+                            meta[k.strip()] = _unquote_fm(v)
                     meta["_filename"] = filepath.name
                     body = parts[2]
                     def extract_section(body, heading):
