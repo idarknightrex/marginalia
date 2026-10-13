@@ -1475,11 +1475,12 @@ async function auditOpenRef(filename, title) {
 
 function showImportResult(el, data) {
   if (data.error) { el.className = 'import-result error'; el.style.display = 'block'; el.textContent = 'Error: ' + data.error; return; }
-  el.className = 'import-result success'; el.style.display = 'block';
+  const hasErrors = data.errors && data.errors.length;
+  el.className = 'import-result ' + (hasErrors ? 'warning' : 'success'); el.style.display = 'block';
   let msg = data.imported + ' reference' + (data.imported !== 1 ? 's' : '') + ' imported';
   if (data.project) msg += ' → ' + data.project;
   if (data.skipped > 0) msg += ', ' + data.skipped + ' skipped (no title)';
-  if (data.errors && data.errors.length) {
+  if (hasErrors) {
     msg += ', ' + data.errors.length + ' error(s):\n';
     msg += data.errors.map(e => '• ' + (typeof e === 'string' ? e : (e.message || e.error || JSON.stringify(e)))).join('\n');
   }
