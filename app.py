@@ -65,7 +65,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.16.1013-1733"
+APP_VERSION = "1.8.16.1019-2352"
 
 def _unquote_fm(v: str) -> str:
     """Strip surrounding double-quotes from a YAML frontmatter value if present.
@@ -117,7 +117,7 @@ def write_canonical_reference(data: dict) -> Path:
     data["id"] = ref_id
     first_author = data.get("authors", "Unknown").split(";")[0].split(",")[0].strip()
     first_author = first_author.replace(" ", "")   # compress name particles: "van Manen" -> "vanManen"
-    year = data.get("year", "0000")
+    year = str(data.get("year") or "0000")
     title_slug = "-".join(data.get("title", "untitled").lower().split()[:3])
     title_slug = "".join(c for c in title_slug if c.isalnum() or c == "-")
     filename = f"{first_author}_{year}_{title_slug}.md"
@@ -157,11 +157,11 @@ def write_canonical_reference(data: dict) -> Path:
         _cite_key  = f"{_ck_author}{_ck_year}{_ck_title}"
 
     # CrossRef-enriched bibliographic fields (may be blank for new refs)
-    _journal   = (data.get("journal")   or "").strip()
-    _volume    = (data.get("volume")    or "").strip()
-    _issue     = (data.get("issue")     or "").strip()
-    _pages     = (data.get("pages")     or "").strip()
-    _publisher = (data.get("publisher") or "").strip()
+    _journal   = str(data.get("journal")   or "").strip()
+    _volume    = str(data.get("volume")    or "").strip()
+    _issue     = str(data.get("issue")     or "").strip()
+    _pages     = str(data.get("pages")     or "").strip()
+    _publisher = str(data.get("publisher") or "").strip()
 
     canonical = f"""---
 id: {ref_id}
@@ -885,7 +885,7 @@ def _audit_ref(ref: dict) -> list:
 
     title   = (ref.get("title") or "").strip()
     authors = (ref.get("authors") or "").strip()
-    year    = (ref.get("year") or "").strip()
+    year    = str(ref.get("year") or "").strip()
     stype   = (ref.get("source_type") or "").strip().lower()
     ref_id  = (ref.get("id") or "").strip()
     url_doi = (ref.get("url_doi") or "").strip()

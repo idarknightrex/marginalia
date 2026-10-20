@@ -3,7 +3,7 @@
   "_docs": "All values editable here or via Settings panel in the UI",
   "csl_sync_path": "/Users/rajboora/Library/Mobile Documents/com~apple~CloudDocs/Personal/Grad School/PhD/SoTL PhD/PhD Writing Space/marginalia.json",
   "default_project": "phd_core",
-  "disposition": "balance",
+  "disposition": "challenge",
   "models": {
     "cloud": {
       "anthropic": "claude-haiku-4-5",
