@@ -65,7 +65,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.16.1019-2352"
+APP_VERSION = "1.8.16.1021-0451"
 
 def _unquote_fm(v: str) -> str:
     """Strip surrounding double-quotes from a YAML frontmatter value if present.
@@ -783,9 +783,12 @@ def _slug_tokens(title: str) -> set:
 
 def _is_likely_duplicate(rec: dict, existing_refs: list):
     """Return the first existing ref that looks like a duplicate of rec, or None.
-    Match criteria (any one sufficient):
-      - Same first-author-surname + year + >=3 overlapping title tokens
-      - Exact url_doi match (non-empty)
+    Match criteria (evaluated in priority order):
+      1. Exact url_doi match (non-empty) -- highest confidence
+      2. Same first-author-surname + year + >=3 overlapping title tokens
+         BUT only when at least one record lacks a DOI. If BOTH records carry
+         different non-placeholder DOIs they are definitively different works
+         regardless of title overlap (different DOI = different paper).
     """
     _DOI_PLACEHOLDERS = {"", "none", "n/a", "-", "–", "na", "null", "other"}
     rec_doi   = (rec.get("url_doi") or "").strip().lower()
@@ -799,8 +802,13 @@ def _is_likely_duplicate(rec: dict, existing_refs: list):
         ex_doi = (ex.get("url_doi") or "").strip().lower()
         if ex_doi in _DOI_PLACEHOLDERS:
             ex_doi = ""
+        # Priority 1: DOI match
         if rec_doi and ex_doi and rec_doi == ex_doi:
             return ex
+        # Priority 2: author + year + title overlap
+        # Skip if BOTH records have distinct non-empty DOIs -- they are different papers.
+        if rec_doi and ex_doi and rec_doi != ex_doi:
+            continue
         ex_year = str(ex.get("year") or "").strip()
         ex_auth = ex.get("authors", "Unknown").split(";")[0].split(",")[0].strip().lower()
         if ex_year == rec_year and ex_auth == rec_auth:
@@ -1144,8 +1152,20 @@ def import_references():
             dois = [d.strip() for d in text.replace(",", "\n").splitlines() if d.strip()]
             for doi in dois:
                 result = lookup_doi(doi)
-                if "_error" in result: parse_errors.append(f"{doi}: {result['_error']}")
-                else: records.append(result)
+                if "_error" in result:
+                    # On lookup failure, write a bare record so the DOI lands in the
+                    # library as a placeholder rather than silently disappearing.
+                    # The researcher can enrich it manually later.
+                    bare_doi = result.get("url_doi") or doi
+                    records.append({
+                        "title": f"[Unresolved DOI: {bare_doi}]",
+                        "url_doi": bare_doi,
+                        "verification_status": "needs-review",
+                        "_bare_record": True,
+                    })
+                    parse_errors.append(f"{doi}: {result['_error']} (bare record written)")
+                else:
+                    records.append(result)
         elif fmt == "csv":     records = parse_csv_import(text)
         elif fmt == "bibtex":  records = parse_bibtex_import(text)
         elif fmt == "ris":     records = parse_ris_import(text)
@@ -1205,6 +1225,134 @@ REFERENCE LIST:
             pass
 
     return jsonify({"format": fmt, "imported": len(imported), "skipped": len(skipped), "errors": parse_errors, "files": imported, "project": project})
+
+
+@app.route("/api/import/stream", methods=["POST"])
+def import_references_stream():
+    """
+    SSE-streaming variant of /api/import.
+    Emits stage events so the UI can show a live heartbeat:
+      data: {"stage": "parsing"}
+      data: {"stage": "dedup", "count": N}
+      data: {"stage": "writing", "n": i, "total": N}
+      data: {"stage": "done", "imported": N, "skipped": S, "errors": [...], "dupes": [...]}
+    Body: same JSON as /api/import (format, text, project).
+    """
+    from flask import Response, stream_with_context
+
+    body    = request.json or {}
+    fmt     = body.get("format", "").lower()
+    text    = body.get("text", "")
+    project = body.get("project", "").strip()
+
+    def generate():
+        import json as _json
+
+        def evt(obj):
+            return f"data: {_json.dumps(obj)}\n\n"
+
+        yield evt({"stage": "parsing"})
+
+        records, parse_errors = [], []
+        try:
+            if fmt == "doi":
+                dois = [d.strip() for d in text.replace(",", "\n").splitlines() if d.strip()]
+                for doi in dois:
+                    result = lookup_doi(doi)
+                    if "_error" in result:
+                        bare_doi = result.get("url_doi") or doi
+                        records.append({"title": f"[Unresolved DOI: {bare_doi}]", "url_doi": bare_doi, "verification_status": "needs-review"})
+                        parse_errors.append(f"{doi}: {result['_error']} (bare record written)")
+                    else:
+                        records.append(result)
+            elif fmt == "csv":     records = parse_csv_import(text)
+            elif fmt == "bibtex":  records = parse_bibtex_import(text)
+            elif fmt == "ris":     records = parse_ris_import(text)
+            elif fmt == "plaintext":
+                settings  = load_settings()
+                model_str = settings.get("models", {}).get("local", {}).get("reasoning", "deepseek-r1:8b")
+                parse_prompt = f"""Parse the following reference list into JSON. Return ONLY a JSON array, no other text.
+Each object must have: title, authors, year, source_type, url_doi, themes
+authors = semicolon-separated. source_type = journal|book|chapter|conference|thesis|web|other
+
+REFERENCE LIST:
+{text}"""
+                try:
+                    raw = call_ollama(model_str, parse_prompt).strip()
+                    if raw.startswith("```"): raw = "\n".join(raw.split("\n")[1:])
+                    if raw.endswith("```"):   raw = "\n".join(raw.split("\n")[:-1])
+                    records = _json.loads(raw.strip())
+                except Exception as e:
+                    parse_errors.append(f"Local model parse failed: {e}")
+            else:
+                yield evt({"stage": "error", "error": f"Unknown format: {fmt}"})
+                return
+        except Exception as e:
+            yield evt({"stage": "error", "error": str(e)})
+            return
+
+        valid = [r for r in records if r.get("title")]
+        yield evt({"stage": "dedup", "count": len(valid)})
+
+        # Dupe check
+        existing = read_all_references()
+        dupes = []
+        for rec in valid:
+            match = _is_likely_duplicate(rec, existing)
+            if match:
+                reason = "DOI match" if (rec.get("url_doi") or "").strip() and \
+                         (rec.get("url_doi") or "").strip().lower() == (match.get("url_doi") or "").strip().lower() \
+                         else "author + year + title overlap"
+                dupes.append({
+                    "incoming_title": rec.get("title", ""),
+                    "incoming_year":  rec.get("year", ""),
+                    "existing_file":  match.get("_filename", ""),
+                    "existing_title": match.get("title", ""),
+                    "match_reason":   reason,
+                })
+
+        if dupes:
+            yield evt({"stage": "dupes_found", "dupes": dupes, "count": len(valid)})
+
+        # Write
+        imported, skipped = [], []
+        for i, rec in enumerate(records):
+            if not rec.get("title"):
+                skipped.append(rec)
+                continue
+            try:
+                rec.setdefault("verification_status", "imported")
+                rec.setdefault("reading_status", "unread")
+                rec.setdefault("physical_holding", "none")
+                if project and not rec.get("connections"):
+                    rec["connections"] = f"{project} | imported"
+                imported.append(write_canonical_reference(rec).name)
+                if (i + 1) % 5 == 0 or i == len(records) - 1:
+                    yield evt({"stage": "writing", "n": len(imported), "total": len(valid)})
+            except Exception as e:
+                parse_errors.append(str(e))
+
+        # Log
+        if imported:
+            log_path = SESSIONS_DIR / "imports.md"
+            timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            log_entry = f"\n### {timestamp} — {fmt} import (stream)\n"
+            if project: log_entry += f"- Project: {project}\n"
+            log_entry += f"- Imported: {len(imported)}\n"
+            if skipped:  log_entry += f"- Skipped: {len(skipped)}\n"
+            try:
+                if log_path.exists():
+                    existing_log = log_path.read_text(encoding="utf-8")
+                    log_path.write_text(existing_log.rstrip() + "\n" + log_entry, encoding="utf-8")
+                else:
+                    log_path.write_text(f"# Import Log\n{log_entry}", encoding="utf-8")
+            except Exception:
+                pass
+
+        yield evt({"stage": "done", "imported": len(imported), "skipped": len(skipped), "errors": parse_errors, "dupes": dupes, "files": imported})
+
+    return Response(stream_with_context(generate()), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.route("/api/doi-lookup", methods=["POST"])
@@ -3290,8 +3438,12 @@ def enrich_confirm(ref_filename):
 
     data = request.json or {}
     candidate = data.get("candidate")
-    if not candidate or not candidate.get("abstract"):
-        return jsonify({"error": "No candidate with an abstract provided"}), 400
+    if not candidate:
+        return jsonify({"error": "No candidate provided"}), 400
+    # Abstract is preferred but not required -- allow enriching bib fields alone
+    # when an abstract is provided it must be non-empty
+    if candidate.get("abstract") is not None and not candidate["abstract"].strip():
+        candidate.pop("abstract", None)
 
     text = filepath.read_text(encoding="utf-8")
     parts = text.split("---", 2)
@@ -3304,38 +3456,61 @@ def enrich_confirm(ref_filename):
             k, v = line.split(": ", 1)
             meta[k.strip()] = v.strip()
 
-    abstract_section = build_tldr_section(strip_jats(candidate["abstract"]), candidate.get("tldr_source", ""))
+    # ── Write all enrichable frontmatter fields ──────────────────────────────
+    # Fields written from candidate (only if candidate supplies a non-empty value
+    # AND the existing field is blank/missing -- never silently overwrite user data).
+    # Exception: abstract is always replaced (it's an index-sourced field, not
+    # researcher-entered data, and the researcher explicitly selected this candidate).
+    ENRICH_FIELDS = [
+        ("title",     "title"),
+        ("authors",   "authors"),
+        ("year",      "year"),
+        ("venue",     "journal"),    # candidate field -> canonical field
+        ("volume",    "volume"),
+        ("issue",     "issue"),
+        ("pages",     "pages"),
+        ("publisher", "publisher"),
+        ("doi",       "url_doi"),    # candidate may carry doi or url_doi
+        ("url_doi",   "url_doi"),
+    ]
+    fields_written = []
+    _BLANK = {"", "none", "n/a", "-", "na", "null", "unknown", "other"}
+    for cand_key, meta_key in ENRICH_FIELDS:
+        cand_val = (candidate.get(cand_key) or "").strip()
+        if not cand_val or cand_val.lower() in _BLANK:
+            continue
+        existing = (meta.get(meta_key) or "").strip()
+        if not existing or existing.lower() in _BLANK:
+            meta[meta_key] = cand_val
+            fields_written.append(meta_key)
 
-    # Cleanly replace JUST the Abstract section. Properly bounded this time:
-    # find the Abstract marker, find the NEXT "## " heading after it
-    # (whatever it is -- Annotation, Argument Connection, etc.), and
-    # replace everything between the two. This is the same general
-    # approach as before but applied to a section that's never shared
-    # with Generate's output, so there's no cross-contamination risk
-    # even if the boundary-finding has an edge case.
     body = parts[2]
-    marker = "## Abstract"
-    if marker in body:
-        before = body.split(marker, 1)[0]
-        rest   = body.split(marker, 1)[1]
-        after  = ("\n## " + rest.split("\n## ", 1)[1]) if "\n## " in rest else ""
-        new_body = before + marker + "\n" + abstract_section + "\n" + after
-    else:
-        # No Abstract section exists yet (older reference, pre-this-build).
-        # Insert it right after Connections if present, else just append.
-        if "## Connections" in body:
-            before = body.split("## Connections", 1)[0]
-            rest   = body.split("## Connections", 1)[1]
-            conn_content, _, after = rest.partition("\n## ")
-            after = ("## " + after) if after else ""
-            new_body = (before + "## Connections" + conn_content.rstrip() + "\n\n"
-                        + marker + "\n" + abstract_section + "\n\n" + after)
+
+    # ── Abstract section ─────────────────────────────────────────────────────
+    abstract_written = False
+    if candidate.get("abstract"):
+        abstract_section = build_tldr_section(strip_jats(candidate["abstract"]), candidate.get("tldr_source", ""))
+        marker = "## Abstract"
+        if marker in body:
+            before = body.split(marker, 1)[0]
+            rest   = body.split(marker, 1)[1]
+            after  = ("\n## " + rest.split("\n## ", 1)[1]) if "\n## " in rest else ""
+            body = before + marker + "\n" + abstract_section + "\n" + after
         else:
-            new_body = body.rstrip() + "\n\n" + marker + "\n" + abstract_section + "\n"
+            if "## Connections" in body:
+                before = body.split("## Connections", 1)[0]
+                rest   = body.split("## Connections", 1)[1]
+                conn_content, _, after = rest.partition("\n## ")
+                after = ("## " + after) if after else ""
+                body = (before + "## Connections" + conn_content.rstrip() + "\n\n"
+                        + marker + "\n" + abstract_section + "\n\n" + after)
+            else:
+                body = body.rstrip() + "\n\n" + marker + "\n" + abstract_section + "\n"
+        abstract_written = True
 
     meta["updated_at"] = datetime.now(timezone.utc).isoformat()
     new_meta_block = "\n".join(f"{k}: {v}" for k, v in meta.items())
-    new_text = f"---\n{new_meta_block}\n---{new_body}"
+    new_text = f"---\n{new_meta_block}\n---{body}"
     filepath.write_text(new_text, encoding="utf-8")
 
     return jsonify({
@@ -3343,7 +3518,11 @@ def enrich_confirm(ref_filename):
         "file": filepath.name,
         "matched_title": candidate.get("title", ""),
         "tldr_source": candidate.get("tldr_source", ""),
-        "abstract_preview": candidate["abstract"][:200],
+        "fields_written": fields_written,
+        "abstract_written": abstract_written,
+        "abstract_preview": candidate.get("abstract", "")[:200],
+        # Return updated field values so JS can refresh edit form inputs
+        "meta": {k: meta.get(k, "") for k in ["title","authors","year","journal","volume","issue","pages","publisher","url_doi"]},
     })
 
 

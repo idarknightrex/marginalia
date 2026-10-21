@@ -1214,6 +1214,7 @@ function selectFormat(btn) {
 }
 
 let _pendingImportPayload = null;
+let _pendingImportApaCount = 0;   // client-detected APA record count for plaintext validation
 
 async function runPasteImport() {
   const text = document.getElementById('paste-input').value.trim();
@@ -1226,6 +1227,14 @@ async function runPasteImport() {
   try {
     const previewBody = { format: pasteFormat, text };
     if (proj) previewBody.project = proj;
+    // Plaintext pre-processing: detect APA records client-side before sending to model
+    _pendingImportApaCount = 0;
+    if (pasteFormat === 'plaintext') {
+      _pendingImportApaCount = detectApaRecordCount(text);
+    }
+    const detectedApaCount = _pendingImportApaCount;
+
+    // Preview count
     const previewRes  = await fetch('/api/import/preview', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(previewBody) });
     const previewData = await previewRes.json();
     if (previewData.error) throw new Error(previewData.error);
@@ -1234,7 +1243,30 @@ async function runPasteImport() {
     const msg   = document.getElementById('ingest-confirm-body');
     const n     = previewData.count || 0;
     const projLabel = proj ? (' to <strong>' + escHtml(proj) + '</strong>') : '';
-    msg.innerHTML = 'You are about to add <strong>' + n + ' reference' + (n !== 1 ? 's' : '') + '</strong>' + projLabel + '. Continue?';
+    let bodyHtml = 'You are about to add <strong>' + n + ' reference' + (n !== 1 ? 's' : '') + '</strong>' + projLabel + '.';
+    if (pasteFormat === 'plaintext' && detectedApaCount > 0 && detectedApaCount !== n) {
+      bodyHtml += '<br><span style="font-size:11px;color:#c9a832">⚠️ Detected ~' + detectedApaCount + ' APA record' + (detectedApaCount !== 1 ? 's' : '') + ' in your text, but model parsed ' + n + '. Verify the result after import.</span>';
+    }
+
+    // Dupe check (non-blocking -- enrich confirm modal with results if available)
+    if (pasteFormat !== 'plaintext') {
+      try {
+        const dupeRes  = await fetch('/api/import/check-duplicates', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ format: pasteFormat, text }) });
+        const dupeData = await dupeRes.json();
+        if (!dupeData.error && dupeData.duplicates && dupeData.duplicates.length) {
+          const nd = dupeData.duplicates.length;
+          bodyHtml += '<br><br><span style="color:#c9a832">\u26a0\ufe0f ' + nd + ' suspected duplicate' + (nd !== 1 ? 's' : '') + ' detected:</span><br>';
+          bodyHtml += '<div style="font-size:10px;font-family:monospace;margin-top:4px;max-height:120px;overflow-y:auto">';
+          dupeData.duplicates.forEach(d => {
+            bodyHtml += '\u2192 <em>' + escHtml(d.incoming_title) + '</em> matches <code>' + escHtml(d.existing_file) + '</code> (' + escHtml(d.match_reason) + ')<br>';
+          });
+          bodyHtml += '</div><br>Duplicates will still be imported. Use Library Audit to remove them after.';
+        }
+      } catch(_) { /* dupe check failure is non-fatal */ }
+    }
+
+    bodyHtml += '<br><br>Continue?';
+    msg.innerHTML = bodyHtml;
     modal.style.display = 'flex';
   } catch(e) {
     resultEl.className = 'import-result error'; resultEl.style.display = 'block';
@@ -1246,22 +1278,75 @@ async function runPasteImport() {
 function cancelIngestConfirm() {
   document.getElementById('ingest-confirm-modal').style.display = 'none';
   _pendingImportPayload = null;
+  _pendingImportApaCount = 0;
 }
 
 async function confirmAndImport() {
   if (!_pendingImportPayload) return;
   document.getElementById('ingest-confirm-modal').style.display = 'none';
   const resultEl = document.getElementById('paste-import-result');
-  resultEl.style.display = 'none';
+  resultEl.className = 'import-result'; resultEl.style.display = 'block';
+  resultEl.innerHTML = '<span style="font-family:monospace;font-size:11px;color:var(--muted)">Parsing\u2026</span>';
   const btn = document.getElementById('paste-import-btn');
   btn.textContent = 'Importing...'; btn.disabled = true;
   const body = _pendingImportPayload;
   _pendingImportPayload = null;
+
   try {
-    const res  = await fetch('/api/import', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    const data = await res.json();
-    showImportResult(resultEl, data);
-    if (data.imported > 0) { document.getElementById('paste-input').value = ''; loadReferences(); }
+    // Use SSE stream for live heartbeat
+    const res = await fetch('/api/import/stream', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finalData = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep incomplete line
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let evt;
+        try { evt = JSON.parse(line.slice(6)); } catch(_) { continue; }
+        if (evt.stage === 'parsing') {
+          resultEl.innerHTML = '<span style="font-family:monospace;font-size:11px;color:var(--muted)">Parsing\u2026</span>';
+        } else if (evt.stage === 'dedup') {
+          resultEl.innerHTML = '<span style="font-family:monospace;font-size:11px;color:var(--muted)">Checking duplicates for ' + evt.count + ' record' + (evt.count !== 1 ? 's' : '') + '\u2026</span>';
+        } else if (evt.stage === 'dupes_found') {
+          const nd = evt.dupes.length;
+          resultEl.innerHTML = '<span style="font-family:monospace;font-size:11px;color:#c9a832">\u26a0\ufe0f ' + nd + ' duplicate' + (nd !== 1 ? 's' : '') + ' found \u2014 writing anyway\u2026</span>';
+        } else if (evt.stage === 'writing') {
+          resultEl.innerHTML = '<span style="font-family:monospace;font-size:11px;color:var(--muted)">Writing ' + evt.n + ' / ' + evt.total + '\u2026</span>';
+        } else if (evt.stage === 'done') {
+          finalData = evt;
+        } else if (evt.stage === 'error') {
+          resultEl.className = 'import-result error';
+          resultEl.textContent = 'Import failed: ' + (evt.error || 'Unknown error');
+          if (btn) { btn.textContent = 'Import \u2192'; btn.disabled = false; }
+          return;
+        }
+      }
+    }
+
+    if (finalData) {
+      showImportResult(resultEl, finalData);
+      // Plaintext count mismatch warning
+      if (_pendingImportApaCount > 0 && finalData.imported !== _pendingImportApaCount) {
+        const mismatchEl = document.createElement('div');
+        mismatchEl.style.cssText = 'font-size:10px;color:#c9a832;font-family:monospace;margin-top:4px';
+        mismatchEl.textContent = '⚠️ APA detection found ~' + _pendingImportApaCount + ' records, model imported ' + finalData.imported + '. Check for missed or merged entries.';
+        resultEl.appendChild(mismatchEl);
+      }
+      _pendingImportApaCount = 0;
+      if (finalData.imported > 0) { document.getElementById('paste-input').value = ''; loadReferences(); }
+    }
   } catch(e) {
     resultEl.className = 'import-result error'; resultEl.style.display = 'block';
     resultEl.textContent = 'Import failed: ' + e.message;
@@ -1331,6 +1416,23 @@ async function syncCslJson() {
 
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/**
+ * Detect and count APA-style reference records in plaintext.
+ * APA records typically start with: Author, A. (Year). Title...
+ * Returns the estimated count, or 0 if detection is uncertain.
+ */
+function detectApaRecordCount(text) {
+  if (!text || !text.trim()) return 0;
+  // Split on blank lines or lines starting a new APA author pattern
+  // Pattern: word(s), initial(s). (4-digit year). ...
+  const apaStartRe = /^[A-Z][^(\n]+,\s+[A-Z][\w.-]*\.?\s*(?:,\s*[A-Z][\w.-]+\.?\s*)*\(\d{4}\)/m;
+  if (!apaStartRe.test(text)) return 0;
+  // Count records: each starts with Author(s), Year pattern after blank line or at start
+  const recordStartRe = /(?:^|\n\n)([A-Z][^(\n]+(?:,\s+[A-Z][\w.-]*\.?[^\n]*)?)\s*\(\d{4}\)/g;
+  const matches = text.match(recordStartRe);
+  return matches ? matches.length : 0;
 }
 
 
@@ -1700,6 +1802,28 @@ async function annotateInModal(filename) {
 
 let enrichCandidatesCache = [];   // holds last search results for selection
 
+/** Return the existing ref that matches candidate by DOI (primary) or title (fallback), or null. */
+function _enrichCandidateInLibrary(candidate) {
+  if (!allRefs || !allRefs.length) return null;
+  const _DOI_PH = new Set(['', 'none', 'n/a', '-', 'na', 'null', 'other']);
+  const candDoi = ((candidate.doi || candidate.url_doi || '')).trim().toLowerCase().replace(/^https?:\/\/doi\.org\//,'');
+  if (candDoi && !_DOI_PH.has(candDoi)) {
+    const m = allRefs.find(r => {
+      const d = ((r.url_doi || '')).trim().toLowerCase().replace(/^https?:\/\/doi\.org\//,'');
+      return d && !_DOI_PH.has(d) && d === candDoi;
+    });
+    if (m) return m;
+  }
+  // Title fallback: normalize and compare
+  const normTitle = t => (t || '').toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();
+  const candTitle = normTitle(candidate.title);
+  if (candTitle.length > 8) {
+    const m = allRefs.find(r => normTitle(r.title) === candTitle);
+    if (m) return m;
+  }
+  return null;
+}
+
 async function searchEnrichCandidates(filename) {
   if (!filename) return;
   const btn        = document.getElementById('edit-enrich-btn');
@@ -1743,13 +1867,17 @@ function renderEnrichCandidates(candidates, queryUsed, filename) {
 
   const cards = candidates.map((c, idx) => {
     const meta = [c.authors, c.year, c.venue].filter(Boolean).map(escHtml).join(' \u00b7 ');
+    const inLib = _enrichCandidateInLibrary(c);
+    const actionHtml = inLib
+      ? `<span style="font-size:10px;font-family:monospace;color:var(--accent);background:var(--accent)18;border:1px solid var(--accent)44;border-radius:3px;padding:2px 7px;cursor:pointer" title="Already in your library: ${escHtml(inLib._filename || '')}" onclick="openRefView(allRefs.find(r=>r._filename==='${escHtml(inLib._filename || '')}'))">Already in library \u2192</span>`
+      : `<button class="btn-primary" style="font-size:10px;padding:3px 8px" onclick="selectEnrichCandidate(${idx}, '${escHtml(filename)}')">Use this</button>`;
     return `
       <div style="padding:8px;border:1px solid var(--border);border-radius:4px;margin-bottom:6px;background:var(--surface)">
         <div style="font-size:9px;font-family:monospace;color:var(--muted);margin-bottom:3px">${c.source === 'semantic_scholar' ? 'Semantic Scholar' : 'OpenAlex'}</div>
         <div style="font-weight:600;font-size:11px;margin-bottom:2px">${escHtml(c.title || 'Untitled')}</div>
         <div style="font-size:10px;color:var(--muted);margin-bottom:6px">${meta}</div>
         <div style="font-size:10px;line-height:1.4;margin-bottom:8px;color:var(--text)">${escHtml(c.preview || '')}${c.abstract && c.abstract.length > 220 ? '\u2026' : ''}</div>
-        <button class="btn-primary" style="font-size:10px;padding:3px 8px" onclick="selectEnrichCandidate(${idx}, '${escHtml(filename)}')">Use this</button>
+        ${actionHtml}
       </div>
     `;
   }).join('');
@@ -1766,7 +1894,7 @@ async function selectEnrichCandidate(idx, filename) {
   if (!candidate) return;
 
   const panel = document.getElementById('edit-enrich-candidates');
-  if (panel) panel.innerHTML = '<div style="font-size:10px;color:var(--muted);font-family:monospace">Writing to Abstract field\u2026</div>';
+  if (panel) panel.innerHTML = '<div style="font-size:10px;color:var(--muted);font-family:monospace">Enriching citation fields\u2026</div>';
 
   try {
     const res  = await fetch('/api/references/' + encodeURIComponent(filename) + '/enrich/confirm', {
@@ -1776,16 +1904,44 @@ async function selectEnrichCandidate(idx, filename) {
     const data = await res.json();
 
     if (data.status === 'enriched') {
-      document.getElementById('edit-abstract').value = candidate.abstract || '';
-      const metaEl = document.getElementById('edit-abstract-meta');
-      if (metaEl) {
-        metaEl.style.display = 'block';
-        metaEl.textContent = 'Source: ' + (data.tldr_source || 'academic index') + '\nMatched: "' + (data.matched_title || '') + '"';
+      // Populate abstract field
+      if (data.abstract_written) {
+        const abstractEl = document.getElementById('edit-abstract');
+        if (abstractEl) abstractEl.value = candidate.abstract || '';
+        const metaEl = document.getElementById('edit-abstract-meta');
+        if (metaEl) {
+          metaEl.style.display = 'block';
+          metaEl.textContent = 'Source: ' + (data.tldr_source || 'academic index') + '\nMatched: "' + (data.matched_title || '') + '"';
+        }
       }
-      if (panel) panel.innerHTML = '<div style="font-size:10px;color:var(--verified)">\u2713 Written to Abstract field above.</div>';
+      // Populate bibliographic edit fields with returned meta
+      const m = data.meta || {};
+      const fieldMap = {
+        'edit-title':     m.title,
+        'edit-authors':   m.authors,
+        'edit-year':      m.year,
+        'edit-journal':   m.journal,
+        'edit-volume':    m.volume,
+        'edit-issue':     m.issue,
+        'edit-pages':     m.pages,
+        'edit-publisher': m.publisher,
+        'edit-doi':       m.url_doi,
+      };
+      Object.entries(fieldMap).forEach(([id, val]) => {
+        const el = document.getElementById(id);
+        if (el && val) el.value = val;
+      });
+      // Build confirmation line
+      const written = data.fields_written || [];
+      const absNote = data.abstract_written ? 'abstract' : '';
+      const allWritten = [...written.filter(f => f !== 'url_doi'), ...(written.includes('url_doi') ? ['DOI'] : []), ...(absNote ? [absNote] : [])];
+      const summary = allWritten.length
+        ? '\u2713 Filled: ' + allWritten.join(', ')
+        : '\u2713 No new fields (already populated)';
+      if (panel) panel.innerHTML = '<div style="font-size:10px;color:var(--verified)">' + escHtml(summary) + '</div>';
       await loadRefs();
     } else {
-      if (panel) panel.innerHTML = '<div style="font-size:10px;color:#c94242">' + (data.error || 'Write failed') + '</div>';
+      if (panel) panel.innerHTML = '<div style="font-size:10px;color:#c94242">' + escHtml(data.error || 'Write failed') + '</div>';
     }
   } catch(e) {
     if (panel) panel.innerHTML = '<div style="font-size:10px;color:#c94242">Error: ' + e.message + '</div>';
