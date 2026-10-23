@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.7.3.0923-1607
+Marginalia — app.py  v1.8.17.1023-0401
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -10,6 +10,7 @@ import re
 import csv
 import json
 import uuid
+import unicodedata
 import threading
 import webbrowser
 from pathlib import Path
@@ -65,7 +66,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.16.1021-0451"
+APP_VERSION = "1.8.17.1023-0401"
 
 def _unquote_fm(v: str) -> str:
     """Strip surrounding double-quotes from a YAML frontmatter value if present.
@@ -75,6 +76,17 @@ def _unquote_fm(v: str) -> str:
     if len(s) >= 2 and s[0] == '"' and s[-1] == '"':
         return s[1:-1]
     return s
+
+
+def _ascii_slug(s: str) -> str:
+    """Fold Unicode to closest ASCII equivalent for cite keys and filenames.
+
+    Zettlr and most BibTeX toolchains choke on non-ASCII in cite keys.
+    NFKD decomposes accented chars (e.g. o-circumflex -> o + combining accent),
+    then .encode('ascii', 'ignore') drops the combining marks.
+    Author display names keep full Unicode -- this only touches slugs.
+    """
+    return unicodedata.normalize('NFKD', s).encode('ascii', 'ignore').decode()
 
 
 # ─── App ──────────────────────────────────────────────────────────────────────
@@ -117,10 +129,12 @@ def write_canonical_reference(data: dict) -> Path:
     data["id"] = ref_id
     first_author = data.get("authors", "Unknown").split(";")[0].split(",")[0].strip()
     first_author = first_author.replace(" ", "")   # compress name particles: "van Manen" -> "vanManen"
+    # ASCII-safe slug for filenames and cite keys -- display names keep full Unicode
+    first_author_ascii = _ascii_slug(first_author)
     year = str(data.get("year") or "0000")
     title_slug = "-".join(data.get("title", "untitled").lower().split()[:3])
     title_slug = "".join(c for c in title_slug if c.isalnum() or c == "-")
-    filename = f"{first_author}_{year}_{title_slug}.md"
+    filename = f"{first_author_ascii}_{year}_{title_slug}.md"
 
     abstract     = data.get("abstract") or "<!-- Machine-fetched abstract — use Enrich from Index to populate -->"
     annotation   = data.get("annotation") or "<!-- AI annotation — run Generate to populate -->"
@@ -151,7 +165,7 @@ def write_canonical_reference(data: dict) -> Path:
     # Cite key: use provided or auto-generate from author+year
     _cite_key = (data.get("cite_key") or "").strip()
     if not _cite_key:
-        _ck_author = first_author[:12] if first_author else "unknown"
+        _ck_author = first_author_ascii[:12] if first_author_ascii else "unknown"
         _ck_year   = str(year)
         _ck_title  = "".join(w[:3] for w in data.get("title","").lower().split()[:2] if w.isalpha())
         _cite_key  = f"{_ck_author}{_ck_year}{_ck_title}"
@@ -384,6 +398,16 @@ prompt_label: {prompt_label}
 
 
 def read_all_references() -> list:
+    """Return every canonical reference as a list of dicts.
+
+    Scans REFERENCES_DIR for .md files, parses YAML frontmatter into dict
+    keys and extracts body sections (Abstract, Annotation, Argument
+    Connection, Your Notes) into dedicated keys.  Skips unparseable files
+    silently.  Results are sorted alphabetically by filename.
+
+    Each dict includes '_filename' (the on-disk name) plus all frontmatter
+    fields and the four body-section fields.
+    """
     refs = []
     for filepath in sorted(REFERENCES_DIR.glob("*.md")):
         try:
@@ -437,6 +461,12 @@ def read_all_references() -> list:
 
 
 def call_ollama(model_str: str, prompt: str, unload_after: bool = True, num_predict: int = -1) -> str:
+    """Send a non-streaming prompt to the local Ollama instance and return the response text.
+
+    When unload_after is True (default), sets keep_alive=0 so the model is
+    evicted from VRAM immediately -- prevents memory pressure when cycling
+    through the council.  num_predict caps token output (-1 = model default).
+    """
     import urllib.request as _ur
     payload = json.dumps({
         "model":      model_str,
@@ -451,6 +481,15 @@ def call_ollama(model_str: str, prompt: str, unload_after: bool = True, num_pred
 
 
 def run_synthesis(prompt: str, responses: dict, synthesis_model: str = "deepseek", synth_mode: str = "survey") -> str:
+    """Run a local-model synthesis pass over the multi-model council responses.
+
+    Takes the original prompt and a dict of {model_name: response_text},
+    strips any <think> reasoning chains, then asks the synthesis model to
+    produce a cross-model summary.  synth_mode controls the instruction
+    framing ('survey' for broad review, 'challenge' for adversarial, etc.).
+
+    Returns the raw synthesis text string.
+    """
     settings  = load_settings()
     local_cfg = settings.get("models", {}).get("local", {})
     model_map = {
@@ -571,6 +610,11 @@ Output the four ## sections only. No preamble. No restarts."""
 # ─── Import parsers ───────────────────────────────────────────────────────────
 
 def parse_csv_import(text: str) -> list:
+    """Parse a CSV string into a list of reference dicts for import.
+
+    Supports flexible column headers via field_map -- e.g. 'author' or
+    'authors' both map to the 'authors' key.  Unknown columns are ignored.
+    """
     records = []
     reader = csv.DictReader(io.StringIO(text))
     field_map = {
@@ -690,6 +734,11 @@ def _parse_bibtex_minimal(text: str) -> list:
     return records
 
 def parse_ris_import(text: str) -> list:
+    """Parse RIS-formatted text into a list of reference dicts for import.
+
+    Handles standard RIS tags (TY, AU, TI, PY, DO, etc.).  Each ER tag
+    terminates a record.  Multiple AU lines are joined with semicolons.
+    """
     type_map = {"JOUR": "journal", "BOOK": "book", "CHAP": "chapter", "CONF": "conference", "THES": "thesis", "RPRT": "other", "ELEC": "web", "GEN": "other"}
     records, current, authors = [], {}, []
     for line in text.splitlines():
@@ -718,6 +767,12 @@ def parse_ris_import(text: str) -> list:
 
 
 def lookup_doi(doi: str) -> dict:
+    """Look up a single DOI via the CrossRef API and return a reference dict.
+
+    Strips common DOI prefixes (https://doi.org/, doi:), queries CrossRef,
+    and normalises the response into Marginalia's field schema.  Returns a
+    dict with '_error' key on failure (network timeout, 404, bad JSON).
+    """
     import urllib.request as _ur
     doi = doi.strip().removeprefix("https://doi.org/").removeprefix("http://doi.org/").removeprefix("doi:")
     url = f"https://api.crossref.org/works/{doi}"
@@ -783,12 +838,9 @@ def _slug_tokens(title: str) -> set:
 
 def _is_likely_duplicate(rec: dict, existing_refs: list):
     """Return the first existing ref that looks like a duplicate of rec, or None.
-    Match criteria (evaluated in priority order):
-      1. Exact url_doi match (non-empty) -- highest confidence
-      2. Same first-author-surname + year + >=3 overlapping title tokens
-         BUT only when at least one record lacks a DOI. If BOTH records carry
-         different non-placeholder DOIs they are definitively different works
-         regardless of title overlap (different DOI = different paper).
+    Match criteria (any one sufficient):
+      - Same first-author-surname + year + >=3 overlapping title tokens
+      - Exact url_doi match (non-empty)
     """
     _DOI_PLACEHOLDERS = {"", "none", "n/a", "-", "–", "na", "null", "other"}
     rec_doi   = (rec.get("url_doi") or "").strip().lower()
@@ -802,13 +854,8 @@ def _is_likely_duplicate(rec: dict, existing_refs: list):
         ex_doi = (ex.get("url_doi") or "").strip().lower()
         if ex_doi in _DOI_PLACEHOLDERS:
             ex_doi = ""
-        # Priority 1: DOI match
         if rec_doi and ex_doi and rec_doi == ex_doi:
             return ex
-        # Priority 2: author + year + title overlap
-        # Skip if BOTH records have distinct non-empty DOIs -- they are different papers.
-        if rec_doi and ex_doi and rec_doi != ex_doi:
-            continue
         ex_year = str(ex.get("year") or "").strip()
         ex_auth = ex.get("authors", "Unknown").split(";")[0].split(",")[0].strip().lower()
         if ex_year == rec_year and ex_auth == rec_auth:
@@ -1130,6 +1177,17 @@ def preview_import():
 
 @app.route("/api/import", methods=["POST"])
 def import_references():
+    """Import references from file upload or JSON body into the canonical library.
+
+    Accepts CSV, BibTeX, RIS files or JSON payloads (including DOI batch
+    and plaintext parsed via local LLM).  For each parsed record, runs
+    dupe detection against the existing library, writes a canonical .md
+    file via write_canonical_reference(), and streams SSE progress events
+    back to the client.
+
+    Returns SSE event stream: one 'ref' event per written record, 'error'
+    events for parse failures, and a final 'done' event with counts.
+    """
     records, parse_errors, fmt = [], [], None
     project = ""
     if request.files:
@@ -1152,20 +1210,8 @@ def import_references():
             dois = [d.strip() for d in text.replace(",", "\n").splitlines() if d.strip()]
             for doi in dois:
                 result = lookup_doi(doi)
-                if "_error" in result:
-                    # On lookup failure, write a bare record so the DOI lands in the
-                    # library as a placeholder rather than silently disappearing.
-                    # The researcher can enrich it manually later.
-                    bare_doi = result.get("url_doi") or doi
-                    records.append({
-                        "title": f"[Unresolved DOI: {bare_doi}]",
-                        "url_doi": bare_doi,
-                        "verification_status": "needs-review",
-                        "_bare_record": True,
-                    })
-                    parse_errors.append(f"{doi}: {result['_error']} (bare record written)")
-                else:
-                    records.append(result)
+                if "_error" in result: parse_errors.append(f"{doi}: {result['_error']}")
+                else: records.append(result)
         elif fmt == "csv":     records = parse_csv_import(text)
         elif fmt == "bibtex":  records = parse_bibtex_import(text)
         elif fmt == "ris":     records = parse_ris_import(text)
@@ -1225,134 +1271,6 @@ REFERENCE LIST:
             pass
 
     return jsonify({"format": fmt, "imported": len(imported), "skipped": len(skipped), "errors": parse_errors, "files": imported, "project": project})
-
-
-@app.route("/api/import/stream", methods=["POST"])
-def import_references_stream():
-    """
-    SSE-streaming variant of /api/import.
-    Emits stage events so the UI can show a live heartbeat:
-      data: {"stage": "parsing"}
-      data: {"stage": "dedup", "count": N}
-      data: {"stage": "writing", "n": i, "total": N}
-      data: {"stage": "done", "imported": N, "skipped": S, "errors": [...], "dupes": [...]}
-    Body: same JSON as /api/import (format, text, project).
-    """
-    from flask import Response, stream_with_context
-
-    body    = request.json or {}
-    fmt     = body.get("format", "").lower()
-    text    = body.get("text", "")
-    project = body.get("project", "").strip()
-
-    def generate():
-        import json as _json
-
-        def evt(obj):
-            return f"data: {_json.dumps(obj)}\n\n"
-
-        yield evt({"stage": "parsing"})
-
-        records, parse_errors = [], []
-        try:
-            if fmt == "doi":
-                dois = [d.strip() for d in text.replace(",", "\n").splitlines() if d.strip()]
-                for doi in dois:
-                    result = lookup_doi(doi)
-                    if "_error" in result:
-                        bare_doi = result.get("url_doi") or doi
-                        records.append({"title": f"[Unresolved DOI: {bare_doi}]", "url_doi": bare_doi, "verification_status": "needs-review"})
-                        parse_errors.append(f"{doi}: {result['_error']} (bare record written)")
-                    else:
-                        records.append(result)
-            elif fmt == "csv":     records = parse_csv_import(text)
-            elif fmt == "bibtex":  records = parse_bibtex_import(text)
-            elif fmt == "ris":     records = parse_ris_import(text)
-            elif fmt == "plaintext":
-                settings  = load_settings()
-                model_str = settings.get("models", {}).get("local", {}).get("reasoning", "deepseek-r1:8b")
-                parse_prompt = f"""Parse the following reference list into JSON. Return ONLY a JSON array, no other text.
-Each object must have: title, authors, year, source_type, url_doi, themes
-authors = semicolon-separated. source_type = journal|book|chapter|conference|thesis|web|other
-
-REFERENCE LIST:
-{text}"""
-                try:
-                    raw = call_ollama(model_str, parse_prompt).strip()
-                    if raw.startswith("```"): raw = "\n".join(raw.split("\n")[1:])
-                    if raw.endswith("```"):   raw = "\n".join(raw.split("\n")[:-1])
-                    records = _json.loads(raw.strip())
-                except Exception as e:
-                    parse_errors.append(f"Local model parse failed: {e}")
-            else:
-                yield evt({"stage": "error", "error": f"Unknown format: {fmt}"})
-                return
-        except Exception as e:
-            yield evt({"stage": "error", "error": str(e)})
-            return
-
-        valid = [r for r in records if r.get("title")]
-        yield evt({"stage": "dedup", "count": len(valid)})
-
-        # Dupe check
-        existing = read_all_references()
-        dupes = []
-        for rec in valid:
-            match = _is_likely_duplicate(rec, existing)
-            if match:
-                reason = "DOI match" if (rec.get("url_doi") or "").strip() and \
-                         (rec.get("url_doi") or "").strip().lower() == (match.get("url_doi") or "").strip().lower() \
-                         else "author + year + title overlap"
-                dupes.append({
-                    "incoming_title": rec.get("title", ""),
-                    "incoming_year":  rec.get("year", ""),
-                    "existing_file":  match.get("_filename", ""),
-                    "existing_title": match.get("title", ""),
-                    "match_reason":   reason,
-                })
-
-        if dupes:
-            yield evt({"stage": "dupes_found", "dupes": dupes, "count": len(valid)})
-
-        # Write
-        imported, skipped = [], []
-        for i, rec in enumerate(records):
-            if not rec.get("title"):
-                skipped.append(rec)
-                continue
-            try:
-                rec.setdefault("verification_status", "imported")
-                rec.setdefault("reading_status", "unread")
-                rec.setdefault("physical_holding", "none")
-                if project and not rec.get("connections"):
-                    rec["connections"] = f"{project} | imported"
-                imported.append(write_canonical_reference(rec).name)
-                if (i + 1) % 5 == 0 or i == len(records) - 1:
-                    yield evt({"stage": "writing", "n": len(imported), "total": len(valid)})
-            except Exception as e:
-                parse_errors.append(str(e))
-
-        # Log
-        if imported:
-            log_path = SESSIONS_DIR / "imports.md"
-            timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-            log_entry = f"\n### {timestamp} — {fmt} import (stream)\n"
-            if project: log_entry += f"- Project: {project}\n"
-            log_entry += f"- Imported: {len(imported)}\n"
-            if skipped:  log_entry += f"- Skipped: {len(skipped)}\n"
-            try:
-                if log_path.exists():
-                    existing_log = log_path.read_text(encoding="utf-8")
-                    log_path.write_text(existing_log.rstrip() + "\n" + log_entry, encoding="utf-8")
-                else:
-                    log_path.write_text(f"# Import Log\n{log_entry}", encoding="utf-8")
-            except Exception:
-                pass
-
-        yield evt({"stage": "done", "imported": len(imported), "skipped": len(skipped), "errors": parse_errors, "dupes": dupes, "files": imported})
-
-    return Response(stream_with_context(generate()), mimetype="text/event-stream",
-                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.route("/api/doi-lookup", methods=["POST"])
@@ -1665,6 +1583,17 @@ def rag_query():
 
 @app.route("/api/prompt", methods=["POST"])
 def handle_prompt():
+    """Main council prompt route -- dispatches a research prompt to multiple models.
+
+    Flow: saves an early session file (so the prompt survives a crash),
+    injects RAG context if present, fans out to the requested model list
+    (local Ollama + cloud APIs), streams SSE progress per model, then runs
+    synthesis and writes the complete session back to canonical.
+
+    Expects JSON body with: prompt, models[], synthesis_model, synth_mode,
+    num_predict, project, writing, disposition, full_prompt, rag_context,
+    rag_coverage.  Returns SSE event stream.
+    """
     global anthropic_tokens
     data            = request.json
     prompt          = data.get("prompt", "")
@@ -1804,6 +1733,16 @@ def handle_prompt():
 
 @app.route("/api/references/<ref_filename>", methods=["PUT"])
 def update_reference(ref_filename):
+    """Update a single canonical reference file from the edit modal.
+
+    Accepts a JSON body of field updates.  Reads the existing .md file,
+    patches frontmatter keys and body sections (Abstract, Annotation, etc.),
+    re-runs audit scoring, and writes the file back.  If the title or
+    authors changed enough to alter the filename slug, renames the file
+    and returns the new filename so the frontend can update its state.
+
+    Path-traversal and sandbox checks run before any file I/O.
+    """
     if "/" in ref_filename or "\\" in ref_filename or ".." in ref_filename:
         return jsonify({"error": "Invalid filename"}), 400
     filepath = (REFERENCES_DIR / ref_filename).resolve()
@@ -2275,7 +2214,8 @@ def export_bibtex():
     }
     lines = []
     for ref in read_all_references():
-        slug   = ref.get("slug") or (ref.get("_filename","")).replace(".md","")
+        # Prefer cite_key from frontmatter (the editable field); fall back to filename slug
+        slug   = (ref.get("cite_key") or "").strip() or ref.get("slug") or (ref.get("_filename","")).replace(".md","")
         if not slug: continue
         # BibTeX cite keys must not contain spaces; compress (don't underscore-pad particles)
         slug = slug.replace(" ", "")
@@ -2337,7 +2277,8 @@ def export_csl_json():
     }
     items = []
     for ref in read_all_references():
-        slug = ref.get("slug") or ref.get("_filename","").replace(".md","")
+        # Prefer cite_key from frontmatter (the editable field); fall back to filename slug
+        slug = (ref.get("cite_key") or "").strip() or ref.get("slug") or ref.get("_filename","").replace(".md","")
         if not slug:
             continue
         slug = slug.replace(" ", "")
@@ -3438,12 +3379,8 @@ def enrich_confirm(ref_filename):
 
     data = request.json or {}
     candidate = data.get("candidate")
-    if not candidate:
-        return jsonify({"error": "No candidate provided"}), 400
-    # Abstract is preferred but not required -- allow enriching bib fields alone
-    # when an abstract is provided it must be non-empty
-    if candidate.get("abstract") is not None and not candidate["abstract"].strip():
-        candidate.pop("abstract", None)
+    if not candidate or not candidate.get("abstract"):
+        return jsonify({"error": "No candidate with an abstract provided"}), 400
 
     text = filepath.read_text(encoding="utf-8")
     parts = text.split("---", 2)
@@ -3456,61 +3393,38 @@ def enrich_confirm(ref_filename):
             k, v = line.split(": ", 1)
             meta[k.strip()] = v.strip()
 
-    # ── Write all enrichable frontmatter fields ──────────────────────────────
-    # Fields written from candidate (only if candidate supplies a non-empty value
-    # AND the existing field is blank/missing -- never silently overwrite user data).
-    # Exception: abstract is always replaced (it's an index-sourced field, not
-    # researcher-entered data, and the researcher explicitly selected this candidate).
-    ENRICH_FIELDS = [
-        ("title",     "title"),
-        ("authors",   "authors"),
-        ("year",      "year"),
-        ("venue",     "journal"),    # candidate field -> canonical field
-        ("volume",    "volume"),
-        ("issue",     "issue"),
-        ("pages",     "pages"),
-        ("publisher", "publisher"),
-        ("doi",       "url_doi"),    # candidate may carry doi or url_doi
-        ("url_doi",   "url_doi"),
-    ]
-    fields_written = []
-    _BLANK = {"", "none", "n/a", "-", "na", "null", "unknown", "other"}
-    for cand_key, meta_key in ENRICH_FIELDS:
-        cand_val = (candidate.get(cand_key) or "").strip()
-        if not cand_val or cand_val.lower() in _BLANK:
-            continue
-        existing = (meta.get(meta_key) or "").strip()
-        if not existing or existing.lower() in _BLANK:
-            meta[meta_key] = cand_val
-            fields_written.append(meta_key)
+    abstract_section = build_tldr_section(strip_jats(candidate["abstract"]), candidate.get("tldr_source", ""))
 
+    # Cleanly replace JUST the Abstract section. Properly bounded this time:
+    # find the Abstract marker, find the NEXT "## " heading after it
+    # (whatever it is -- Annotation, Argument Connection, etc.), and
+    # replace everything between the two. This is the same general
+    # approach as before but applied to a section that's never shared
+    # with Generate's output, so there's no cross-contamination risk
+    # even if the boundary-finding has an edge case.
     body = parts[2]
-
-    # ── Abstract section ─────────────────────────────────────────────────────
-    abstract_written = False
-    if candidate.get("abstract"):
-        abstract_section = build_tldr_section(strip_jats(candidate["abstract"]), candidate.get("tldr_source", ""))
-        marker = "## Abstract"
-        if marker in body:
-            before = body.split(marker, 1)[0]
-            rest   = body.split(marker, 1)[1]
-            after  = ("\n## " + rest.split("\n## ", 1)[1]) if "\n## " in rest else ""
-            body = before + marker + "\n" + abstract_section + "\n" + after
-        else:
-            if "## Connections" in body:
-                before = body.split("## Connections", 1)[0]
-                rest   = body.split("## Connections", 1)[1]
-                conn_content, _, after = rest.partition("\n## ")
-                after = ("## " + after) if after else ""
-                body = (before + "## Connections" + conn_content.rstrip() + "\n\n"
+    marker = "## Abstract"
+    if marker in body:
+        before = body.split(marker, 1)[0]
+        rest   = body.split(marker, 1)[1]
+        after  = ("\n## " + rest.split("\n## ", 1)[1]) if "\n## " in rest else ""
+        new_body = before + marker + "\n" + abstract_section + "\n" + after
+    else:
+        # No Abstract section exists yet (older reference, pre-this-build).
+        # Insert it right after Connections if present, else just append.
+        if "## Connections" in body:
+            before = body.split("## Connections", 1)[0]
+            rest   = body.split("## Connections", 1)[1]
+            conn_content, _, after = rest.partition("\n## ")
+            after = ("## " + after) if after else ""
+            new_body = (before + "## Connections" + conn_content.rstrip() + "\n\n"
                         + marker + "\n" + abstract_section + "\n\n" + after)
-            else:
-                body = body.rstrip() + "\n\n" + marker + "\n" + abstract_section + "\n"
-        abstract_written = True
+        else:
+            new_body = body.rstrip() + "\n\n" + marker + "\n" + abstract_section + "\n"
 
     meta["updated_at"] = datetime.now(timezone.utc).isoformat()
     new_meta_block = "\n".join(f"{k}: {v}" for k, v in meta.items())
-    new_text = f"---\n{new_meta_block}\n---{body}"
+    new_text = f"---\n{new_meta_block}\n---{new_body}"
     filepath.write_text(new_text, encoding="utf-8")
 
     return jsonify({
@@ -3518,11 +3432,7 @@ def enrich_confirm(ref_filename):
         "file": filepath.name,
         "matched_title": candidate.get("title", ""),
         "tldr_source": candidate.get("tldr_source", ""),
-        "fields_written": fields_written,
-        "abstract_written": abstract_written,
-        "abstract_preview": candidate.get("abstract", "")[:200],
-        # Return updated field values so JS can refresh edit form inputs
-        "meta": {k: meta.get(k, "") for k in ["title","authors","year","journal","volume","issue","pages","publisher","url_doi"]},
+        "abstract_preview": candidate["abstract"][:200],
     })
 
 
