@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.8.17.1023-1607
+Marginalia — app.py  v1.8.18.1023-2101
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -66,7 +66,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.17.1023-1607"
+APP_VERSION = "1.8.18.1023-2101"
 
 def _unquote_fm(v: str) -> str:
     """Strip surrounding double-quotes from a YAML frontmatter value if present.
@@ -621,6 +621,11 @@ def parse_csv_import(text: str) -> list:
         "title": ["title"], "authors": ["authors", "author"],
         "year": ["year"], "source_type": ["source_type", "type", "sourcetype"],
         "url_doi": ["url_doi", "doi", "url"],
+        "journal": ["journal", "container-title", "publication", "source"],
+        "volume": ["volume", "vol"],
+        "issue": ["issue", "number"],
+        "pages": ["pages", "page"],
+        "publisher": ["publisher"],
         "verification_status": ["verification_status", "status"],
         "physical_holding": ["physical_holding", "holding"],
         "holding_location": ["holding_location", "location"],
@@ -677,6 +682,11 @@ def parse_bibtex_import(text: str) -> list:
             "year":         entry.get("year", ""),
             "source_type":  type_map.get(entry.get("ENTRYTYPE", "").lower(), "other"),
             "url_doi":      entry.get("doi", "") or entry.get("url", ""),
+            "journal":      entry.get("journal", ""),
+            "volume":       entry.get("volume", ""),
+            "issue":        entry.get("number", ""),
+            "pages":        entry.get("pages", "").replace("--", "–"),
+            "publisher":    entry.get("publisher", ""),
             "abstract":     abstract,
             "annotation":   annotation,
             "user_notes":   note,
@@ -723,6 +733,11 @@ def _parse_bibtex_minimal(text: str) -> list:
             "authors":      authors,
             "year":         field("year"),
             "url_doi":      field("doi") or field("url"),
+            "journal":      field("journal"),
+            "volume":       field("volume"),
+            "issue":        field("number"),
+            "pages":        field("pages").replace("--", "–"),
+            "publisher":    field("publisher"),
             "abstract":     abstract,
             "annotation":   annotation,
             "user_notes":   note,
@@ -748,6 +763,9 @@ def parse_ris_import(text: str) -> list:
         if line == "ER  -":
             if current.get("title"):
                 current["authors"] = "; ".join(authors)
+                if "_sp" in current:
+                    current.setdefault("pages", current["_sp"])
+                    del current["_sp"]
                 records.append(current)
             current, authors = {}, []
             continue
@@ -760,6 +778,12 @@ def parse_ris_import(text: str) -> list:
         elif tag in ("PY","Y1"): current["year"] = val[:4]
         elif tag == "DO": current["url_doi"] = val
         elif tag == "UR": current.setdefault("url_doi", val)
+        elif tag in ("JO","JF","T2"): current.setdefault("journal", val)
+        elif tag == "VL": current["volume"] = val
+        elif tag == "IS": current["issue"] = val
+        elif tag == "SP": current["_sp"] = val
+        elif tag == "EP": current["pages"] = current.get("_sp", "") + "–" + val if current.get("_sp") else val
+        elif tag == "PB": current["publisher"] = val
         elif tag == "AB": current["annotation"] = val
         elif tag == "KW": current["keywords"] = (current.get("keywords","") + ", " + val).strip(", ")
         elif tag == "N1": current["argument_connection"] = val
@@ -784,12 +808,29 @@ def lookup_doi(doi: str) -> dict:
         authors_list = msg.get("author", [])
         authors = "; ".join(f"{a.get('family','')}, {a.get('given','')}".strip(", ") for a in authors_list)
         year = ""
-        date_parts = msg.get("published", msg.get("published-print", msg.get("published-online", {})))
+        date_parts = msg.get("published-print", msg.get("published", msg.get("published-online", {})))
         if date_parts and date_parts.get("date-parts"):
             year = str(date_parts["date-parts"][0][0])
         type_map = {"journal-article": "journal", "book": "book", "book-chapter": "chapter", "proceedings-article": "conference", "dissertation": "thesis"}
         titles = msg.get("title", [""])
-        return {"title": titles[0] if titles else "", "authors": authors, "year": year, "source_type": type_map.get(msg.get("type",""), "other"), "url_doi": doi, "annotation": msg.get("abstract", "")}
+        containers = msg.get("container-title", [""])
+        abstract_raw = msg.get("abstract", "")
+        if abstract_raw:
+            abstract_raw = strip_jats(abstract_raw)
+        return {
+            "title": titles[0] if titles else "",
+            "authors": authors,
+            "year": year,
+            "source_type": type_map.get(msg.get("type",""), "other"),
+            "url_doi": doi if doi.startswith("10.") else "",
+            "journal": containers[0] if containers else "",
+            "volume": str(msg.get("volume", "") or ""),
+            "issue": str(msg.get("issue", "") or ""),
+            "pages": str(msg.get("page", "") or ""),
+            "publisher": str(msg.get("publisher", "") or ""),
+            "keywords": ", ".join(msg.get("subject", [])),
+            "annotation": abstract_raw,
+        }
     except Exception as e:
         return {"_error": str(e), "url_doi": doi}
 
@@ -3431,6 +3472,94 @@ def enrich_confirm(ref_filename):
         "matched_title": candidate.get("title", ""),
         "tldr_source": candidate.get("tldr_source", ""),
         "abstract_preview": candidate["abstract"][:200],
+    })
+
+
+@app.route("/api/references/<ref_filename>/enrich/doi-refetch", methods=["POST"])
+def enrich_doi_refetch(ref_filename):
+    """Re-fetch citation metadata from CrossRef using the ref's existing DOI.
+
+    Backfills missing or corrects wrong fields: year, journal, volume, issue,
+    pages, publisher, keywords.  Only overwrites a field if the existing value
+    is empty/blank -- never clobbers human edits.  Year is the exception: it
+    is always updated to the CrossRef published-print value when available,
+    because the original import may have used the wrong date field.
+
+    No human gate needed -- the DOI is already confirmed on file.
+    """
+    if "/" in ref_filename or "\\" in ref_filename or ".." in ref_filename:
+        return jsonify({"error": "Invalid filename"}), 400
+    filepath = (REFERENCES_DIR / ref_filename).resolve()
+    if REFERENCES_DIR.resolve() not in filepath.parents:
+        return jsonify({"error": "Invalid path"}), 400
+    if not filepath.exists():
+        return jsonify({"error": "Reference not found"}), 404
+
+    text = filepath.read_text(encoding="utf-8")
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return jsonify({"error": "Invalid canonical format"}), 400
+
+    meta = {}
+    meta_keys = []
+    for line in parts[1].strip().splitlines():
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            meta[k.strip()] = v.strip()
+            meta_keys.append(k.strip())
+
+    doi = meta.get("url_doi", "").strip()
+    if not doi:
+        return jsonify({"error": "No DOI on this reference"}), 400
+
+    result = lookup_doi(doi)
+    if result.get("_error"):
+        return jsonify({"error": f"CrossRef lookup failed: {result['_error']}"}), 502
+
+    updated_fields = []
+
+    # Year: always update from CrossRef published-print (fixes wrong-date-field bug)
+    if result.get("year") and result["year"] != meta.get("year", ""):
+        meta["year"] = result["year"]
+        updated_fields.append(f"year: {meta.get('year', '?')} -> {result['year']}")
+
+    # Backfill-only fields: only write if currently blank
+    backfill = {
+        "journal": result.get("journal", ""),
+        "volume": result.get("volume", ""),
+        "issue": result.get("issue", ""),
+        "pages": result.get("pages", ""),
+        "publisher": result.get("publisher", ""),
+        "keywords": result.get("keywords", ""),
+    }
+    for field_name, new_val in backfill.items():
+        if new_val and not meta.get(field_name, "").strip():
+            meta[field_name] = new_val
+            if field_name not in meta_keys:
+                meta_keys.append(field_name)
+            updated_fields.append(field_name)
+
+    # Fix url_doi if it was blank or mangled
+    if result.get("url_doi") and not meta.get("url_doi", "").strip():
+        meta["url_doi"] = result["url_doi"]
+        updated_fields.append("url_doi")
+
+    if not updated_fields:
+        return jsonify({"status": "no_changes", "file": filepath.name, "message": "All fields already populated"})
+
+    meta["updated_at"] = datetime.now(timezone.utc).isoformat()
+    if "updated_at" not in meta_keys:
+        meta_keys.append("updated_at")
+
+    new_meta_block = "\n".join(f"{k}: {meta[k]}" for k in meta_keys if k in meta)
+    new_text = f"---\n{new_meta_block}\n---{parts[2]}"
+    filepath.write_text(new_text, encoding="utf-8")
+
+    return jsonify({
+        "status": "refetched",
+        "file": filepath.name,
+        "updated_fields": updated_fields,
+        "crossref_title": result.get("title", ""),
     })
 
 

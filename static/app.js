@@ -1836,6 +1836,46 @@ async function selectEnrichCandidate(idx, filename) {
 }
 
 
+// ── DOI re-fetch — backfill citation fields from CrossRef ────────────────────
+async function doiRefetch(filename) {
+  if (!filename) return;
+  const btn    = document.getElementById('edit-doi-refetch-btn');
+  const status = document.getElementById('edit-doi-refetch-status');
+  btn.textContent = 'Fetching…'; btn.disabled = true;
+  status.textContent = '';
+  try {
+    const res  = await fetch('/api/references/' + encodeURIComponent(filename) + '/enrich/doi-refetch', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if (data.status === 'refetched') {
+      status.style.color = 'var(--verified)';
+      status.textContent = '✓ Updated: ' + data.updated_fields.join(', ');
+      // Refresh the edit form fields with new values
+      await loadRefs();
+      const ref = allRefs.find(r => r._filename === filename);
+      if (ref) {
+        document.getElementById('edit-journal').value   = ref.journal   || '';
+        document.getElementById('edit-volume').value    = ref.volume    || '';
+        document.getElementById('edit-issue').value     = ref.issue     || '';
+        document.getElementById('edit-pages').value     = ref.pages     || '';
+        document.getElementById('edit-publisher').value = ref.publisher || '';
+        document.getElementById('edit-year').value      = ref.year      || '';
+      }
+    } else if (data.status === 'no_changes') {
+      status.style.color = 'var(--muted)';
+      status.textContent = 'All fields already populated';
+    } else {
+      status.style.color = '#c94242';
+      status.textContent = data.error || 'Re-fetch failed';
+    }
+  } catch(e) {
+    status.style.color = '#c94242';
+    status.textContent = 'Error: ' + e.message;
+  }
+  btn.textContent = '🔄 Re-fetch from DOI'; btn.disabled = false;
+}
+
 // ── annotateRef ──────────────────────────────────────────────────────────────
 // Triggers the multi-model annotation council for a single reference.
 // Sends the ref's filename to /api/annotate, which fans out to the active

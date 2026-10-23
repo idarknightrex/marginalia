@@ -8,7 +8,7 @@ Update both when the version changes.
 
 ## Current version
 
-**1.8.17.1023-1607** (Oct 23 2026)
+**1.8.18.1023-2101** (Oct 23 2026)
 
 ---
 
@@ -50,6 +50,36 @@ A malformed ref kills the entire export silently.
 Fix: three-phase export (parse / validate / serialize). Currently only parsing exists.
 Phase 2 (validate) should collect errors and skip bad refs with a warning log.
 Phase 3 (serialize) should only process validated records.
+
+### CRITICAL — All ingest paths drop citation elements
+
+`write_canonical_reference()` has frontmatter slots for journal, volume, issue,
+pages, publisher — but every intake path ignores them:
+
+| Parser | journal | volume | issue | pages | publisher |
+|--------|---------|--------|-------|-------|-----------|
+| BibTeX (bibtexparser) | ❌ | ❌ | ❌ | ❌ | ❌ |
+| BibTeX (minimal/regex) | ❌ | ❌ | ❌ | ❌ | ❌ |
+| RIS | ❌ | ❌ | ❌ | ❌ | ❌ |
+| CSV | ❌ | ❌ | ❌ | ❌ | ❌ |
+| DOI lookup | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+Every ref imported since launch has blank citation elements.
+
+**DOI lookup also has wrong year priority**: picks `published` (online-first)
+before `published-print` (journal issue). Banas et al. 2011 imports as 2010.
+Fix: `published-print` → `published` → `published-online`.
+
+**DOI not written**: stripped DOI value doesn't reliably land in `url_doi`.
+
+Field mappings needed:
+- BibTeX: `journal`→journal, `volume`→volume, `number`→issue, `pages`→pages, `publisher`→publisher
+- RIS: `JO`/`JF`/`T2`→journal, `VL`→volume, `IS`→issue, `SP`/`EP`→pages, `PB`→publisher
+- CSV: add journal/volume/issue/pages/publisher to field_map
+- DOI: `container-title`→journal, `volume`, `issue`, `page`→pages, `publisher`
+
+Enrich pass needs a "re-fetch from DOI" mode that re-queries CrossRef for
+existing refs and backfills missing/wrong fields.
 
 ### Dupe detection gap — no-DOI subtitle variation
 
@@ -177,6 +207,7 @@ Architecture:
 
 | Version | Date | Notes |
 |---------|------|-------|
+| 1.8.18.1023-2101 | Oct 23 2026 | Ingest fix: all parsers now write journal/vol/issue/pages/publisher; DOI date priority fix; DOI re-fetch enrich |
 | 1.8.17.1023-1607 | Oct 23 2026 | Cite key ASCII fix, url:None fix, comment pass |
 | 1.8.16.1019-2352 | Oct 19 2026 | Repack |
 | 1.8.15 | Oct 2026 | Audit backfill, filter history |
