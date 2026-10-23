@@ -8,7 +8,7 @@ Update both when the version changes.
 
 ## Current version
 
-**1.8.17.1023-0401** (Oct 23 2026)
+**1.8.17.1023-1607** (Oct 23 2026)
 
 ---
 
@@ -41,8 +41,8 @@ Update both when the version changes.
 
 `_ascii_slug()` helper added; `write_canonical_reference()` now normalises
 `first_author` to ASCII for both cite key and filename.  Export functions
-(`export_bibtex`, `export_csl_json`) now prefer the `cite_key` frontmatter
-field over the filename slug.
+still use filename slug -- switching them to `cite_key` requires a migration
+pass across all ~280 existing canonical files first (separate build).
 
 ### Export silent drop
 
@@ -177,7 +177,7 @@ Architecture:
 
 | Version | Date | Notes |
 |---------|------|-------|
-| 1.8.17.1023-0401 | Oct 23 2026 | Cite key ASCII fix, export cite_key, url:None fix, comment pass |
+| 1.8.17.1023-1607 | Oct 23 2026 | Cite key ASCII fix, url:None fix, comment pass |
 | 1.8.16.1019-2352 | Oct 19 2026 | Repack |
 | 1.8.15 | Oct 2026 | Audit backfill, filter history |
 | 1.8.14 | Oct 2026 | Enrich two-step (search → human picks), confabulation guard |

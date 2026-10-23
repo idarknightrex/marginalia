@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.8.17.1023-0401
+Marginalia — app.py  v1.8.17.1023-1607
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -66,7 +66,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.17.1023-0401"
+APP_VERSION = "1.8.17.1023-1607"
 
 def _unquote_fm(v: str) -> str:
     """Strip surrounding double-quotes from a YAML frontmatter value if present.
@@ -2214,8 +2214,7 @@ def export_bibtex():
     }
     lines = []
     for ref in read_all_references():
-        # Prefer cite_key from frontmatter (the editable field); fall back to filename slug
-        slug   = (ref.get("cite_key") or "").strip() or ref.get("slug") or (ref.get("_filename","")).replace(".md","")
+        slug   = ref.get("slug") or (ref.get("_filename","")).replace(".md","")
         if not slug: continue
         # BibTeX cite keys must not contain spaces; compress (don't underscore-pad particles)
         slug = slug.replace(" ", "")
@@ -2277,8 +2276,7 @@ def export_csl_json():
     }
     items = []
     for ref in read_all_references():
-        # Prefer cite_key from frontmatter (the editable field); fall back to filename slug
-        slug = (ref.get("cite_key") or "").strip() or ref.get("slug") or ref.get("_filename","").replace(".md","")
+        slug = ref.get("slug") or ref.get("_filename","").replace(".md","")
         if not slug:
             continue
         slug = slug.replace(" ", "")
