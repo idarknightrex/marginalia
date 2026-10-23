@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.8.18.1023-2101
+Marginalia — app.py  v1.8.18.1023-2228
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -66,7 +66,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.18.1023-2101"
+APP_VERSION = "1.8.18.1023-2228"
 
 def _unquote_fm(v: str) -> str:
     """Strip surrounding double-quotes from a YAML frontmatter value if present.
@@ -2257,6 +2257,8 @@ def export_bibtex():
     for ref in read_all_references():
         slug   = ref.get("slug") or (ref.get("_filename","")).replace(".md","")
         if not slug: continue
+        # ASCII-normalise the slug so legacy Unicode filenames export cleanly
+        slug = _ascii_slug(slug)
         # BibTeX cite keys must not contain spaces; compress (don't underscore-pad particles)
         slug = slug.replace(" ", "")
         # Strip trailing dedup suffix (_xxxxxx where x is 6 hex chars) from cite keys
@@ -2320,6 +2322,8 @@ def export_csl_json():
         slug = ref.get("slug") or ref.get("_filename","").replace(".md","")
         if not slug:
             continue
+        # ASCII-normalise the slug so legacy Unicode filenames export cleanly
+        slug = _ascii_slug(slug)
         slug = slug.replace(" ", "")
         slug = re.sub(r'_[0-9a-f]{6}$', '', slug)
         csl_type = csl_type_map.get(ref.get("source_type","").lower(), "document")
@@ -3512,19 +3516,20 @@ def enrich_doi_refetch(ref_filename):
     if not doi:
         return jsonify({"error": "No DOI on this reference"}), 400
 
+    data = request.json or {}
+    force = data.get("force", False)
+
     result = lookup_doi(doi)
     if result.get("_error"):
         return jsonify({"error": f"CrossRef lookup failed: {result['_error']}"}), 502
 
     updated_fields = []
 
-    # Year: always update from CrossRef published-print (fixes wrong-date-field bug)
-    if result.get("year") and result["year"] != meta.get("year", ""):
-        meta["year"] = result["year"]
-        updated_fields.append(f"year: {meta.get('year', '?')} -> {result['year']}")
-
-    # Backfill-only fields: only write if currently blank
-    backfill = {
+    # Fields that update on force OR when blank
+    refetch_fields = {
+        "title": result.get("title", ""),
+        "authors": result.get("authors", ""),
+        "year": result.get("year", ""),
         "journal": result.get("journal", ""),
         "volume": result.get("volume", ""),
         "issue": result.get("issue", ""),
@@ -3532,17 +3537,22 @@ def enrich_doi_refetch(ref_filename):
         "publisher": result.get("publisher", ""),
         "keywords": result.get("keywords", ""),
     }
-    for field_name, new_val in backfill.items():
-        if new_val and not meta.get(field_name, "").strip():
-            meta[field_name] = new_val
-            if field_name not in meta_keys:
-                meta_keys.append(field_name)
-            updated_fields.append(field_name)
+    for field_name, new_val in refetch_fields.items():
+        if not new_val:
+            continue
+        existing = meta.get(field_name, "").strip()
+        if force or not existing:
+            if new_val != existing:
+                meta[field_name] = new_val
+                if field_name not in meta_keys:
+                    meta_keys.append(field_name)
+                updated_fields.append(field_name)
 
     # Fix url_doi if it was blank or mangled
-    if result.get("url_doi") and not meta.get("url_doi", "").strip():
-        meta["url_doi"] = result["url_doi"]
-        updated_fields.append("url_doi")
+    if result.get("url_doi") and (force or not meta.get("url_doi", "").strip()):
+        if result["url_doi"] != meta.get("url_doi", "").strip():
+            meta["url_doi"] = result["url_doi"]
+            updated_fields.append("url_doi")
 
     if not updated_fields:
         return jsonify({"status": "no_changes", "file": filepath.name, "message": "All fields already populated"})

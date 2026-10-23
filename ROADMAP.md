@@ -8,7 +8,7 @@ Update both when the version changes.
 
 ## Current version
 
-**1.8.18.1023-2101** (Oct 23 2026)
+**1.8.18.1023-2228** (Oct 23 2026)
 
 ---
 
@@ -207,7 +207,7 @@ Architecture:
 
 | Version | Date | Notes |
 |---------|------|-------|
-| 1.8.18.1023-2101 | Oct 23 2026 | Ingest fix: all parsers now write journal/vol/issue/pages/publisher; DOI date priority fix; DOI re-fetch enrich |
+| 1.8.18.1023-2228 | Oct 23 2026 | Ingest fix: all parsers now write journal/vol/issue/pages/publisher; DOI date priority fix; DOI re-fetch enrich; re-fetch override mode; ASCII export ids |
 | 1.8.17.1023-1607 | Oct 23 2026 | Cite key ASCII fix, url:None fix, comment pass |
 | 1.8.16.1019-2352 | Oct 19 2026 | Repack |
 | 1.8.15 | Oct 2026 | Audit backfill, filter history |

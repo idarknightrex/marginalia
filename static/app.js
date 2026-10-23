@@ -1841,11 +1841,12 @@ async function doiRefetch(filename) {
   if (!filename) return;
   const btn    = document.getElementById('edit-doi-refetch-btn');
   const status = document.getElementById('edit-doi-refetch-status');
+  const force = document.getElementById('edit-doi-refetch-force').checked;
   btn.textContent = 'Fetching…'; btn.disabled = true;
   status.textContent = '';
   try {
     const res  = await fetch('/api/references/' + encodeURIComponent(filename) + '/enrich/doi-refetch', {
-      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({})
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ force })
     });
     const data = await res.json();
     if (data.status === 'refetched') {
