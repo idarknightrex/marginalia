@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.8.18.1023-2228
+Marginalia — app.py  v1.8.19.1028-1540
 Flask backend. Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
 """
@@ -66,7 +66,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.18.1023-2228"
+APP_VERSION = "1.8.19.1028-1540"
 
 def _unquote_fm(v: str) -> str:
     """Strip surrounding double-quotes from a YAML frontmatter value if present.
@@ -1967,6 +1967,15 @@ def get_projects():
                     if "## Framing" in body:
                         raw = body.split("## Framing")[1].split("\n## ")[0].strip()
                         meta["framing"] = raw if not raw.startswith("<!--") else ""
+                    # Parse Research Onion section
+                    if "## Research Onion" in body:
+                        onion_raw = body.split("## Research Onion")[1].split("\n## ")[0]
+                        if "```json" in onion_raw:
+                            try:
+                                json_str = onion_raw.split("```json")[1].split("```")[0].strip()
+                                meta["research_onion"] = json.loads(json_str)
+                            except (json.JSONDecodeError, IndexError):
+                                pass
                     slug = meta["slug"]
                     connected = [r for r in all_refs
                                  if any(slug == line.split("|")[0].strip()
@@ -2016,6 +2025,16 @@ def update_project(project_slug):
             body   = before + "## Framing\n" + data["framing"] + "\n" + after
         else:
             body = body.rstrip() + "\n\n## Framing\n" + data["framing"] + "\n"
+    # Save Research Onion data
+    if "research_onion" in data:
+        onion_block = "```json\n" + json.dumps(data["research_onion"], indent=2) + "\n```"
+        if "## Research Onion" in body:
+            before = body.split("## Research Onion")[0]
+            rest   = body.split("## Research Onion")[1]
+            after  = ("\n## " + rest.split("\n## ",1)[1]) if "\n## " in rest else ""
+            body   = before + "## Research Onion\n" + onion_block + "\n" + after
+        else:
+            body = body.rstrip() + "\n\n## Research Onion\n" + onion_block + "\n"
     fm_lines = "\n".join(f"{k}: {v}" for k, v in meta.items() if v)
     new_filepath.write_text(f"---\n{fm_lines}\n---\n{body}", encoding="utf-8")
     if new_filepath != filepath:
@@ -2046,6 +2065,8 @@ updated_at: {datetime.now(timezone.utc).isoformat()}
 
 ## Framing
 {framing or "<!-- Research question or framing for this project -->"}
+
+## Research Onion
 
 ## Sessions
 

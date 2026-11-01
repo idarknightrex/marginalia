@@ -2223,11 +2223,49 @@ async function loadProjects() {
     } else {
       refsEl.textContent = 'No references connected yet — add this slug to a reference\u2019s Connections field';
     }
+    // Research Onion panel
+    const onionEl = document.createElement('div');
+    onionEl.style.cssText = 'margin-top:8px;padding-top:6px;border-top:1px solid var(--border)';
+    const onion = p.research_onion || {};
+    const ONION_LAYERS = [
+      {key:'philosophy', label:'Philosophy'},
+      {key:'approach', label:'Approach'},
+      {key:'methodological_choice', label:'Method'},
+      {key:'strategy', label:'Strategy'},
+      {key:'time_horizon', label:'Time Horizon'},
+      {key:'techniques', label:'Techniques'}
+    ];
+    const hasAny = ONION_LAYERS.some(l => {
+      const d = onion[l.key]; return d && ((d.selected && d.selected.length) || d.rationale);
+    });
+    if (hasAny) {
+      const toggle = document.createElement('div');
+      toggle.style.cssText = 'font-family:monospace;font-size:10px;color:var(--muted);cursor:pointer;text-transform:uppercase;letter-spacing:.06em';
+      toggle.innerHTML = '&#9656; Research Onion';
+      const body = document.createElement('div');
+      body.style.cssText = 'display:none;margin-top:6px';
+      toggle.onclick = () => { body.style.display = body.style.display === 'none' ? 'block' : 'none'; toggle.innerHTML = body.style.display === 'none' ? '&#9656; Research Onion' : '&#9662; Research Onion'; };
+      ONION_LAYERS.forEach(l => {
+        const d = onion[l.key] || {};
+        const sel = (d.selected || []).map(s => s.replace(/_/g,' ')).join(', ');
+        if (!sel && !d.rationale) return;
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:6px;margin-bottom:3px;font-size:11px;line-height:1.4';
+        row.innerHTML = '<span style="font-weight:600;color:var(--muted);min-width:72px;flex-shrink:0">' + l.label + '</span>' +
+          '<span style="color:var(--text)">' + (sel || '<em style="color:var(--muted)">unset</em>') +
+          (d.rationale ? ' <span style="color:var(--muted);font-style:italic"> — ' + d.rationale + '</span>' : '') + '</span>';
+        body.appendChild(row);
+      });
+      onionEl.appendChild(toggle);
+      onionEl.appendChild(body);
+    } else {
+      onionEl.innerHTML = '<div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;opacity:.5">Research Onion — not set</div>';
+    }
     const footerEl = document.createElement('div');
     footerEl.style.cssText = 'font-size:10px;font-family:monospace;color:var(--muted);margin-top:8px;padding-top:6px;border-top:1px solid var(--border)';
     footerEl.textContent = 'Created ' + (p.created_at || '').slice(0,16).replace('T',' ') + ' UTC';
     card.appendChild(headerRow); card.appendChild(framingEl); card.appendChild(abstractEl);
-    card.appendChild(refsEl); card.appendChild(footerEl);
+    card.appendChild(refsEl); card.appendChild(onionEl); card.appendChild(footerEl);
     list.appendChild(card);
   });
   // Populate intelligence project filter
@@ -2272,13 +2310,52 @@ async function saveNewProject() {
 }
 
 let _editingProjectSlug = null;
+const ONION_LAYER_KEYS = ['philosophy','approach','methodological_choice','strategy','time_horizon','techniques'];
 function openProjectEdit(p) {
   _editingProjectSlug = p.slug || p.name || p._filename.replace('.md','');
   document.getElementById('proj-edit-label').value    = p.label || _editingProjectSlug;
   document.getElementById('proj-edit-slug').value     = p.slug || _editingProjectSlug;
   document.getElementById('proj-edit-framing').value  = p.framing || '';
   document.getElementById('proj-edit-abstract').value = p.abstract || '';
+  // Populate onion fields
+  const onion = p.research_onion || {};
+  ONION_LAYER_KEYS.forEach(k => {
+    const d = onion[k] || {};
+    const sel = document.getElementById('onion-sel-' + k);
+    const customIn = document.getElementById('onion-custom-' + k);
+    const ratIn = document.getElementById('onion-rat-' + k);
+    if (sel) {
+      const selected = d.selected || [];
+      const stdOpts = Array.from(sel.options).map(o => o.value);
+      const customs = [];
+      Array.from(sel.options).forEach(o => o.selected = false);
+      selected.forEach(v => {
+        if (stdOpts.includes(v)) { sel.querySelector('option[value="' + v + '"]').selected = true; }
+        else { customs.push(v); }
+      });
+      if (customIn) customIn.value = customs.join(', ');
+    }
+    if (ratIn) ratIn.value = d.rationale || '';
+  });
+  document.getElementById('onion-edit-body').style.display = 'none';
   document.getElementById('proj-edit-modal').style.display = 'flex';
+}
+function _collectOnionData() {
+  const onion = {};
+  ONION_LAYER_KEYS.forEach(k => {
+    const sel = document.getElementById('onion-sel-' + k);
+    const customIn = document.getElementById('onion-custom-' + k);
+    const ratIn = document.getElementById('onion-rat-' + k);
+    const selected = sel ? Array.from(sel.selectedOptions).map(o => o.value) : [];
+    if (customIn && customIn.value.trim()) {
+      customIn.value.split(',').map(s => s.trim()).filter(Boolean).forEach(c => {
+        const slug = c.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+        if (slug && !selected.includes(slug)) selected.push(slug);
+      });
+    }
+    onion[k] = { selected, rationale: (ratIn ? ratIn.value.trim() : '') };
+  });
+  return onion;
 }
 function closeProjectEdit() {
   document.getElementById('proj-edit-modal').style.display = 'none';
@@ -2295,6 +2372,7 @@ async function saveProjectEdit() {
       slug:     document.getElementById('proj-edit-slug').value.trim(),
       framing:  document.getElementById('proj-edit-framing').value.trim(),
       abstract: document.getElementById('proj-edit-abstract').value.trim(),
+      research_onion: _collectOnionData(),
     })
   });
   btn.textContent = 'Save'; btn.disabled = false;

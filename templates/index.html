@@ -989,6 +989,71 @@
       <label>Abstract <span style="font-family:monospace;font-size:10px;color:var(--muted);font-weight:normal">2–4 sentences — argument, scope, intended venue</span></label>
       <textarea id="proj-edit-abstract" rows="4" placeholder="What this project argues, its scope, and where it's headed..."></textarea>
     </div>
+    <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">
+      <div style="font-family:monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;cursor:pointer" onclick="document.getElementById('onion-edit-body').style.display=document.getElementById('onion-edit-body').style.display==='none'?'block':'none'">
+        &#9656; Research Onion <span style="font-weight:normal;text-transform:none">(Saunders et al.)</span>
+      </div>
+      <div id="onion-edit-body" style="display:none;font-size:12px">
+        <div class="onion-layer-edit" data-layer="philosophy">
+          <label style="font-weight:600;font-size:11px;display:block;margin-bottom:3px">Philosophy</label>
+          <select id="onion-sel-philosophy" multiple style="width:100%;height:56px;font-size:11px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 4px">
+            <option value="positivism">Positivism</option><option value="critical_realism">Critical Realism</option>
+            <option value="interpretivism">Interpretivism</option><option value="postmodernism">Postmodernism</option>
+            <option value="pragmatism">Pragmatism</option><option value="critical_inquiry">Critical Inquiry</option>
+          </select>
+          <input id="onion-custom-philosophy" class="search-input" placeholder="Custom position..." style="margin-top:3px;font-size:11px;padding:4px 6px">
+          <input id="onion-rat-philosophy" class="search-input" placeholder="Rationale..." style="margin-top:3px;font-size:11px;padding:4px 6px">
+        </div>
+        <div class="onion-layer-edit" data-layer="approach" style="margin-top:8px">
+          <label style="font-weight:600;font-size:11px;display:block;margin-bottom:3px">Approach</label>
+          <select id="onion-sel-approach" multiple style="width:100%;height:44px;font-size:11px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 4px">
+            <option value="deduction">Deduction</option><option value="induction">Induction</option><option value="abduction">Abduction</option>
+          </select>
+          <input id="onion-custom-approach" class="search-input" placeholder="Custom position..." style="margin-top:3px;font-size:11px;padding:4px 6px">
+          <input id="onion-rat-approach" class="search-input" placeholder="Rationale..." style="margin-top:3px;font-size:11px;padding:4px 6px">
+        </div>
+        <div class="onion-layer-edit" data-layer="methodological_choice" style="margin-top:8px">
+          <label style="font-weight:600;font-size:11px;display:block;margin-bottom:3px">Methodological Choice</label>
+          <select id="onion-sel-methodological_choice" multiple style="width:100%;height:56px;font-size:11px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 4px">
+            <option value="mono_method_quantitative">Mono method quantitative</option><option value="mono_method_qualitative">Mono method qualitative</option>
+            <option value="multi_method_quantitative">Multi-method quantitative</option><option value="multi_method_qualitative">Multi-method qualitative</option>
+            <option value="mixed_methods_simple">Mixed methods simple</option><option value="mixed_methods_complex">Mixed methods complex</option>
+          </select>
+          <input id="onion-custom-methodological_choice" class="search-input" placeholder="Custom position..." style="margin-top:3px;font-size:11px;padding:4px 6px">
+          <input id="onion-rat-methodological_choice" class="search-input" placeholder="Rationale..." style="margin-top:3px;font-size:11px;padding:4px 6px">
+        </div>
+        <div class="onion-layer-edit" data-layer="strategy" style="margin-top:8px">
+          <label style="font-weight:600;font-size:11px;display:block;margin-bottom:3px">Strategy</label>
+          <select id="onion-sel-strategy" multiple style="width:100%;height:68px;font-size:11px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 4px">
+            <option value="experiment">Experiment</option><option value="survey">Survey</option>
+            <option value="archival_documentary">Archival / Documentary</option><option value="case_study">Case Study</option>
+            <option value="ethnography">Ethnography</option><option value="action_research">Action Research</option>
+            <option value="grounded_theory">Grounded Theory</option><option value="narrative_inquiry">Narrative Inquiry</option>
+          </select>
+          <input id="onion-custom-strategy" class="search-input" placeholder="Custom position..." style="margin-top:3px;font-size:11px;padding:4px 6px">
+          <input id="onion-rat-strategy" class="search-input" placeholder="Rationale..." style="margin-top:3px;font-size:11px;padding:4px 6px">
+        </div>
+        <div class="onion-layer-edit" data-layer="time_horizon" style="margin-top:8px">
+          <label style="font-weight:600;font-size:11px;display:block;margin-bottom:3px">Time Horizon</label>
+          <select id="onion-sel-time_horizon" multiple style="width:100%;height:32px;font-size:11px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 4px">
+            <option value="cross_sectional">Cross-sectional</option><option value="longitudinal">Longitudinal</option>
+          </select>
+          <input id="onion-custom-time_horizon" class="search-input" placeholder="Custom position..." style="margin-top:3px;font-size:11px;padding:4px 6px">
+          <input id="onion-rat-time_horizon" class="search-input" placeholder="Rationale..." style="margin-top:3px;font-size:11px;padding:4px 6px">
+        </div>
+        <div class="onion-layer-edit" data-layer="techniques" style="margin-top:8px">
+          <label style="font-weight:600;font-size:11px;display:block;margin-bottom:3px">Techniques &amp; Procedures</label>
+          <select id="onion-sel-techniques" multiple style="width:100%;height:68px;font-size:11px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 4px">
+            <option value="questionnaire">Questionnaire</option><option value="interview">Interview</option>
+            <option value="focus_group">Focus Group</option><option value="observation">Observation</option>
+            <option value="document_analysis">Document Analysis</option><option value="statistical_analysis">Statistical Analysis</option>
+            <option value="thematic_analysis">Thematic Analysis</option><option value="content_analysis">Content Analysis</option>
+          </select>
+          <input id="onion-custom-techniques" class="search-input" placeholder="Custom position..." style="margin-top:3px;font-size:11px;padding:4px 6px">
+          <input id="onion-rat-techniques" class="search-input" placeholder="Rationale..." style="margin-top:3px;font-size:11px;padding:4px 6px">
+        </div>
+      </div>
+    </div>
     <div class="edit-modal-actions">
       <button class="btn-secondary" onclick="closeProjectEdit()">Cancel</button>
       <button class="btn-primary" id="proj-edit-save-btn" onclick="saveProjectEdit()">Save</button>
