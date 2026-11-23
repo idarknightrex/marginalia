@@ -1,5 +1,5 @@
 """
-Marginalia — app.py  v1.8.20.1123-1433
+Marginalia — app.py  v1.8.20.1123-1650
 Flask backend for the Marginalia research instrument.
 
 Run via bootstrap.command or: python app.py
@@ -89,7 +89,7 @@ for d in [REFERENCES_DIR, SESSIONS_DIR, CAPTURES_DIR, EXPORTS_DIR, PROJECTS_DIR,
 NOTES_DIR = APP_ROOT / "canonical" / "notes"
 
 # ─── Version ──────────────────────────────────────────────────────────────────
-APP_VERSION = "1.8.19.1028-1540"
+APP_VERSION = "1.8.20.1123-1650"
 
 def _unquote_fm(v: str) -> str:
     """Strip surrounding double-quotes from a YAML frontmatter value if present.
