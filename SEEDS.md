@@ -23,6 +23,7 @@ On the dashboard that keeps drifting — June 18 2026
 The Files / Intelligence split — 2.x
 The posture slider and the seed of bias — design note
 Accessibility — WCAG 2.1 AA — June 28 2026 (dedicated to Wade Brown)
+Session spark graph — visual trajectory of a session — November 17 2026 (jet lag, home)
 Architecture and roadmap
 
 On the architecture — early sessions (four canonical types)
@@ -51,6 +52,8 @@ On federated /current and the finger protocol — 3.x
 On Solid, federation, and public working thought — 3.x (Berners-Lee)
 Marginalia Pod Server — federation layer — 4.x
 On open source community and contribution — v1.99x
+Apple Harbor — local AI clustering watch item — November 14 2026 (reading week, Tokyo)
+Nadella's CYA — "outsourced your thinking" and Marginalia's architecture — November 22 2026
 The research and its theoretical grounding
 
 On the cognitive agent and unrealized capital — June 2026 (Nadella, Rushkoff)
@@ -58,6 +61,8 @@ On Open Notebook — closest open-source analogue — June 19 2026
 Mills (2023) — Cultural representation in AI — June 2026 (WEIRD)
 If Anyone Builds It, Everyone Dies — Yudkowsky & Soares — shelf note
 XDA local-first convergence — citable sources — June 2026
+Jet lag as design method — embodied knowledge and dropped filters — November 17 2026 (home)
+Predictive accuracy is not mechanistic alignment — the asymmetry problem for j-space — November 23 2026 (York/Nature Machine Intelligence)
 Ingest, provenance, and the ethics board
 
 On handwriting as friction, not nostalgia — June 18 2026 (Van der Weel)
@@ -1601,6 +1606,86 @@ Marginalia currently ingests flat formats (BibTeX, RIS, CSV, DOI batch, plaintex
 
 ---
 
+Anthropic's agent memory hierarchy — Marginalia got there first (November 9 2026, Tokyo)
+
+Anthropic published "Building effective agents: Memory" (anthropic.com/research/components-of-agent-memory, November 2026). They propose a four-layer memory architecture for AI agents: (1) transcripts — searchable event logs, (2) memory notes — salient observations written during or after sessions, (3) memory representations — structured knowledge built from notes, such as linked wikis, (4) injected context — a small preloaded set for every session. An offline "dreaming" pass moves information upward through these layers, correcting errors and consolidating structure.
+
+This is Marginalia's architecture, arrived at independently from the opposite direction.
+
+| Anthropic's agent layer | Marginalia's human layer |
+|------------------------|-------------------------|
+| Transcripts (raw event log) | Session logs (council responses, prompts, full exchange) |
+| Memory notes (salient observations) | Annotations on refs, researcher notes written during/after sessions |
+| Memory representations (linked wiki / map) | The graph (refs, notes, concepts connected into navigable structure) |
+| Injected context (preloaded each session) | Onion positions, researcher context block, +++ stacked context |
+| Dreaming (offline consolidation) | The researcher between sessions: tagging refs, confirming/rejecting edges, adjusting onion |
+
+Their key findings also map:
+
+**Selective note-taking beats logging everything.** Their agent that logged everything went stale; the one that wrote only essential, non-redundant observations performed better. This is Marginalia's annotation grounding gate (refusing to annotate unverified refs) and the manual edge confirmation. The friction forces selectivity. Selectivity is what makes memory useful.
+
+**Prefer goals over rigid rules.** Telling the system what memory is FOR worked better than prescribing what to record. This is the disposition slider — declaring whether you're reading critically or receptively, which shapes what the system does with what it finds, rather than hard rules about what to save.
+
+**Keep the top layer lean.** Long injected context reduces adherence. This is why the researcher context block and the onion are compact declarations, not full session transcripts — you prime the council with your position, not your history.
+
+**Dreaming needs to be tuned to the task.** Their dreaming pass is scheduled, offline, and aimed at information likely to change. The human researcher's "dreaming" is the same: between sessions, you return to the library and the map with fresh eyes, correct what's stale, promote what matters, prune what doesn't. The friction gates are the mechanism that makes this consolidation happen at the right granularity — not after every keystroke, but at judgment boundaries.
+
+What's worth noting is the convergence. Anthropic's team was solving "how should an AI agent remember things across sessions." Marginalia was solving "how should a human researcher's thinking be made visible and persistent across months of work." Same problem, same hierarchy, same findings about selectivity and consolidation. The fact that the architecture works for both suggests it's describing something real about how structured memory works, not just an engineering convenience.
+
+Marginalia had this architecture in production (v1.6+, June 2026) five months before the Anthropic paper. Not a priority claim — the problems are different enough that independent convergence is the interesting finding, not who was first. But it's worth recording that the design decisions documented in this Seeds file (human gates, selective annotation, compact injected context, offline consolidation through friction) were arrived at from use, not from theory, and the theory caught up.
+
+---
+
+Map-first ingest — the map is the primary object (November 8 2026, reading week, Tokyo)
+
+The current architecture assumes bottom-up accretion: refs and notes exist first, connections form between them, the map visualizes the result. But the map can also be the thing you ingest. Drop a structure into Marginalia — a concept map, a research desk document, an rsif-x file — and the system unpacks it into canonical in a single simultaneous pass: nodes become refs and notes, edges become connections, onion positions arrive as metadata. The library is generated from the map, not the other way around.
+
+This reframes the ingest pipeline. The distinction isn't "bibliography vs. document" — it's flat imports (BibTeX, RIS — nodes only, no structure) vs. structured imports (rsif-x, hyperlinked documents — nodes and edges together). A structured import writes refs, notes, and connections to canonical simultaneously. Every imported connection arrives as a pending edge, same human confirmation gate as everything else — the map proposes, the researcher confirms.
+
+Both modes coexist. Bottom-up accretion (one ref at a time, connections emerging over weeks) is the slow-thinking instrument — the topology of cognition made visible through friction. Map-first ingest is "I already have a structure, let Marginalia hold it." The two produce graphs with different provenance: accreted graphs trace the researcher's path; ingested graphs trace a document's structure. Both are honest about their origin as long as provenance is recorded.
+
+The rsif-x format is the natural carrier for map-first ingest. The self-rendering document (see above) is both the export and the import — a research position that can be opened in a browser, inspected, and then ingested into another Marginalia instance or a different tool entirely. The format round-trips.
+
+---
+
+rsif-x as self-rendering document (November 8 2026, reading week, Tokyo)
+
+The goal state for rsif-x: the file IS the reader. A single HTML file with the data embedded as JSON, a minimal renderer for the graph, the onion as a sidebar, the linearized dashboard as an alternative view. Open it in a browser — no install, no server, no account — and you're looking at the research position: nodes, edges, rationales, confirmation states, provenance chain, methodological positioning. The entire pathway computed and transportable.
+
+Precedents: TiddlyWiki (single HTML file that is its own application and data store), itty.bitty sites (entire page encoded in the URL fragment). The principle is the same — the document doesn't depend on infrastructure to be legible.
+
+This solves the adoption problem that kills academic interchange formats. BibTeX succeeded because every tool could read it, not because it was good. A format that requires the recipient to install something is dead on arrival in committee review, LMS uploads, email attachments, conference submissions. A format that opens in a browser and shows you the thing — that travels.
+
+Two-layer spec: the DATA SCHEMA (JSON — the graph, the onion, the edges with typed relations and rationales, confirmation states, provenance) and the SELF-RENDERING CONTAINER (the HTML wrapper that makes it viewable without tooling). Tools like Marginalia read and write the schema layer. Humans open the container layer. The schema is the interchange format; the container is what makes the format self-sufficient.
+
+The container isn't a viewer — it's the document. The way a PDF isn't a viewer for PostScript, it's the document that happens to carry rendering instructions with it. An rsif-x file that requires Marginalia to open is just another proprietary export. An rsif-x file that opens in any browser is a publication format for research positions.
+
+---
+
+rsif-x as independent edtech contribution (November 8 2026, reading week, Tokyo)
+
+The rsif-x format is the part of this work that can travel independently of Marginalia. Marginalia is a personal instrument — deliberately anti-scale, built for one researcher's cognition. But rsif-x is a file format, and formats are infrastructure. They're shareable by definition.
+
+The field has a file format problem for research and scholarly work. BibTeX is 40 years old and encodes nothing about relationships between sources. RIS is worse. Zotero RDF is rich but Zotero-specific. CSL JSON is for citation rendering, not for representing how ideas connect. None of them carry edges — they're all flat lists of nodes. The closest analogues (Obsidian vault exports, Roam JSON, nanopublications, MODS/METS) each miss something: untyped relations, no methodological metadata, no provenance, no researcher-asserted connections.
+
+rsif-x sits in that gap: a format for exchanging not bibliographies but research positions — the graph, the onion, the edges with their rationales, the confirmation states. A supervisor could open a student's rsif-x and see the shape of their thinking, not just their reading list. A methods examiner could see the methodological positioning alongside the sources that ground it.
+
+This means the PhD potentially produces two separable outputs aimed at different audiences: the tool (Marginalia — the argument about cognition having an observable topology) and the format (rsif-x — the infrastructure that lets research positions be shared, inspected, and compared across tools). The tool is the thesis; the format is the contribution that outlives it.
+
+---
+
+Marginalia as computational representation of research cognition (November 8 2026, reading week, Tokyo)
+
+The instrument metaphor has been present since the beginning — Marginalia as research instrument, not productivity tool. But there's a stronger claim underneath it: Marginalia is a computational representation of what the researcher's mind looks like while doing research. Not a model of the output (the paper, the thesis), but a model of the process — the accumulation, the false starts, the connections that form and dissolve, the slow convergence on a position.
+
+The deliberate friction in the design — the human gates, the manual confirmation of edges, the refusal to auto-classify, the disposition slider that asks you to declare your stance before firing the council — isn't UX overhead. It's instrumentation. The friction makes the process observable. Every gate is a moment where the researcher has to externalize a judgment that would otherwise happen silently in their head: "yes, these two ideas are connected," "no, this paper doesn't actually support that claim," "I'm approaching this critically, not receptively." Those externalized judgments are the data. The graph that accumulates from them is a trace of research thinking, not a bibliography.
+
+This reframes the PhD contribution. Marginalia isn't just a tool that happens to be built during a PhD — the tool IS the argument. The argument is: research cognition has a topology, that topology can be made visible through deliberate friction in a computational instrument, and observing that topology changes the research itself (the instrument is reflexive — using it changes what it measures). The onion gives the topology a methodological axis. The map gives it a relational axis. The dashboard linearizes it for an audience. But the thing being represented in all three views is the same thing: the shape of one mind moving through a body of literature.
+
+The "analogue" quality matters. The friction keeps the pace close to the pace of actual thinking. A tool that auto-generates a citation network from a BibTeX file produces a graph in seconds, but that graph represents the machine's reading of metadata, not the researcher's reading of the work. Marginalia's graph takes weeks to build because the researcher is the one building it, one judgment at a time. That's not a limitation — it's the point. The slow accretion IS the fidelity.
+
+---
+
 ## 2.0 Definition (October 2026)
 
 2.0 is the ability to start a project, assign the framework (onion), link notes/sessions/refs, create a network map, and use the refs/notes/session ideas to assemble a short presentation — the full research lifecycle in one tool.
@@ -1638,6 +1723,24 @@ That's not a feature spec. That's the actual rhythm of research thinking, and th
 
 Each onion layer is a concentric ring on the visualization. The project's selections define a radial path through the onion. Two projects with similar paths are methodologically close; divergent paths are in tension. The gap between layers — epistemology vs. actual techniques — is the tension field where methodological arguments live. The onion isn't just a filter or color-code on the map; it's a second axis of structure layered on the citation/connection graph.
 
+### Onion as tag vocabulary — methodological tags for references (November 4 2026, scoped)
+
+The onion is the one place in Marginalia where methodology already lives. The reference library's keywords field has no methodological dimension — tags are topical ("enactment", "polyvagal theory") but never positional ("deductive", "case study", "interpretivist"). The coursework is making this gap visible: the researcher is doing methods work, and none of that vocabulary appears on any reference card.
+
+Fix: the onion's selections become a controlled vocabulary for a new tag category. Methodological tags sit alongside topical keywords but are drawn from the onion's option sets, not freeform. When a project's onion says "deduction," that term is available as a tag on any ref in the project. The researcher applies it manually — this is not LLM inference, it's the researcher saying "this paper is evidence of deductive method in my field."
+
+**Schema implications:**
+- New field on refs: `method_tags` (list), separate from `keywords`. Values constrained to the union of all onion selections across the ref's project(s).
+- Onion panel shows ref counts per selection: "Interpretivism (3 refs)" — clickable, filters library.
+- Ref card gets a method tags section (below keywords) with autocomplete drawn from the project's onion.
+- When a ref belongs to multiple projects with different onion positions, it sees the union of both vocabularies.
+
+**What this is NOT:**
+- Not automatic classification. The LLM layer (step 4) may eventually propose method tags, but the base feature is human tagging with a structured vocabulary.
+- Not a replacement for keywords. Topical and methodological are orthogonal dimensions.
+
+**Build placement:** Slots naturally after onion deploy, before or alongside Map v1. The onion already stores selections; this extends them into the ref schema. Low-risk, no new infrastructure.
+
 ### Raj's ERES 990 project — known positions (stub)
 
 | Layer | Position | Status |
@@ -1648,3 +1751,111 @@ Each onion layer is a concentric ring on the visualization. The project's select
 | Strategy | Quasi-experimental (quant strand); phenomenology — Giorgi (qual strand?) | Partial — qual strategy not confirmed |
 | Time horizon | Unknown — pre/post across term = longitudinal; single snapshot = cross-sectional | Open question |
 | Techniques | AEQ-S likely (quant); interviews? observation? | Open question |
+
+---
+
+### Apple Harbor — local AI clustering watch item (November 14 2026, reading week, Tokyo)
+
+Apple is building Harbor, a Mac app (currently private preview under Claris) that turns Apple Silicon Macs into private AI inference servers for open-weight models. The headline feature: clustering two or more Macs over Thunderbolt 5 to pool unified memory into a single inference resource — models larger than any one machine, or more concurrent requests.
+
+**Why this matters for Marginalia:**
+
+The SLM-on-Solaris plan (Ollama on the Mac Mini M4) is the current infrastructure assumption for the LLM layer (build step 6). Harbor could replace that entire layer with something Apple-native: model management, serving, and multi-machine scaling without a third-party stack.
+
+- Local-first alignment: no cloud dependency for inference — same philosophy as Marginalia's design.
+- Clustering path: a Mini + a Studio daisy-chained over TB5 would give a pooled-memory engine that could run substantially larger models than the Mini alone. This matters for synthesis modes that want bigger context windows.
+- Model management: Harbor handles download/load without CLI — lower maintenance than Ollama for a single-user research tool.
+
+**The open question:** Does Harbor expose a local API endpoint that Marginalia can call (the way it would call Ollama's REST API), or is it locked to Apple Intelligence integration only? If it's API-accessible, it could slot directly into the model host abstraction already in the architecture. If it's closed, Ollama remains the path.
+
+**Watch for:** public preview announcement, API documentation, whether it supports the same model formats Ollama does (GGUF/safetensors), and whether the clustering requires identical hardware or works with mixed Apple Silicon generations.
+
+---
+
+### Session spark graph — visual trajectory of a session (November 17 2026, jet lag, home)
+
+Each session already produces a text summary of what happened. This is the visual form of that summary — a spark graph (small, inline, glanceable) that plots the shape of a research session as a trajectory through two dimensions:
+
+- **Horizontal axis:** exploratory (left) ↔ conservative (right). How far the researcher ranged from the established material.
+- **Vertical axis:** sequence of moves, with spacing proportional to the size of the leap. Tight clustering = incremental refinement. Big gaps = conceptual jumps.
+
+**What counts as a move, and how it's positioned:**
+
+The model calls provide natural event boundaries — no manual logging required.
+
+- Staying within the references already in the prompt = small vertical step, center position. Steady pace, nothing wrong with it.
+- Calling in additional work or connections = bigger vertical gap, shifts left toward exploratory.
+- Doubling down on those new connections, bulking on them = shifts further left.
+- Tightening, refining, narrowing within established clusters = shifts right toward conservative.
+
+Each model call in the session becomes a calibration point. The model already knows what was in the prompt context and what's new — that delta is the raw signal for positioning the point.
+
+**Relationship to the disposition slider:** The slider is declared intent ("I want to explore today"). The spark graph is observed behavior. The gap between the two is a finding — "set exploratory, spent 80% in conservative refinement" is exactly the kind of process observation the thesis is after.
+
+**The test:** Two session spark graphs side by side should reveal something the researcher didn't feel in the moment. If it only confirms what they already knew, it's decoration. If it shows a pattern — sessions that start exploratory always collapse conservative by move 5, say — that's data about research cognition.
+
+**Where it lives:** Dashboard element, probably. A thumbnail per session in a session history view. Not a full panel — the whole point is that it's a spark line, legible at a glance.
+
+---
+
+### Jet lag as design method — embodied knowledge and dropped filters (November 17 2026, home)
+
+A pattern worth naming: the sharpest design scoping in Marginalia's history has come from sessions where the designer was jet-lagged, sleep-deprived, or otherwise running without the usual conscious and subconscious filters. The Tokyo reading week entries (thesis framing, rsif-x, map-first ingest — all November 8, post-flight insomnia) and the session spark graph (November 17, 3:30am after return) share a quality: they strip ideas to load-bearing structure. No decoration, no hedging, no "it might be nice if." Just the mechanism.
+
+This is an embodied design observation, not a productivity hack. The conscious filters that get dropped aren't just social niceties — they include the internal editor that says "that's too ambitious," the scope anxiety that says "how would I build that," and the academic caution that says "I need to cite something before I can think this." What remains when those drop is closer to the actual shape of the idea.
+
+There's a connection to Marginalia's own thesis: if the tool is about making research cognition visible, then the conditions under which design cognition becomes most legible are themselves data. The friction that Marginalia imposes on the researcher (human gates, manual confirmation) is the opposite of what jet lag does to the designer — one adds friction to externalize judgment, the other removes friction to access it. Both produce observable traces.
+
+Not prescriptive. The observation is that filter-dropped states produce a particular kind of output — structurally clear, scope-honest, free of defensive hedging — and that output has consistently survived later scrutiny. The ideas don't get revised away when the filters come back; they get detailed.
+
+---
+
+### Nadella's CYA — "outsourced your thinking" and Marginalia's architecture (November 22 2026)
+
+Satya Nadella on CNN's Fareed Zakaria GPS (July 2026): companies that trust one AI for everything "may not survive." His specific recommendations:
+
+1. Keep the harness (the tool layer) and the context/memory separate from the model — don't rely on labs' built-in tools
+2. Keep metadata from every model call so you can train your own weights or an open model later
+3. "Any firm that doesn't have this control... will not remain a firm because you've essentially outsourced your thinking"
+4. "Any one model can go away, and you can still continue to be in control of your own destiny"
+
+**Why this is a convergence observation:**
+
+This is the third independent arrival at Marginalia's architecture from a different starting point:
+- Marginalia: epistemological argument (research sovereignty, the graph traces thinking not bibliography)
+- Anthropic agent memory hierarchy (November 9): four-layer design that mirrors sessions/annotations/graph/onion
+- Nadella: business survival argument (don't outsource your thinking, keep the harness model-agnostic)
+
+Marginalia already does everything he recommends: model host abstraction (council seats, swap without losing the graph), provenance tagging on every model response, session transcripts as retained data exhaust, the tool layer entirely independent of which model serves it.
+
+**The CYA reading:** Nadella is simultaneously selling Azure infrastructure and warning customers not to depend on the models that run on it. The article flags the self-interest — Microsoft invests in Anthropic and OpenAI and sells the alternative infrastructure layer. But the structural argument holds regardless: he's saying "sure, we'll sell you the thing, but read between the lines — you need your own private recipe for your data." That's not just marketing. That's a CEO who sees the dependency trap and is putting the warning on record so it can't be said he didn't tell them.
+
+**For the thesis:** Nadella's framing — "outsourced your thinking" — is almost exactly the thesis claim stated in business language. Marginalia's argument is that research cognition has an observable topology and this instrument makes it visible. His argument is that if you let someone else hold the topology of your thinking, you've lost the firm. Same structural claim, different domain.
+
+(See also: "On the cognitive agent and unrealized capital — June 2026" for Nadella's earlier convergence with Marginalia on the cognitive agent framing via Rushkoff.)
+
+---
+
+### Predictive accuracy is not mechanistic alignment — the asymmetry problem for j-space (November 23 2026, York / Nature Machine Intelligence)
+
+York University researchers tested whether AI models that predict brain activity actually use the same internal mechanisms as the brain. They developed "reverse predictivity testing" — checking not just whether the model predicts the neurons, but whether the neurons can predict the model's internal features. Finding: the model predicts the brain well, but the brain cannot equally predict many of the model's internal features. A system can match another system's outputs while using entirely different internal strategies.
+
+The critical detail: this asymmetry did NOT appear when comparing biological brains to each other. Neuron responses across different brains doing the same task showed symmetric predictivity. Biological systems doing similar work with similar outputs actually do share internal mechanisms. The asymmetry is specific to the artificial-biological boundary.
+
+**The complication for j-space and the thesis:**
+
+Marginalia's thesis claim is that research cognition has an observable topology — the graph traces thinking, the spark graph traces session behavior, the disposition slider vs actual behavior reveals declared-vs-observed gaps. This all rests on an assumption: that observing the moves tells you something about the cognition underneath.
+
+This study says: careful. Predictive accuracy (the outputs match) does not guarantee mechanistic alignment (the internals match). A map of research moves might match the moves without matching the thinking that produced them.
+
+**Where this bites:**
+
+Not in the human-to-human layer. The asymmetry finding is actually reassuring here — biological systems doing the same task DO share internal mechanisms. When Marginalia externalizes the researcher's own judgments through human gates (manual confirmation, declared disposition, typed rationales), it's capturing human-to-human cognition. The instrument is the researcher's own process made visible. No asymmetry problem.
+
+The bite is in the LLM layer (build step 7). When the AI proposes edges, suggests method tags, or offers synthesis, those proposals will predict what the researcher would do — but potentially via entirely different internal mechanisms. The AI's output matches yours without sharing your reasoning. This is not a bug to fix; it's a structural property of the artificial-biological boundary.
+
+**The deeper justification for the human confirmation gate:**
+
+The confirmation gate on AI-proposed edges was always justified on sovereignty grounds (the researcher decides, the AI only proposes). This study adds a mechanistic justification: AI proposals are outputs that may match yours without sharing your reasoning. Confirmation isn't just about control — it's about the fact that the AI's path to the same conclusion is not evidence that the conclusion is correct for the reasons the researcher would hold. The gate forces the researcher to supply their own reasoning (the rationale field on the edge), which is the actual cognitive trace, not the AI's prediction of it.
+
+**Citation:** York University, published in *Nature Machine Intelligence*, November 2026. Public testing toolkit released. (Full reference TBD — retrieve from journal when available.)

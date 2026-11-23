@@ -1,7 +1,30 @@
 """
-Marginalia — app.py  v1.8.19.1028-1540
-Flask backend. Run via bootstrap.command or: python app.py
+Marginalia — app.py  v1.8.20.1123-1433
+Flask backend for the Marginalia research instrument.
+
+Run via bootstrap.command or: python app.py
 All API keys loaded from setup.env — edit that file, never touch this one.
+
+Architecture: canonical markdown files with YAML frontmatter as the single
+source of truth for every reference.  No database — the researcher owns their
+files and can read, edit, grep, or git-diff them with any tool.  Flask serves
+the API; the JS frontend is a single-page app in index.html + app.js.
+
+Key subsystems:
+  - Reference CRUD: write_canonical_reference(), read_all_references()
+  - Import pipeline: parse_csv_import(), parse_bibtex_import(), parse_ris_import()
+  - Export pipeline: export_bibtex(), export_csl_json() — three-phase with per-record errors
+  - Audit engine: _audit_ref() with severity levels and persistent flags
+  - Session management: session lifecycle, model calls, cost tracking
+  - Research Onion: method-layer tagging per reference
+
+v1.8.20 changes:
+  - Cite key: LaTeX escape stripping + BibTeX cite key passthrough on import
+  - Ingest: rejection reasons surfaced to researcher (not silent)
+  - Dupe detection: first-5-title-words tightening for no-DOI matches
+  - Export: three-phase pipeline with per-record error handling
+  - url_doi: sanitise 'None' string on read
+  - Docstring pass on high-priority functions
 """
 
 import os
@@ -78,6 +101,27 @@ def _unquote_fm(v: str) -> str:
     return s
 
 
+def _strip_latex(s: str) -> str:
+    """Convert common BibTeX/LaTeX accent escapes to their base letter.
+
+    BibTeX encodes accented characters as e.g. {\\\"o} or \\\"{o} for o-umlaut,
+    {\\^o} for o-circumflex, {\\'e} for e-acute, {\\c{c}} for c-cedilla, etc.
+    This function strips the escape markup and keeps the base letter so that
+    'C{\\^o}t{\\'e}' becomes 'Cote' — suitable for cite keys and filenames.
+    Must run BEFORE _ascii_slug() so the base letter survives NFKD folding.
+    """
+    import re
+    # First pass: {\cmd{X}} or {\cmd X} -> X  (e.g. {\"{o}} -> o, {\^o} -> o)
+    s = re.sub(r'\{\\[a-zA-Z`\'^"~=.]{1,2}\{([^}])\}\}', r'\1', s)
+    s = re.sub(r'\{\\[a-zA-Z`\'^"~=.]{1,2}\s*([a-zA-Z])\}', r'\1', s)
+    # Second pass: \cmd{X} without outer braces (e.g. \"{o} -> o)
+    s = re.sub(r'\\[a-zA-Z`\'^"~=.]{1,2}\{([^}])\}', r'\1', s)
+    s = re.sub(r'\\[a-zA-Z`\'^"~=.]{1,2}\s+([a-zA-Z])', r'\1', s)
+    # Drop any remaining stray braces
+    s = s.replace('{', '').replace('}', '')
+    return s
+
+
 def _ascii_slug(s: str) -> str:
     """Fold Unicode to closest ASCII equivalent for cite keys and filenames.
 
@@ -85,6 +129,9 @@ def _ascii_slug(s: str) -> str:
     NFKD decomposes accented chars (e.g. o-circumflex -> o + combining accent),
     then .encode('ascii', 'ignore') drops the combining marks.
     Author display names keep full Unicode -- this only touches slugs.
+
+    For strings that may contain BibTeX/LaTeX escapes, call _strip_latex()
+    first -- NFKD cannot decompose a backslash-brace sequence.
     """
     return unicodedata.normalize('NFKD', s).encode('ascii', 'ignore').decode()
 
@@ -129,8 +176,9 @@ def write_canonical_reference(data: dict) -> Path:
     data["id"] = ref_id
     first_author = data.get("authors", "Unknown").split(";")[0].split(",")[0].strip()
     first_author = first_author.replace(" ", "")   # compress name particles: "van Manen" -> "vanManen"
-    # ASCII-safe slug for filenames and cite keys -- display names keep full Unicode
-    first_author_ascii = _ascii_slug(first_author)
+    # ASCII-safe slug for filenames and cite keys -- display names keep full Unicode.
+    # Strip LaTeX escapes first so {\"o} -> o before NFKD folding.
+    first_author_ascii = _ascii_slug(_strip_latex(first_author))
     year = str(data.get("year") or "0000")
     title_slug = "-".join(data.get("title", "untitled").lower().split()[:3])
     title_slug = "".join(c for c in title_slug if c.isalnum() or c == "-")
@@ -162,12 +210,16 @@ def write_canonical_reference(data: dict) -> Path:
     _audit_worst    = {3: "critical", 2: "warning", 1: "noise", 0: "clean"}[_worst_sev]
     _audit_issues_json = json.dumps(_audit_issues)
 
-    # Cite key: use provided or auto-generate from author+year
+    # Cite key: use provided or auto-generate from author+year.
+    # Always ASCII-normalise (strip LaTeX escapes then NFKD fold) so cite keys
+    # are safe for BibTeX, Zettlr, Pandoc and filesystem paths.
     _cite_key = (data.get("cite_key") or "").strip()
-    if not _cite_key:
+    if _cite_key:
+        _cite_key = _ascii_slug(_strip_latex(_cite_key))
+    else:
         _ck_author = first_author_ascii[:12] if first_author_ascii else "unknown"
         _ck_year   = str(year)
-        _ck_title  = "".join(w[:3] for w in data.get("title","").lower().split()[:2] if w.isalpha())
+        _ck_title  = "".join(w[:3] for w in _strip_latex(data.get("title","")).lower().split()[:2] if w.isalpha())
         _cite_key  = f"{_ck_author}{_ck_year}{_ck_title}"
 
     # CrossRef-enriched bibliographic fields (may be blank for new refs)
@@ -434,6 +486,12 @@ def read_all_references() -> list:
                     meta["user_notes"]           = extract_section(body, "Your Notes")
                     meta["connections"]          = extract_section(body, "Connections")
 
+                    # Sanitise url_doi: frontmatter may contain the literal string
+                    # "None" from older Python writes (str(None)).  Normalise to "".
+                    _raw_doi = (meta.get("url_doi") or "").strip()
+                    if _raw_doi.lower() in ("none", "n/a", "-"):
+                        meta["url_doi"] = ""
+
                     # Collapse legacy tags/themes into single keywords field
                     # Priority: keywords > tags > themes (body section)
                     if not meta.get("keywords"):
@@ -651,8 +709,14 @@ def parse_csv_import(text: str) -> list:
 
 
 def parse_bibtex_import(text: str) -> list:
-    # Fix: note/annote → ## Your Notes (Claude annotations land here),
-    # abstract → ## Abstract. Multi-line values handled properly.
+    """Parse BibTeX-formatted text into a list of reference dicts for import.
+
+    Uses bibtexparser when available, falls back to _parse_bibtex_minimal().
+    Maps BibTeX entry types to Marginalia source_types, converts 'and'-separated
+    authors to semicolons, and preserves the original cite key (the entry ID).
+    Handles note/annote → ## Your Notes, abstract → ## Abstract.
+    Multi-line values handled properly via brace-depth tracking in fallback.
+    """
     try:
         import bibtexparser
         db = bibtexparser.loads(text)
@@ -693,14 +757,23 @@ def parse_bibtex_import(text: str) -> list:
             "keywords":     normalise_keywords(entry.get("keywords", "")),
             "needs_review": truncated,
         }
+        # Preserve the BibTeX entry's own cite key so the researcher keeps
+        # their existing citation identifiers through import/export round-trips.
+        bib_id = entry.get("ID", "").strip()
+        if bib_id:
+            rec["cite_key"] = bib_id
         if rec["title"]:
             records.append(rec)
     return records
 
 
 def _parse_bibtex_minimal(text: str) -> list:
-    # Handles multi-line field values by tracking brace depth — previous regex
-    # version stopped at first newline, silently truncating Claude annotations.
+    """Fallback BibTeX parser when bibtexparser is not installed.
+
+    Handles multi-line field values by tracking brace depth — the previous regex
+    version stopped at first newline, silently truncating Claude annotations.
+    Extracts the entry cite key from @type{citekey, ...} format.
+    """
     import re
     records = []
     entries = re.findall(r'@\w+\{[^@]+', text, re.DOTALL)
@@ -744,6 +817,10 @@ def _parse_bibtex_minimal(text: str) -> list:
             "keywords":       field("keywords"),
             "needs_review": truncated,
         }
+        # Extract cite key from @type{citekey, ...}
+        ck_match = re.match(r'@\w+\{([^,]+)', entry)
+        if ck_match:
+            rec["cite_key"] = ck_match.group(1).strip()
         if rec["title"]:
             records.append(rec)
     return records
@@ -879,9 +956,15 @@ def _slug_tokens(title: str) -> set:
 
 def _is_likely_duplicate(rec: dict, existing_refs: list):
     """Return the first existing ref that looks like a duplicate of rec, or None.
+
     Match criteria (any one sufficient):
-      - Same first-author-surname + year + >=3 overlapping title tokens
-      - Exact url_doi match (non-empty)
+      - Exact url_doi match (non-empty, ignoring DOI placeholders)
+      - Same first-author-surname + year + first 5 substantive title words match
+
+    The title check uses the first 5 alpha-only words (lowercased) rather than
+    a bag-of-words overlap, which catches subtitle variations that inflate the
+    token count (e.g. "Method X: A Review" vs "Method X: A Practical Guide"
+    would share 3 tokens under the old rule but differ on the first-5 check).
     """
     _DOI_PLACEHOLDERS = {"", "none", "n/a", "-", "–", "na", "null", "other"}
     rec_doi   = (rec.get("url_doi") or "").strip().lower()
@@ -890,6 +973,10 @@ def _is_likely_duplicate(rec: dict, existing_refs: list):
     rec_year  = str(rec.get("year") or "").strip()
     rec_auth  = rec.get("authors", "Unknown").split(";")[0].split(",")[0].strip().lower()
     rec_tok   = _slug_tokens(rec.get("title", ""))
+    # First-5 substantive words for tighter subtitle matching
+    import re as _re_dup
+    _first5 = lambda t: tuple(_re_dup.sub(r"[^a-z0-9]", "", w) for w in t.lower().split()[:5] if w.isalpha())
+    rec_f5   = _first5(rec.get("title", ""))
 
     for ex in existing_refs:
         ex_doi = (ex.get("url_doi") or "").strip().lower()
@@ -901,7 +988,9 @@ def _is_likely_duplicate(rec: dict, existing_refs: list):
         ex_auth = ex.get("authors", "Unknown").split(";")[0].split(",")[0].strip().lower()
         if ex_year == rec_year and ex_auth == rec_auth:
             ex_tok = _slug_tokens(ex.get("title", ""))
-            if len(rec_tok & ex_tok) >= 3:
+            ex_f5  = _first5(ex.get("title", ""))
+            # Match on first-5 title words OR 3+ overlapping tokens (backward compat)
+            if (rec_f5 and ex_f5 and rec_f5 == ex_f5) or len(rec_tok & ex_tok) >= 3:
                 return ex
     return None
 
@@ -1277,9 +1366,24 @@ REFERENCE LIST:
     else:
         return jsonify({"error": "No file or JSON body received"}), 400
 
-    imported, skipped = [], []
-    for rec in records:
-        if not rec.get("title"): skipped.append(rec); continue
+    imported, skipped, rejection_reasons = [], [], []
+    existing_refs = read_all_references()
+    for i, rec in enumerate(records):
+        if not rec.get("title"):
+            reason = f"Record {i+1}: no title field — cannot create reference"
+            skipped.append(rec)
+            rejection_reasons.append(reason)
+            continue
+        # Check for duplicates before writing
+        dup = _is_likely_duplicate(rec, existing_refs)
+        if dup:
+            match_type = "DOI match" if (rec.get("url_doi") or "").strip() and \
+                         (rec.get("url_doi") or "").strip().lower() == (dup.get("url_doi") or "").strip().lower() \
+                         else "author + year + title overlap"
+            reason = f'"{rec["title"][:60]}": duplicate of existing "{dup.get("title","")[:60]}" ({match_type})'
+            skipped.append(rec)
+            rejection_reasons.append(reason)
+            continue
         try:
             rec.setdefault("verification_status", "imported")
             rec.setdefault("reading_status", "unread")
@@ -1288,7 +1392,7 @@ REFERENCE LIST:
                 rec["connections"] = f"{project} | imported"
             imported.append(write_canonical_reference(rec).name)
         except Exception as e:
-            parse_errors.append(str(e))
+            parse_errors.append(f'"{rec.get("title","")[:60]}": write failed — {e}')
 
     if imported:
         log_path = SESSIONS_DIR / "imports.md"
@@ -1296,7 +1400,11 @@ REFERENCE LIST:
         log_entry = f"\n### {timestamp} — {fmt} import\n"
         if project: log_entry += f"- Project: {project}\n"
         log_entry += f"- Imported: {len(imported)}\n"
-        if skipped:  log_entry += f"- Skipped (no title): {len(skipped)}\n"
+        if skipped:  log_entry += f"- Skipped: {len(skipped)}\n"
+        for reason in rejection_reasons[:5]:
+            log_entry += f"  - {reason[:120]}\n"
+        if len(rejection_reasons) > 5:
+            log_entry += f"  - ... and {len(rejection_reasons)-5} more\n"
         if parse_errors: log_entry += f"- Errors: {len(parse_errors)}\n"
         for f_name in imported[:10]:
             log_entry += f"  - {f_name}\n"
@@ -1311,7 +1419,9 @@ REFERENCE LIST:
         except Exception:
             pass
 
-    return jsonify({"format": fmt, "imported": len(imported), "skipped": len(skipped), "errors": parse_errors, "files": imported, "project": project})
+    return jsonify({"format": fmt, "imported": len(imported), "skipped": len(skipped),
+                     "errors": parse_errors, "rejection_reasons": rejection_reasons,
+                     "files": imported, "project": project})
 
 
 @app.route("/api/doi-lookup", methods=["POST"])
@@ -2262,9 +2372,13 @@ Search terms:"""
 
 @app.route("/api/export/bibtex", methods=["GET"])
 def export_bibtex():
-    # Live BibTeX export — generates fresh from canonical files on every request.
-    # Point Zettlr at http://100.126.14.57:5001/api/export/bibtex as the citation library.
-    # Citekey = slug (already BibTeX-safe: lowercase, underscores, no spaces).
+    """Live BibTeX export with three-phase pipeline: parse, validate, serialize.
+
+    Generates fresh from canonical files on every request.
+    Point Zettlr at http://100.126.14.57:5001/api/export/bibtex as the citation library.
+    Per-record errors are caught and logged in a comment header rather than
+    silently dropping the record or crashing the whole export.
+    """
     type_map = {
         "journal article": "article", "journal": "article",
         "book": "book", "chapter": "incollection",
@@ -2274,42 +2388,56 @@ def export_bibtex():
         "keynote": "misc", "poster": "misc", "talk": "misc",
         "other": "misc", "web": "misc",
     }
-    lines = []
-    for ref in read_all_references():
-        slug   = ref.get("slug") or (ref.get("_filename","")).replace(".md","")
-        if not slug: continue
-        # ASCII-normalise the slug so legacy Unicode filenames export cleanly
-        slug = _ascii_slug(slug)
-        # BibTeX cite keys must not contain spaces; compress (don't underscore-pad particles)
-        slug = slug.replace(" ", "")
-        # Strip trailing dedup suffix (_xxxxxx where x is 6 hex chars) from cite keys
-        slug = re.sub(r'_[0-9a-f]{6}$', '', slug)
-        entry_type = type_map.get(ref.get("source_type","").lower(), "misc")
-        # Convert "Last, First; Last, First" or "First Last; First Last" to BibTeX "and" format
-        authors_raw = ref.get("authors","")
-        authors_bib = " and ".join(a.strip() for a in authors_raw.split(";") if a.strip())
-        fields = [f"  author    = {{{authors_bib}}}",
-                  f"  title     = {{{ref.get('title','')}}}",
-                  f"  year      = {{{ref.get('year','')}}}"]
-        if ref.get("url_doi"):
-            doi = ref["url_doi"].strip()
-            if doi.startswith("http://") or doi.startswith("https://") or doi.startswith("10."):
-                if "doi.org" in doi or doi.startswith("10."):
-                    fields.append(f"  doi       = {{{doi}}}")
-                else:
-                    fields.append(f"  url       = {{{doi}}}")
-        for bib_field, ref_key in [("journal","journal"),("volume","volume"),("number","issue"),("pages","pages"),("publisher","publisher")]:
-            val = (ref.get(ref_key,"") or "").strip()
-            if val:
-                fields.append(f"  {bib_field:<9} = {{{val}}}")
-        if ref.get("keywords"):
-            fields.append(f"  keywords  = {{{ref['keywords']}}}")
-        elif ref.get("tags"):
-            fields.append(f"  keywords  = {{{ref['tags']}}}")
-        if ref.get("annotation"):
-            fields.append(f"  annote    = {{{ref['annotation'][:500]}}}")
-        lines.append(f"@{entry_type}{{{slug},\n" + ",\n".join(fields) + "\n}")
-    bib_content = "\n\n".join(lines)
+    lines, errors = [], []
+    all_refs = read_all_references()
+    for ref in all_refs:
+        try:
+            # Phase 1: parse cite key
+            slug = (ref.get("cite_key") or "").strip()
+            if not slug:
+                slug = ref.get("slug") or (ref.get("_filename","")).replace(".md","")
+            if not slug:
+                errors.append(f"Skipped record with no cite key or filename")
+                continue
+            # Phase 2: validate and normalise
+            slug = _ascii_slug(_strip_latex(slug))
+            slug = slug.replace(" ", "")
+            slug = re.sub(r'_[0-9a-f]{6}$', '', slug)
+            entry_type = type_map.get(ref.get("source_type","").lower(), "misc")
+            # Phase 3: serialize
+            authors_raw = ref.get("authors","")
+            authors_bib = " and ".join(a.strip() for a in authors_raw.split(";") if a.strip())
+            fields = [f"  author    = {{{authors_bib}}}",
+                      f"  title     = {{{ref.get('title','')}}}",
+                      f"  year      = {{{ref.get('year','')}}}"]
+            if ref.get("url_doi"):
+                doi = ref["url_doi"].strip()
+                if doi.startswith("http://") or doi.startswith("https://") or doi.startswith("10."):
+                    if "doi.org" in doi or doi.startswith("10."):
+                        fields.append(f"  doi       = {{{doi}}}")
+                    else:
+                        fields.append(f"  url       = {{{doi}}}")
+            for bib_field, ref_key in [("journal","journal"),("volume","volume"),("number","issue"),("pages","pages"),("publisher","publisher")]:
+                val = (ref.get(ref_key,"") or "").strip()
+                if val:
+                    fields.append(f"  {bib_field:<9} = {{{val}}}")
+            if ref.get("keywords"):
+                fields.append(f"  keywords  = {{{ref['keywords']}}}")
+            elif ref.get("tags"):
+                fields.append(f"  keywords  = {{{ref['tags']}}}")
+            if ref.get("annotation"):
+                fields.append(f"  annote    = {{{ref['annotation'][:500]}}}")
+            lines.append(f"@{entry_type}{{{slug},\n" + ",\n".join(fields) + "\n}")
+        except Exception as e:
+            errors.append(f"{ref.get('_filename','?')}: {e}")
+    # Build output with error header if needed
+    header = ""
+    if errors:
+        header = "% Marginalia BibTeX export errors:\n"
+        for err in errors:
+            header += f"%   {err}\n"
+        header += f"% Exported {len(lines)} of {len(all_refs)} references\n\n"
+    bib_content = header + "\n\n".join(lines)
     from flask import Response
     return Response(bib_content, mimetype="application/x-bibtex",
                     headers={"Content-Disposition": "inline; filename=marginalia.bib"})
@@ -2317,10 +2445,14 @@ def export_bibtex():
 
 @app.route("/api/export/csl-json", methods=["GET"])
 def export_csl_json():
-    # Live CSL JSON export -- generates fresh from canonical files on every request.
-    # Zettlr: Settings -> Export -> Citation database -> enter URL or file path.
-    # On Tailscale: point Zettlr at http://100.126.14.57:5001/api/export/csl-json
-    # CSL type map -- Marginalia source_type -> CSL item type
+    """Live CSL JSON export with three-phase pipeline: parse, validate, serialize.
+
+    Generates fresh from canonical files on every request.
+    Zettlr: Settings -> Export -> Citation database -> enter URL or file path.
+    On Tailscale: point Zettlr at http://100.126.14.57:5001/api/export/csl-json
+    Per-record errors are caught and the record is skipped with a _errors entry
+    at the top of the JSON array so toolchains that consume the array still work.
+    """
     csl_type_map = {
         "journal article":           "article-journal",
         "journal":                   "article-journal",
@@ -2338,65 +2470,74 @@ def export_csl_json():
         "web":                       "webpage",
         "other":                     "document",
     }
-    items = []
-    for ref in read_all_references():
-        slug = ref.get("slug") or ref.get("_filename","").replace(".md","")
-        if not slug:
-            continue
-        # ASCII-normalise the slug so legacy Unicode filenames export cleanly
-        slug = _ascii_slug(slug)
-        slug = slug.replace(" ", "")
-        slug = re.sub(r'_[0-9a-f]{6}$', '', slug)
-        csl_type = csl_type_map.get(ref.get("source_type","").lower(), "document")
-
-        # Authors: "Last, First; Last, First" or "First Last; ..."
-        author_list = []
-        for raw in (ref.get("authors","") or "").split(";"):
-            raw = raw.strip()
-            if not raw:
+    items, errors = [], []
+    all_refs = read_all_references()
+    for ref in all_refs:
+        try:
+            # Phase 1: parse cite key
+            slug = (ref.get("cite_key") or "").strip()
+            if not slug:
+                slug = ref.get("slug") or ref.get("_filename","").replace(".md","")
+            if not slug:
+                errors.append(f"Skipped record with no cite key or filename")
                 continue
-            if "," in raw:
-                family, given = raw.split(",", 1)
-                author_list.append({"family": family.strip(), "given": given.strip()})
-            else:
-                parts = raw.rsplit(" ", 1)
-                if len(parts) == 2:
-                    author_list.append({"family": parts[1], "given": parts[0]})
-                else:
-                    author_list.append({"literal": raw})
+            # Phase 2: validate and normalise
+            slug = _ascii_slug(_strip_latex(slug))
+            slug = slug.replace(" ", "")
+            slug = re.sub(r'_[0-9a-f]{6}$', '', slug)
+            csl_type = csl_type_map.get(ref.get("source_type","").lower(), "document")
 
-        item = {"id": slug, "type": csl_type, "title": ref.get("title","") or slug}
-        if author_list:
-            item["author"] = author_list
-        year = ref.get("year","").strip()
-        if year and year.isdigit():
-            item["issued"] = {"date-parts": [[int(year)]]}
-        url_doi = (ref.get("url_doi","") or "").strip()
-        if url_doi and (url_doi.startswith("http://") or url_doi.startswith("https://") or url_doi.startswith("10.")):
-            if "doi.org" in url_doi or url_doi.startswith("10."):
-                item["DOI"] = url_doi.replace("https://doi.org/","").replace("http://doi.org/","")
-                item["url"] = "https://doi.org/" + item["DOI"]
-            else:
-                item["url"] = url_doi
-        # CSL-JSON field mapping: internal name -> CSL spec name
-        csl_field_map = {
-            "journal":   "container-title",
-            "publisher": "publisher",
-            "volume":    "volume",
-            "issue":     "issue",
-            "pages":     "page",
-            "edition":   "edition",
-        }
-        for internal, csl_key in csl_field_map.items():
-            val = (ref.get(internal,"") or "").strip()
-            if val:
-                item[csl_key] = val
-        kw = ref.get("keywords","").strip()
-        if kw:
-            item["keyword"] = kw
-        if ref.get("abstract","").strip():
-            item["abstract"] = ref["abstract"].strip()
-        items.append(item)
+            # Phase 3: serialize
+            author_list = []
+            for raw in (ref.get("authors","") or "").split(";"):
+                raw = raw.strip()
+                if not raw:
+                    continue
+                if "," in raw:
+                    family, given = raw.split(",", 1)
+                    author_list.append({"family": family.strip(), "given": given.strip()})
+                else:
+                    parts = raw.rsplit(" ", 1)
+                    if len(parts) == 2:
+                        author_list.append({"family": parts[1], "given": parts[0]})
+                    else:
+                        author_list.append({"literal": raw})
+
+            item = {"id": slug, "type": csl_type, "title": ref.get("title","") or slug}
+            if author_list:
+                item["author"] = author_list
+            year = ref.get("year","").strip()
+            if year and year.isdigit():
+                item["issued"] = {"date-parts": [[int(year)]]}
+            url_doi = (ref.get("url_doi","") or "").strip()
+            if url_doi and (url_doi.startswith("http://") or url_doi.startswith("https://") or url_doi.startswith("10.")):
+                if "doi.org" in url_doi or url_doi.startswith("10."):
+                    item["DOI"] = url_doi.replace("https://doi.org/","").replace("http://doi.org/","")
+                    item["url"] = "https://doi.org/" + item["DOI"]
+                else:
+                    item["url"] = url_doi
+            csl_field_map = {
+                "journal":   "container-title",
+                "publisher": "publisher",
+                "volume":    "volume",
+                "issue":     "issue",
+                "pages":     "page",
+                "edition":   "edition",
+            }
+            for internal, csl_key in csl_field_map.items():
+                val = (ref.get(internal,"") or "").strip()
+                if val:
+                    item[csl_key] = val
+            kw = ref.get("keywords","").strip()
+            if kw:
+                item["keyword"] = kw
+            if ref.get("abstract","").strip():
+                item["abstract"] = ref["abstract"].strip()
+            items.append(item)
+        except Exception as e:
+            errors.append(f"{ref.get('_filename','?')}: {e}")
+    if errors:
+        items.insert(0, {"_export_errors": errors, "_exported": len(items), "_total": len(all_refs)})
     from flask import Response
     return Response(json.dumps(items, ensure_ascii=False, indent=2),
                     mimetype="application/json",

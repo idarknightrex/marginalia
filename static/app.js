@@ -1514,12 +1514,18 @@ async function auditOpenRef(filename, title) {
 function showImportResult(el, data) {
   if (data.error) { el.className = 'import-result error'; el.style.display = 'block'; el.textContent = 'Error: ' + data.error; return; }
   const hasErrors = data.errors && data.errors.length;
-  el.className = 'import-result ' + (hasErrors ? 'warning' : 'success'); el.style.display = 'block';
+  const hasRejects = data.rejection_reasons && data.rejection_reasons.length;
+  el.className = 'import-result ' + (hasErrors ? 'warning' : (hasRejects && data.imported === 0 ? 'warning' : 'success'));
+  el.style.display = 'block';
   let msg = data.imported + ' reference' + (data.imported !== 1 ? 's' : '') + ' imported';
   if (data.project) msg += ' → ' + data.project;
-  if (data.skipped > 0) msg += ', ' + data.skipped + ' skipped (no title)';
+  if (data.skipped > 0) msg += ', ' + data.skipped + ' skipped';
+  if (hasRejects) {
+    msg += '\n\nNot imported:\n';
+    msg += data.rejection_reasons.map(r => '• ' + r).join('\n');
+  }
   if (hasErrors) {
-    msg += ', ' + data.errors.length + ' error(s):\n';
+    msg += '\n\n' + data.errors.length + ' error(s):\n';
     msg += data.errors.map(e => '• ' + (typeof e === 'string' ? e : (e.message || e.error || JSON.stringify(e)))).join('\n');
   }
   el.style.whiteSpace = 'pre-wrap';
